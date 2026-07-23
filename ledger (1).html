@@ -1,0 +1,1095 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rupee Ledger</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&display=swap');
+
+:root{
+  --paper:#F6F1E7;
+  --paper-line:#E2D7C0;
+  --card:#FFFDF8;
+  --ink:#1F2A44;
+  --ink-soft:#5B647E;
+  --stamp:#B23A2E;
+  --green:#2F6F4E;
+  --gold:#A9791F;
+  --gold-bg:#F1E6C8;
+  --shadow: 0 1px 2px rgba(31,42,68,.06), 0 6px 16px rgba(31,42,68,.07);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:#DCD3BF;
+  font-family:'Inter',sans-serif;
+  color:var(--ink);
+  display:flex;
+  justify-content:center;
+  min-height:100vh;
+}
+.phone{
+  width:100%;
+  max-width:420px;
+  min-height:100vh;
+  background:
+    repeating-linear-gradient(var(--paper) 0px, var(--paper) 27px, var(--paper-line) 28px),
+    var(--paper);
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  box-shadow: 0 0 60px rgba(0,0,0,.25);
+}
+::selection{background:var(--gold-bg);}
+
+/* ---- Header / Spotlight ---- */
+.topbar{
+  padding:22px 18px 14px;
+  border-bottom:1px solid var(--paper-line);
+  background:linear-gradient(var(--paper) 85%, transparent);
+}
+.wordmark{
+  font-family:'Space Grotesk',sans-serif;
+  font-weight:700;
+  font-size:20px;
+  letter-spacing:-0.02em;
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+}
+.wordmark .acct{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;
+  font-weight:500;
+  color:var(--ink-soft);
+  letter-spacing:.04em;
+}
+.spotlight{
+  margin-top:14px;
+  position:relative;
+}
+.spotlight-line{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  border-bottom:2px dotted #B7A97E;
+  padding-bottom:8px;
+}
+.spotlight-line svg{flex:none;opacity:.55;}
+.spotlight input{
+  flex:1;
+  border:none;
+  background:none;
+  outline:none;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:14.5px;
+  color:var(--ink);
+}
+.spotlight input::placeholder{color:#9C9578;}
+.cursor-blink{
+  width:2px;height:16px;background:var(--stamp);
+  animation:blink 1s step-end infinite;
+  margin-left:-4px;
+}
+@keyframes blink{50%{opacity:0;}}
+.preview-chip{
+  margin-top:10px;
+  background:var(--card);
+  border:1px solid var(--paper-line);
+  border-left:3px solid var(--gold);
+  border-radius:6px;
+  padding:10px 12px;
+  font-size:13px;
+  display:none;
+  box-shadow:var(--shadow);
+  animation:rise .18s ease-out;
+}
+@keyframes rise{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:translateY(0);}}
+.preview-chip.show{display:block;}
+.preview-chip .parsed{color:var(--ink-soft);margin-bottom:8px;line-height:1.5;}
+.preview-chip .parsed b{color:var(--ink);font-family:'IBM Plex Mono',monospace;}
+.preview-actions{display:flex;gap:8px;}
+.btn{
+  font-family:'Inter',sans-serif;
+  font-size:12.5px;
+  font-weight:600;
+  border-radius:5px;
+  border:1px solid var(--ink);
+  background:var(--ink);
+  color:var(--paper);
+  padding:6px 12px;
+  cursor:pointer;
+}
+.btn.ghost{background:none;color:var(--ink);}
+.btn.small{padding:4px 9px;font-size:11.5px;}
+.btn:active{transform:translateY(1px);}
+
+/* ---- Scroll area ---- */
+.screen{flex:1;overflow-y:auto;padding:16px 18px 100px;}
+.eyebrow{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10.5px;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+  color:var(--ink-soft);
+  margin:0 0 6px;
+}
+h2.section-title{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:17px;
+  margin:22px 0 10px;
+}
+.section-title:first-child{margin-top:0;}
+
+/* ---- Cards ---- */
+.card{
+  background:var(--card);
+  border:1px solid var(--paper-line);
+  border-radius:10px;
+  padding:16px;
+  box-shadow:var(--shadow);
+  margin-bottom:12px;
+}
+.consolidation{
+  display:flex; justify-content:space-between; gap:10px;
+}
+.consolidation .stat{flex:1;}
+.consolidation .amount{
+  font-family:'IBM Plex Mono',monospace;
+  font-weight:600;
+  font-size:22px;
+}
+.consolidation .amount.pos{color:var(--green);}
+.consolidation .amount.neg{color:var(--stamp);}
+.consolidation .label{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+.divider-v{width:1px;background:var(--paper-line);}
+.net-line{
+  margin-top:12px;padding-top:10px;border-top:1px dashed var(--paper-line);
+  font-size:12px;color:var(--ink-soft);
+}
+
+.chip-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:4px;}
+.chip{
+  flex:none;
+  background:var(--card);
+  border:1px solid var(--paper-line);
+  border-radius:20px;
+  padding:8px 14px;
+  font-size:12.5px;
+  font-weight:500;
+  cursor:pointer;
+  white-space:nowrap;
+  box-shadow:var(--shadow);
+}
+.chip:active{background:var(--gold-bg);}
+.chip b{font-family:'IBM Plex Mono',monospace;color:var(--stamp);}
+
+.row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--paper-line);}
+.row:last-child{border-bottom:none;}
+.row .meta{font-size:11px;color:var(--ink-soft);}
+.row .who{font-weight:600;font-size:13.5px;}
+.amt{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:14px;}
+.amt.pos{color:var(--green);}
+.amt.neg{color:var(--stamp);}
+
+/* ---- Groups ---- */
+.group-card{cursor:pointer;}
+.group-head{display:flex;justify-content:space-between;align-items:flex-start;}
+.group-name{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:15px;}
+.group-code{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);}
+.avatars{display:flex;margin-top:8px;}
+.avatar{
+  width:26px;height:26px;border-radius:50%;
+  background:var(--gold-bg);border:2px solid var(--card);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10.5px;font-weight:600;color:var(--gold);
+  margin-left:-8px;
+}
+.avatar:first-child{margin-left:0;}
+
+/* ---- Budget bars ---- */
+.budget-item{margin-bottom:14px;}
+.budget-top{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;}
+.budget-top .cat{font-weight:600;}
+.bar-track{height:8px;border-radius:5px;background:var(--paper-line);overflow:hidden;}
+.bar-fill{height:100%;border-radius:5px;background:var(--green);}
+.bar-fill.warn{background:var(--gold);}
+.bar-fill.over{background:var(--stamp);}
+.budget-note{font-size:11px;color:var(--ink-soft);margin-top:4px;}
+.ai-tag{
+  display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.05em;
+  background:var(--gold-bg);color:var(--gold);border-radius:4px;padding:2px 6px;
+  text-transform:uppercase; margin-left:6px;
+}
+
+/* ---- Tabs (sub nav within wallet) ---- */
+.subtabs{display:flex;gap:6px;margin-bottom:14px;}
+.subtab{
+  flex:1;text-align:center;padding:8px 0;border-radius:7px;
+  font-size:12.5px;font-weight:600;cursor:pointer;
+  border:1px solid var(--paper-line); color:var(--ink-soft);
+}
+.subtab.active{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+
+/* alerts */
+.alert{
+  border-left:3px solid var(--stamp); background:#FBEDEA;
+  border-radius:6px; padding:10px 12px; font-size:12.5px; margin-bottom:12px;
+}
+.alert b{color:var(--stamp);}
+
+/* form bits */
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:11.5px;color:var(--ink-soft);margin-bottom:5px;font-weight:600;}
+.field input, .field select{
+  width:100%;padding:9px 10px;border:1px solid var(--paper-line);border-radius:7px;
+  font-family:'Inter',sans-serif;font-size:13.5px;background:var(--card);color:var(--ink);
+}
+.seg{display:flex;border:1px solid var(--paper-line);border-radius:7px;overflow:hidden;}
+.seg div{flex:1;text-align:center;padding:8px 0;font-size:12px;font-weight:600;cursor:pointer;color:var(--ink-soft);}
+.seg div.active{background:var(--ink);color:var(--paper);}
+
+.qr-wrap{display:flex;justify-content:center;padding:14px 0 6px;}
+#qrbox, #ticketqr{background:#fff;padding:10px;border-radius:8px;}
+
+.ticket-card{border-radius:10px;padding:0;overflow:hidden;margin-bottom:14px;box-shadow:var(--shadow);}
+.ticket-top{padding:12px 14px;color:#fff;}
+.ticket-top.train{background:#2F6F4E;}
+.ticket-top.flight{background:#1F2A44;}
+.ticket-top.movie{background:#B23A2E;}
+.ticket-type{font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.8;}
+.ticket-title{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14.5px;margin-top:2px;}
+.ticket-body{background:var(--card);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;}
+.ticket-info div{font-size:11.5px;color:var(--ink-soft);margin-bottom:3px;}
+.ticket-info b{color:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:12px;}
+.countdown{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--gold);font-weight:600;}
+
+.empty{text-align:center;padding:26px 10px;color:var(--ink-soft);font-size:12.5px;}
+
+/* ---- Bottom nav ---- */
+.tabbar{
+  position:sticky;bottom:0;
+  display:flex;align-items:center;justify-content:space-around;
+  background:var(--card);
+  border-top:1px solid var(--paper-line);
+  padding:10px 8px calc(10px + env(safe-area-inset-bottom));
+}
+.tab-btn{
+  background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;
+  color:var(--ink-soft);font-size:9.5px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;
+  width:56px;
+}
+.tab-btn.active{color:var(--ink);}
+.tab-btn svg{opacity:.65;}
+.tab-btn.active svg{opacity:1;}
+.tab-add{
+  width:48px;height:48px;border-radius:50%;background:var(--stamp);color:#fff;
+  display:flex;align-items:center;justify-content:center;margin-top:-26px;
+  box-shadow:0 4px 12px rgba(178,58,46,.4); border:3px solid var(--card); cursor:pointer;
+}
+
+/* modal */
+.modal-back{
+  position:fixed;inset:0;background:rgba(31,42,68,.4);z-index:20;
+  display:none; align-items:flex-end; justify-content:center;
+}
+.modal-back.show{display:flex;}
+.modal{
+  width:100%;max-width:420px;background:var(--paper);
+  border-radius:16px 16px 0 0;max-height:88vh;overflow-y:auto;
+  padding:18px 18px 26px; animation:slideup .22s ease-out;
+}
+@keyframes slideup{from{transform:translateY(24px);opacity:.5;}to{transform:translateY(0);opacity:1;}}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+.modal-head h3{font-family:'Space Grotesk',sans-serif;margin:0;font-size:16.5px;}
+.close-x{background:none;border:none;font-size:18px;cursor:pointer;color:var(--ink-soft);}
+
+.scan-anim{text-align:center;padding:30px 10px;}
+.scan-line{
+  width:100%;height:3px;background:var(--gold);border-radius:2px;margin:16px 0;
+  animation:scan 1.1s ease-in-out infinite;
+}
+@keyframes scan{0%,100%{opacity:.25;}50%{opacity:1;}}
+
+.toast{
+  position:fixed; bottom:90px; left:50%; transform:translateX(-50%);
+  background:var(--ink); color:var(--paper); padding:10px 16px; border-radius:20px;
+  font-size:12.5px; font-weight:600; box-shadow:var(--shadow); z-index:30;
+  opacity:0; transition:opacity .25s, transform .25s; pointer-events:none;
+}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="topbar">
+    <div class="wordmark">Rupee Ledger <span class="acct">ACCT · GRP-INDEX</span></div>
+    <div class="spotlight">
+      <div class="spotlight-line">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1F2A44" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="spotlightInput" placeholder="₹100 dinner with Sarah… or set food budget 6000" autocomplete="off"/>
+        <div class="cursor-blink"></div>
+      </div>
+      <div class="preview-chip" id="previewChip"></div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen"></div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="tabbar">
+    <button class="tab-btn" data-tab="home" onclick="setTab('home')">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      Home
+    </button>
+    <button class="tab-btn" data-tab="groups" onclick="setTab('groups')">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M14 20c0-2.4 1.6-4.4 3.8-5"/></svg>
+      Groups
+    </button>
+    <div class="tab-add" onclick="openAdd()">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+    <button class="tab-btn" data-tab="budget" onclick="setTab('budget')">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V9M12 19V5M20 19v-6"/></svg>
+      Budget
+    </button>
+    <button class="tab-btn" data-tab="wallet" onclick="setTab('wallet')">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16" cy="14" r="1.2" fill="currentColor" stroke="none"/></svg>
+      Wallet
+    </button>
+  </div>
+</div>
+
+<div class="modal-back" id="modalBack">
+  <div class="modal" id="modalBody"></div>
+</div>
+
+<script>
+/* ============ STATE ============ */
+const state = {
+  tab: 'home',
+  walletSub: 'upi',
+  groups: [
+    { code:'GRP-0042', name:'Flatmates', members:[
+        {name:'Rahul', balance:450},{name:'Sarah', balance:-200},{name:'Priya', balance:120}] },
+    { code:'GRP-0088', name:'Goa Trip', members:[
+        {name:'Aman', balance:1200},{name:'Neha', balance:0},{name:'Karan', balance:-300}] },
+    { code:'GRP-0011', name:'Family', members:[
+        {name:'Mom', balance:-500},{name:'Dev (bro)', balance:0}] },
+  ],
+  friends: [ {name:'Vikram', balance:500} ],
+  activity: [
+    {who:'Sarah', note:'Dinner at Toit', amt:-200, cat:'Food', time:'Today, 8:40pm'},
+    {who:'Rahul', note:'Electricity bill split', amt:450, cat:'Housing', time:'Yesterday'},
+    {who:'Metro', note:'Metro card top-up', amt:-30, cat:'Transport', time:'Yesterday'},
+    {who:'Priya', note:'Movie tickets', amt:120, cat:'Entertainment', time:'2 days ago'},
+  ],
+  presets: [
+    {label:'Chai', amt:10, cat:'Food'},
+    {label:'Metro', amt:30, cat:'Transport'},
+    {label:'Coffee', amt:150, cat:'Food'},
+    {label:'Auto', amt:80, cat:'Transport'},
+    {label:"Sarah's rent split", amt:6000, cat:'Housing'},
+  ],
+  budgets: [
+    {cat:'Food', limit:8000, spent:5200},
+    {cat:'Transport', limit:3000, spent:1200},
+    {cat:'Shopping', limit:5000, spent:4800},
+    {cat:'Entertainment', limit:2000, spent:2100},
+  ],
+  subscriptions: [
+    {name:'Adobe Creative Cloud', amt:1656, cycle:'monthly', renewIn:2, trial:true},
+    {name:'Spotify', amt:119, cycle:'monthly', renewIn:5, trial:false},
+    {name:'Netflix', amt:649, cycle:'monthly', renewIn:12, trial:false},
+    {name:'Amazon Prime', amt:1499, cycle:'yearly', renewIn:40, trial:false},
+  ],
+  tickets: [
+    {type:'train', title:'Rajdhani Express 12301', route:'New Delhi → Mumbai Central', when:'Fri, 24 Jul · 16:25', seat:'B4 / 32', ref:'PNR 4821093456', price:1450, daysAway:3},
+  ],
+  ticketPool: [
+    {type:'flight', title:'IndiGo 6E-204', route:'BOM → BLR', when:'Sat, 8 Aug · 06:40', seat:'14C', ref:'ABCXYZ', price:4200, daysAway:18},
+    {type:'movie', title:'Dune: Part Three', route:'PVR Phoenix · Screen 4', when:'Sun, 26 Jul · 21:15', seat:'F12, F13', ref:'BKG998211', price:600, daysAway:5},
+    {type:'train', title:'Shatabdi Express 12002', route:'Bhopal → New Delhi', when:'Wed, 5 Aug · 06:15', seat:'C2 / 14', ref:'PNR 7710239981', price:980, daysAway:15},
+  ],
+};
+
+const money = n => (n<0?'-':'') + '₹' + Math.abs(Math.round(n)).toLocaleString('en-IN');
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(window.__toastT);
+  window.__toastT = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+/* ============ NAV ============ */
+function setTab(t){ state.tab = t; render(); }
+
+/* ============ RENDER ROOT ============ */
+function render(){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===state.tab));
+  const s = document.getElementById('screen');
+  if(state.tab==='home') s.innerHTML = renderHome();
+  if(state.tab==='groups') s.innerHTML = renderGroups();
+  if(state.tab==='budget') s.innerHTML = renderBudget();
+  if(state.tab==='wallet') s.innerHTML = renderWallet();
+  if(state.tab==='wallet') afterWalletRender();
+}
+
+/* ============ HOME ============ */
+function totals(){
+  let owedToYou=0, youOwe=0;
+  state.groups.forEach(g=>g.members.forEach(m=> m.balance>0?owedToYou+=m.balance:youOwe+=-m.balance));
+  state.friends.forEach(f=> f.balance>0?owedToYou+=f.balance:youOwe+=-f.balance);
+  return {owedToYou, youOwe};
+}
+
+function renderHome(){
+  const {owedToYou, youOwe} = totals();
+  return `
+    <p class="eyebrow">Global consolidation</p>
+    <div class="card">
+      <div class="consolidation">
+        <div class="stat"><div class="amount pos">${money(owedToYou)}</div><div class="label">owed to you</div></div>
+        <div class="divider-v"></div>
+        <div class="stat"><div class="amount neg">${money(youOwe)}</div><div class="label">you owe</div></div>
+      </div>
+      <div class="net-line">Net position: <b style="font-family:'IBM Plex Mono',monospace;color:${owedToYou-youOwe>=0?'var(--green)':'var(--stamp)'}">${money(owedToYou-youOwe)}</b> across ${state.groups.length} groups + ${state.friends.length} direct friend${state.friends.length===1?'':'s'}.</div>
+    </div>
+
+    <h2 class="section-title">Quick add <span class="ai-tag">AI ranked</span></h2>
+    <div class="chip-row">
+      ${state.presets.map((p,i)=>`<div class="chip" onclick="quickAdd(${i})">${p.label} <b>${money(p.amt)}</b></div>`).join('')}
+    </div>
+
+    <h2 class="section-title">Recent activity</h2>
+    <div class="card">
+      ${state.activity.map(a=>`
+        <div class="row">
+          <div><div class="who">${a.who}</div><div class="meta">${a.note} · ${a.time}</div></div>
+          <div class="amt ${a.amt>=0?'pos':'neg'}">${money(a.amt)}</div>
+        </div>`).join('')}
+    </div>
+
+    <h2 class="section-title">Budget snapshot</h2>
+    <div class="card">
+      ${state.budgets.slice(0,2).map(b=>budgetBarHtml(b)).join('')}
+      <div style="text-align:right;margin-top:6px;"><span onclick="setTab('budget')" style="font-size:12px;font-weight:600;cursor:pointer;color:var(--ink-soft);">See full budget →</span></div>
+    </div>
+  `;
+}
+
+function quickAdd(i){
+  const p = state.presets[i];
+  state.activity.unshift({who:'You', note:p.label, amt:-p.amt, cat:p.cat, time:'Just now'});
+  toast(`Logged ${p.label} · ${money(p.amt)}`);
+  render();
+}
+
+/* ============ GROUPS ============ */
+function groupNet(g){ return g.members.reduce((s,m)=>s+m.balance,0); }
+function renderGroups(){
+  return `
+    <p class="eyebrow">Numbered accounts</p>
+    <h2 class="section-title" style="margin-top:0;">Your groups</h2>
+    ${state.groups.map(g=>{
+      const net = groupNet(g);
+      return `
+      <div class="card group-card" onclick="toast('Opening ${g.name} ledger…')">
+        <div class="group-head">
+          <div>
+            <div class="group-name">${g.name}</div>
+            <div class="group-code">${g.code}</div>
+          </div>
+          <div class="amt ${net>=0?'pos':'neg'}">${money(net)}</div>
+        </div>
+        <div class="avatars">
+          ${g.members.map(m=>`<div class="avatar">${m.name[0]}</div>`).join('')}
+        </div>
+        ${g.members.map(m=>`
+          <div class="row">
+            <div class="who" style="font-weight:500;font-size:13px;">${m.name}</div>
+            <div class="amt ${m.balance>=0?'pos':'neg'}">${m.balance===0?'settled':money(m.balance)}</div>
+          </div>`).join('')}
+      </div>`;
+    }).join('')}
+
+    <h2 class="section-title">Direct with friends</h2>
+    <div class="card">
+      ${state.friends.map(f=>`
+        <div class="row">
+          <div class="who">${f.name}</div>
+          <div class="amt ${f.balance>=0?'pos':'neg'}">${money(f.balance)}</div>
+        </div>`).join('')}
+    </div>
+
+    <div style="text-align:center;margin-top:8px;">
+      <button class="btn ghost" onclick="toast('New group creation flow')">+ New group</button>
+    </div>
+  `;
+}
+
+/* ============ BUDGET ============ */
+function budgetBarHtml(b){
+  const pct = Math.min(100, Math.round(b.spent/b.limit*100));
+  const cls = pct>=100?'over':pct>=85?'warn':'';
+  let note = `${pct}% of ${money(b.limit)} used`;
+  if(pct>=100) note = `Over budget by ${money(b.spent-b.limit)} — flagged for review`;
+  else if(pct>=85) note = `${pct}% used, pace is ahead of the month`;
+  return `
+    <div class="budget-item">
+      <div class="budget-top"><span class="cat">${b.cat}</span><span>${money(b.spent)} / ${money(b.limit)}</span></div>
+      <div class="bar-track"><div class="bar-fill ${cls}" style="width:${pct}%"></div></div>
+      <div class="budget-note">${note}</div>
+    </div>`;
+}
+function renderBudget(){
+  const day = 22, daysInMonth = 31;
+  const monthPct = Math.round(day/daysInMonth*100);
+  return `
+    <p class="eyebrow">AI budget tracker</p>
+    <div class="card">
+      <div style="font-size:13px;color:var(--ink-soft);">You're <b style="color:var(--ink)">${monthPct}%</b> through July.</div>
+      <div class="bar-track" style="margin-top:8px;"><div class="bar-fill" style="width:${monthPct}%;background:var(--ink);"></div></div>
+    </div>
+    <h2 class="section-title">Category budgets <span class="ai-tag">Suggested from 3mo history</span></h2>
+    <div class="card">
+      ${state.budgets.map(b=>budgetBarHtml(b)).join('')}
+    </div>
+    <div class="alert"><b>Anomaly flagged</b> — Shopping has one charge (₹2,400 at "Store #4471") that's 3x your usual basket size. Review it?</div>
+    <div style="text-align:center;">
+      <button class="btn ghost" onclick="toast('Budget editor would open here')">Adjust budgets</button>
+    </div>
+  `;
+}
+
+/* ============ WALLET ============ */
+function renderWallet(){
+  return `
+    <p class="eyebrow">Wallet</p>
+    <div class="subtabs">
+      <div class="subtab ${state.walletSub==='upi'?'active':''}" onclick="setWalletSub('upi')">UPI QR</div>
+      <div class="subtab ${state.walletSub==='subs'?'active':''}" onclick="setWalletSub('subs')">Subscriptions</div>
+      <div class="subtab ${state.walletSub==='tickets'?'active':''}" onclick="setWalletSub('tickets')">Tickets</div>
+    </div>
+    ${state.walletSub==='upi'?renderUpi():''}
+    ${state.walletSub==='subs'?renderSubs():''}
+    ${state.walletSub==='tickets'?renderTickets():''}
+  `;
+}
+function setWalletSub(s){ state.walletSub=s; render(); }
+
+function renderUpi(){
+  return `
+    <div class="card">
+      <div class="field"><label>Payee name</label><input id="upiName" value="Your Name" /></div>
+      <div class="field"><label>UPI ID</label><input id="upiId" value="yourname@upi" /></div>
+      <div class="field"><label>Amount (₹)</label><input id="upiAmt" type="number" value="500" /></div>
+      <div class="field"><label>Note</label><input id="upiNote" value="Settling up" /></div>
+      <button class="btn" style="width:100%;" onclick="generateUpiQr()">Generate QR</button>
+      <div class="qr-wrap" id="qrbox"></div>
+      <div style="text-align:center;" id="qrShareRow"></div>
+    </div>
+  `;
+}
+function generateUpiQr(){
+  const pn = document.getElementById('upiName').value || 'Recipient';
+  const pa = document.getElementById('upiId').value || 'upi@bank';
+  const am = document.getElementById('upiAmt').value || '0';
+  const tn = document.getElementById('upiNote').value || '';
+  const uri = `upi://pay?pa=${encodeURIComponent(pa)}&pn=${encodeURIComponent(pn)}&am=${encodeURIComponent(am)}&tn=${encodeURIComponent(tn)}&cu=INR`;
+  const box = document.getElementById('qrbox');
+  box.innerHTML = '';
+  new QRCode(box, { text: uri, width:170, height:170, colorDark:"#1F2A44", colorLight:"#ffffff", correctLevel: QRCode.CorrectLevel.H });
+  document.getElementById('qrShareRow').innerHTML = `
+    <button class="btn small ghost" style="margin-top:10px;" onclick="copyUpiLink('${uri.replace(/'/g,"\\'")}')">Copy payment link</button>
+  `;
+  toast('QR generated — ready to share');
+}
+function copyUpiLink(uri){
+  navigator.clipboard?.writeText(uri).catch(()=>{});
+  toast('UPI link copied');
+}
+
+function renderSubs(){
+  const trial = state.subscriptions.find(s=>s.trial);
+  const monthlyLoad = state.subscriptions.reduce((s,x)=> s + (x.cycle==='yearly'? x.amt/12 : x.amt), 0);
+  return `
+    ${trial?`<div class="alert"><b>${trial.name} trial ends in ${trial.renewIn} days</b> — converts to ${money(trial.amt)}/mo unless you cancel.</div>`:''}
+    <div class="card">
+      <div class="row"><div class="who">Monthly subscription load</div><div class="amt neg">${money(Math.round(monthlyLoad))}</div></div>
+    </div>
+    ${state.subscriptions.map(s=>`
+      <div class="card">
+        <div class="row" style="border:none;padding:0;">
+          <div>
+            <div class="who">${s.name} ${s.trial?'<span class="ai-tag" style="background:#FBEDEA;color:var(--stamp);">TRIAL</span>':''}</div>
+            <div class="meta">${money(s.amt)} / ${s.cycle} · renews in ${s.renewIn} day${s.renewIn===1?'':'s'}</div>
+          </div>
+          <div class="amt neg">${money(s.amt)}</div>
+        </div>
+      </div>`).join('')}
+    <div style="text-align:center;"><button class="btn ghost" onclick="toast('Add subscription form would open here')">+ Add subscription</button></div>
+  `;
+}
+
+function renderTickets(){
+  const sorted = [...state.tickets].sort((a,b)=>a.daysAway-b.daysAway);
+  return `
+    <div style="text-align:center;margin-bottom:14px;">
+      <button class="btn" onclick="scanTicket()">Scan / import ticket</button>
+    </div>
+    ${sorted.length===0?'<div class="empty">No tickets yet — scan a boarding pass, PNR or movie booking to add one.</div>':''}
+    ${sorted.map((t,i)=>`
+      <div class="ticket-card">
+        <div class="ticket-top ${t.type}">
+          <div class="ticket-type">${t.type}</div>
+          <div class="ticket-title">${t.title}</div>
+        </div>
+        <div class="ticket-body">
+          <div class="ticket-info">
+            <div>${t.route}</div>
+            <div><b>${t.when}</b></div>
+            <div>Seat ${t.seat} · ${t.ref}</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="countdown">${t.daysAway===0?'Today':'in '+t.daysAway+'d'}</div>
+            <div id="tqr-${i}" style="margin-top:6px;"></div>
+          </div>
+        </div>
+      </div>
+    `).join('')}
+  `;
+}
+function afterWalletRender(){
+  if(state.walletSub==='tickets'){
+    const sorted = [...state.tickets].sort((a,b)=>a.daysAway-b.daysAway);
+    sorted.forEach((t,i)=>{
+      const el = document.getElementById('tqr-'+i);
+      if(el){ el.innerHTML=''; new QRCode(el, {text:t.ref, width:56, height:56, colorDark:"#1F2A44", colorLight:"#ffffff"}); }
+    });
+  }
+}
+function scanTicket(){
+  const modal = document.getElementById('modalBody');
+  document.getElementById('modalBack').classList.add('show');
+  modal.innerHTML = `
+    <div class="modal-head"><h3>Reading ticket…</h3><button class="close-x" onclick="closeModal()">✕</button></div>
+    <div class="scan-anim">
+      <div style="font-size:12.5px;color:var(--ink-soft);">AI is extracting route, date, seat and PNR</div>
+      <div class="scan-line"></div>
+      <div style="font-size:11.5px;color:var(--ink-soft);">This usually takes a couple of seconds</div>
+    </div>
+  `;
+  setTimeout(()=>{
+    const t = state.ticketPool.shift();
+    if(!t){ modal.innerHTML = `<div class="modal-head"><h3>All caught up</h3><button class="close-x" onclick="closeModal()">✕</button></div><div class="empty">No more sample tickets in this demo pool.</div>`; return; }
+    modal.innerHTML = `
+      <div class="modal-head"><h3>Extracted ticket <span class="ai-tag">AI DRAFT</span></h3><button class="close-x" onclick="closeModal()">✕</button></div>
+      <div class="field"><label>Type</label><input value="${t.type}" id="tk-type"/></div>
+      <div class="field"><label>Title</label><input value="${t.title}" id="tk-title"/></div>
+      <div class="field"><label>Route / venue</label><input value="${t.route}" id="tk-route"/></div>
+      <div class="field"><label>Date & time</label><input value="${t.when}" id="tk-when"/></div>
+      <div class="field"><label>Seat</label><input value="${t.seat}" id="tk-seat"/></div>
+      <div class="field"><label>Reference</label><input value="${t.ref}" id="tk-ref"/></div>
+      <div class="field"><label>Price (₹)</label><input value="${t.price}" id="tk-price" type="number"/></div>
+      <button class="btn" style="width:100%;" onclick='confirmTicket(${JSON.stringify(t).replace(/'/g,"&apos;")})'>Save to wallet & log expense</button>
+    `;
+  }, 1300);
+}
+function confirmTicket(t){
+  state.tickets.push(t);
+  state.activity.unshift({who:'You', note:t.title+' ticket', amt:-t.price, cat:'Travel', time:'Just now'});
+  closeModal();
+  setTab('wallet'); state.walletSub='tickets'; render();
+  toast('Ticket saved to wallet');
+}
+
+/* ============ ADD / SPOTLIGHT ============ */
+const CATS = {
+  food:['dinner','lunch','breakfast','chai','coffee','food','restaurant','snack'],
+  transport:['metro','auto','uber','ola','cab','train','flight','bus','fuel','petrol'],
+  entertainment:['movie','netflix','concert','game'],
+  housing:['rent','electricity','wifi','maintenance'],
+  shopping:['amazon','flipkart','shopping','clothes'],
+};
+function categorize(text){
+  const t = text.toLowerCase();
+  for(const [cat, words] of Object.entries(CATS)){
+    if(words.some(w=>t.includes(w))) return cat[0].toUpperCase()+cat.slice(1);
+  }
+  return 'Other';
+}
+let splitState = { mode:'equal', groupCode:'', values:{}, computed:null };
+
+function openAdd(){
+  splitState = { mode:'equal', groupCode:'', values:{}, computed:null };
+  const modal = document.getElementById('modalBody');
+  document.getElementById('modalBack').classList.add('show');
+  modal.innerHTML = `
+    <div class="modal-head"><h3>Add expense</h3><button class="close-x" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Amount (₹)</label><input id="addAmt" type="number" placeholder="0" oninput="renderSplitRows()"/></div>
+    <div class="field"><label>Note</label><input id="addNote" placeholder="What was this for?" oninput="onNoteChange()"/></div>
+    <div class="field"><label>Category</label>
+      <select id="addCat">
+        ${['Food','Transport','Entertainment','Housing','Shopping','Travel','Other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label>Split between</label>
+      <select id="addGroupSel" onchange="onGroupChange()">
+        <option value="">Custom — type names below</option>
+        ${state.groups.map(g=>`<option value="${g.code}">${g.name} (${g.code})</option>`).join('')}
+      </select>
+    </div>
+    <div class="field" id="customNamesField">
+      <label>Names, comma separated</label>
+      <input id="addCustomNames" placeholder="e.g. Sarah, Rahul" oninput="renderSplitRows()"/>
+    </div>
+    <div class="field" style="display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="includeMe" checked onchange="renderSplitRows()" style="width:auto;"/>
+      <label style="margin:0;">Include myself as a participant</label>
+    </div>
+    <div class="field">
+      <label>Split mode</label>
+      <div class="seg" id="splitSeg">
+        <div class="active" data-v="equal">Equal</div><div data-v="exact">Exact</div><div data-v="pct">%</div><div data-v="shares">Shares</div>
+      </div>
+    </div>
+    <div class="card" id="splitRows" style="padding:6px 12px;"></div>
+    <div id="splitValidation" style="font-size:11.5px;color:var(--stamp);margin:-6px 0 12px;"></div>
+    <div style="display:flex; gap:8px; margin-bottom:14px;">
+      <button class="btn ghost" style="flex:1;" onclick="openTip()">Tip calculator</button>
+      <button class="btn ghost" style="flex:1;" onclick="openReceiptScan()">Scan receipt</button>
+    </div>
+    <h2 class="section-title" style="margin-top:6px;">Or tap a preset</h2>
+    <div class="chip-row">
+      ${state.presets.map((p,i)=>`<div class="chip" onclick="quickAdd(${i}); closeModal();">${p.label} <b>${money(p.amt)}</b></div>`).join('')}
+    </div>
+    <button class="btn" style="width:100%;margin-top:10px;" onclick="confirmSplit()">Log expense &amp; apply split</button>
+  `;
+  modal.querySelectorAll('#splitSeg div').forEach(d=>d.onclick=()=>{
+    modal.querySelectorAll('#splitSeg div').forEach(x=>x.classList.remove('active'));
+    d.classList.add('active');
+    splitState.mode = d.dataset.v;
+    splitState.values = {};
+    renderSplitRows();
+  });
+  renderSplitRows();
+}
+
+function onNoteChange(){
+  const note = document.getElementById('addNote').value;
+  const catSel = document.getElementById('addCat');
+  if(catSel) catSel.value = categorize(note);
+}
+
+function onGroupChange(){
+  splitState.groupCode = document.getElementById('addGroupSel').value;
+  document.getElementById('customNamesField').style.display = splitState.groupCode ? 'none' : 'block';
+  splitState.values = {};
+  renderSplitRows();
+}
+
+function getParticipantNames(){
+  if(splitState.groupCode){
+    const g = state.groups.find(g=>g.code===splitState.groupCode);
+    return g ? g.members.map(m=>m.name) : [];
+  }
+  const raw = document.getElementById('addCustomNames')?.value || '';
+  return raw.split(',').map(s=>s.trim()).filter(Boolean);
+}
+
+function getSplitRows(){
+  const includeMe = document.getElementById('includeMe')?.checked ?? true;
+  const names = getParticipantNames();
+  return includeMe ? [...names, 'You'] : names;
+}
+
+function renderSplitRows(){
+  const container = document.getElementById('splitRows');
+  const valid = document.getElementById('splitValidation');
+  if(!container) return;
+  const amount = parseFloat(document.getElementById('addAmt')?.value) || 0;
+  const rows = getSplitRows();
+
+  if(rows.length===0){
+    container.innerHTML = `<div class="empty" style="padding:14px 0;">Pick a group, or type at least one name, to split with.</div>`;
+    valid.textContent = '';
+    splitState.computed = null;
+    return;
+  }
+
+  if(splitState.mode==='equal'){
+    const share = amount / rows.length;
+    container.innerHTML = rows.map(n=>`
+      <div class="row"><div class="who" style="font-weight:500;font-size:13px;">${n}${n==='You'?' (you)':''}</div><div class="amt">${money(share)}</div></div>
+    `).join('');
+    valid.textContent = '';
+    splitState.computed = rows.map(n=>({name:n, value:share}));
+    return;
+  }
+
+  const suffix = splitState.mode==='pct' ? '%' : splitState.mode==='shares' ? 'shares' : '₹';
+  container.innerHTML = rows.map(n=>{
+    const existing = splitState.values[n] ?? '';
+    return `
+    <div class="row" style="gap:8px;">
+      <div class="who" style="font-weight:500;font-size:13px;flex:1;">${n}${n==='You'?' (you)':''}</div>
+      <input data-name="${n}" class="split-input" type="number" min="0" step="any" value="${existing}" placeholder="${suffix}"
+        style="width:92px;padding:6px 8px;border:1px solid var(--paper-line);border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right;"/>
+    </div>`;
+  }).join('');
+
+  container.querySelectorAll('.split-input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      splitState.values[inp.dataset.name] = inp.value;
+      checkSplitValidity();
+    });
+  });
+  checkSplitValidity();
+}
+
+function checkSplitValidity(){
+  const valid = document.getElementById('splitValidation');
+  const amount = parseFloat(document.getElementById('addAmt')?.value) || 0;
+  const rows = getSplitRows();
+  const vals = rows.map(n => parseFloat(splitState.values[n]) || 0);
+  const sum = vals.reduce((a,b)=>a+b,0);
+
+  if(splitState.mode==='exact'){
+    const diff = Math.round((amount - sum)*100)/100;
+    if(Math.abs(diff) > 0.5){
+      valid.textContent = diff>0 ? `${money(diff)} of the bill is still unassigned` : `Amounts add up to ${money(diff*-1)} more than the bill`;
+      splitState.computed = null;
+      return false;
+    }
+    valid.textContent = '';
+    splitState.computed = rows.map((n,i)=>({name:n, value:vals[i]}));
+    return true;
+  }
+  if(splitState.mode==='pct'){
+    const diff = Math.round((100 - sum)*10)/10;
+    if(Math.abs(diff) > 0.5 || sum===0){
+      valid.textContent = `Percentages add up to ${sum}% — needs to total 100%`;
+      splitState.computed = null;
+      return false;
+    }
+    valid.textContent = '';
+    splitState.computed = rows.map((n,i)=>({name:n, value: amount * vals[i]/100}));
+    return true;
+  }
+  if(splitState.mode==='shares'){
+    if(sum<=0){
+      valid.textContent = 'Assign at least one share to someone';
+      splitState.computed = null;
+      return false;
+    }
+    valid.textContent = '';
+    splitState.computed = rows.map((n,i)=>({name:n, value: amount * vals[i]/sum}));
+    return true;
+  }
+  valid.textContent = '';
+  return true;
+}
+
+function confirmSplit(){
+  const amount = parseFloat(document.getElementById('addAmt').value) || 0;
+  const note = document.getElementById('addNote').value || 'Expense';
+  const cat = document.getElementById('addCat').value;
+  if(amount<=0){ toast('Enter an amount first'); return; }
+
+  const okToLog = splitState.mode==='equal' ? true : checkSplitValidity();
+  if(!okToLog || !splitState.computed || splitState.computed.length===0){
+    toast('Fix the split before logging — see the note above the amounts');
+    return;
+  }
+
+  // Everyone except "You" owes their share back to the payer (assumed to be you in this prototype)
+  const owedRows = splitState.computed.filter(r=>r.name!=='You' && r.value>0);
+
+  if(splitState.groupCode){
+    const g = state.groups.find(g=>g.code===splitState.groupCode);
+    owedRows.forEach(r=>{
+      const m = g.members.find(m=>m.name===r.name);
+      if(m) m.balance += r.value;
+    });
+  } else {
+    owedRows.forEach(r=>{
+      let f = state.friends.find(f=>f.name.toLowerCase()===r.name.toLowerCase());
+      if(!f){ f = {name:r.name, balance:0}; state.friends.push(f); }
+      f.balance += r.value;
+    });
+  }
+
+  const modeLabel = {equal:'equally', exact:'exact amounts', pct:'percentages', shares:'shares'}[splitState.mode];
+  state.activity.unshift({
+    who: 'You paid',
+    note: `${note} · split ${splitState.computed.length} ways (${modeLabel})`,
+    amt: -amount,
+    cat,
+    time: 'Just now'
+  });
+
+  closeModal();
+  setTab(splitState.groupCode ? 'groups' : 'home');
+  toast(`Logged ${money(amount)} · split ${splitState.computed.length} ways`);
+}
+function openTip(){
+  const modal = document.getElementById('modalBody');
+  modal.innerHTML = `
+    <div class="modal-head"><h3>Tip calculator</h3><button class="close-x" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Bill amount (₹)</label><input id="tipBill" type="number" value="1200" oninput="calcTip()"/></div>
+    <div class="field"><label>Tip %</label><input id="tipPct" type="number" value="10" oninput="calcTip()"/></div>
+    <div class="field"><label>Number of people</label><input id="tipPeople" type="number" value="4" oninput="calcTip()"/></div>
+    <div class="card" id="tipResult"></div>
+    <button class="btn" style="width:100%;" onclick="applyTip()">Add as expense</button>
+  `;
+  calcTip();
+}
+function calcTip(){
+  const bill = parseFloat(document.getElementById('tipBill').value)||0;
+  const pct = parseFloat(document.getElementById('tipPct').value)||0;
+  const people = parseInt(document.getElementById('tipPeople').value)||1;
+  const tip = bill*pct/100;
+  const total = bill+tip;
+  document.getElementById('tipResult').innerHTML = `
+    <div class="row"><div class="who">Tip</div><div class="amt">${money(tip)}</div></div>
+    <div class="row"><div class="who">Total incl. tip</div><div class="amt">${money(total)}</div></div>
+    <div class="row"><div class="who">Per person (${people})</div><div class="amt pos">${money(total/people)}</div></div>
+  `;
+}
+function applyTip(){
+  const bill = parseFloat(document.getElementById('tipBill').value)||0;
+  const pct = parseFloat(document.getElementById('tipPct').value)||0;
+  const total = bill + bill*pct/100;
+  state.activity.unshift({who:'You', note:'Bill + tip', amt:-total, cat:'Food', time:'Just now'});
+  closeModal(); setTab('home'); toast('Added to activity');
+}
+function openReceiptScan(){
+  const modal = document.getElementById('modalBody');
+  modal.innerHTML = `
+    <div class="modal-head"><h3>Scan receipt</h3><button class="close-x" onclick="closeModal()">✕</button></div>
+    <div class="field"><label>Upload / capture photo</label><input type="file" accept="image/*" onchange="fakeOcr()"/></div>
+    <div id="ocrArea"></div>
+  `;
+}
+function fakeOcr(){
+  document.getElementById('ocrArea').innerHTML = `
+    <div class="scan-anim"><div style="font-size:12.5px;color:var(--ink-soft);">Reading receipt…</div><div class="scan-line"></div></div>
+  `;
+  setTimeout(()=>{
+    document.getElementById('ocrArea').innerHTML = `
+      <div class="eyebrow" style="margin-top:10px;">AI extracted — edit before saving</div>
+      <div class="field"><label>Merchant</label><input id="ocrMerchant" value="Toit Brewpub"/></div>
+      <div class="field"><label>Date</label><input id="ocrDate" value="21 Jul 2026"/></div>
+      <div class="field"><label>Total (₹)</label><input id="ocrTotal" type="number" value="1840"/></div>
+      <button class="btn" style="width:100%;" onclick="saveOcr()">Save expense</button>
+    `;
+  }, 1200);
+}
+function saveOcr(){
+  const merchant = document.getElementById('ocrMerchant').value;
+  const total = parseFloat(document.getElementById('ocrTotal').value)||0;
+  state.activity.unshift({who:'You', note:merchant+' (receipt)', amt:-total, cat:categorize(merchant), time:'Just now'});
+  closeModal(); setTab('home'); toast('Receipt saved');
+}
+function closeModal(){ document.getElementById('modalBack').classList.remove('show'); }
+document.getElementById('modalBack').addEventListener('click', e=>{ if(e.target.id==='modalBack') closeModal(); });
+
+/* ============ SPOTLIGHT PARSER ============ */
+const spotlightInput = document.getElementById('spotlightInput');
+const previewChip = document.getElementById('previewChip');
+spotlightInput.addEventListener('input', ()=>{
+  const text = spotlightInput.value.trim();
+  if(!text){ previewChip.classList.remove('show'); return; }
+  const parsed = parseSpotlight(text);
+  previewChip.innerHTML = renderPreview(parsed, text);
+  previewChip.classList.add('show');
+});
+spotlightInput.addEventListener('keydown', e=>{ if(e.key==='Enter') commitSpotlight(spotlightInput.value.trim()); });
+
+function parseSpotlight(text){
+  const t = text.toLowerCase();
+  const amtMatch = text.match(/₹?\s?(\d+(\.\d+)?)/);
+  const amount = amtMatch ? parseFloat(amtMatch[1]) : null;
+
+  if(t.startsWith('request')){
+    const nameMatch = t.match(/from\s+([a-z]+)/);
+    return {action:'request', amount, name: nameMatch? nameMatch[1] : 'friend'};
+  }
+  if(t.includes('budget') && t.includes('set')){
+    const catMatch = Object.keys(CATS).find(c=>t.includes(c)) || (t.match(/set\s+(\w+)\s+budget/)||[])[1];
+    return {action:'budget', amount, cat: catMatch || 'category'};
+  }
+  if(t.startsWith('add') && (t.includes('monthly')||t.includes('yearly')||t.includes('subscription'))){
+    const nameMatch = text.match(/add\s+([a-zA-Z ]+?)\s+\d/);
+    return {action:'subscription', amount, name: nameMatch? nameMatch[1].trim() : 'service', cycle: t.includes('yearly')?'yearly':'monthly'};
+  }
+  const withMatch = text.match(/with\s+([a-zA-Z]+)/i);
+  return {action:'expense', amount, note:text, with: withMatch? withMatch[1] : null, cat: categorize(text)};
+}
+
+function renderPreview(p, raw){
+  if(p.action==='request'){
+    return `<div class="parsed">💸 Generate a UPI request for <b>${p.amount?money(p.amount):'—'}</b> from <b>${p.name}</b></div>
+      <div class="preview-actions"><button class="btn small" onclick="commitSpotlight('${raw.replace(/'/g,"\\'")}')">Generate QR</button><button class="btn small ghost" onclick="dismissPreview()">Edit</button></div>`;
+  }
+  if(p.action==='budget'){
+    return `<div class="parsed">📊 Set <b>${p.cat}</b> monthly budget to <b>${p.amount?money(p.amount):'—'}</b></div>
+      <div class="preview-actions"><button class="btn small" onclick="commitSpotlight('${raw.replace(/'/g,"\\'")}')">Update budget</button><button class="btn small ghost" onclick="dismissPreview()">Edit</button></div>`;
+  }
+  if(p.action==='subscription'){
+    return `<div class="parsed">🔁 Track subscription <b>${p.name}</b> · <b>${p.amount?money(p.amount):'—'}</b> / ${p.cycle}</div>
+      <div class="preview-actions"><button class="btn small" onclick="commitSpotlight('${raw.replace(/'/g,"\\'")}')">Add subscription</button><button class="btn small ghost" onclick="dismissPreview()">Edit</button></div>`;
+  }
+  const halfNote = p.with && p.amount ? ` — they'd owe <b>${money(p.amount/2)}</b>, split equally` : '';
+  return `<div class="parsed">🧾 Log <b>${p.amount?money(p.amount):'—'}</b> · ${p.cat}${p.with?` · split with <b>${p.with}</b>${halfNote}`:''}</div>
+    <div class="preview-actions"><button class="btn small" onclick="commitSpotlight('${raw.replace(/'/g,"\\'")}')">Confirm</button><button class="btn small ghost" onclick="dismissPreview()">Edit</button></div>`;
+}
+function dismissPreview(){ previewChip.classList.remove('show'); }
+
+function commitSpotlight(raw){
+  const p = parseSpotlight(raw);
+  if(p.action==='expense'){
+    if(p.with && p.amount){
+      // equal 2-way split: the named person owes half back to you
+      const share = p.amount/2;
+      let f = state.friends.find(fr=>fr.name.toLowerCase()===p.with.toLowerCase());
+      if(!f){ f = {name:p.with[0].toUpperCase()+p.with.slice(1), balance:0}; state.friends.push(f); }
+      f.balance += share;
+      state.activity.unshift({who:'You paid', note:`${raw} · split 2 ways (equally)`, amt:-p.amount, cat:p.cat, time:'Just now'});
+    } else {
+      state.activity.unshift({who:'You', note:raw, amt:-(p.amount||0), cat:p.cat, time:'Just now'});
+    }
+    toast('Expense logged from Spotlight');
+    setTab('home');
+  } else if(p.action==='budget'){
+    const catName = p.cat[0].toUpperCase()+p.cat.slice(1);
+    const existing = state.budgets.find(b=>b.cat.toLowerCase()===p.cat.toLowerCase());
+    if(existing) existing.limit = p.amount||existing.limit;
+    else state.budgets.push({cat:catName, limit:p.amount||1000, spent:0});
+    toast('Budget updated');
+    setTab('budget');
+  } else if(p.action==='subscription'){
+    state.subscriptions.unshift({name:p.name, amt:p.amount||0, cycle:p.cycle, renewIn:30, trial:false});
+    toast('Subscription added');
+    setTab('wallet'); state.walletSub='subs';
+  } else if(p.action==='request'){
+    setTab('wallet'); state.walletSub='upi'; render();
+    setTimeout(()=>{
+      document.getElementById('upiName').value = p.name[0].toUpperCase()+p.name.slice(1);
+      document.getElementById('upiAmt').value = p.amount||0;
+      generateUpiQr();
+    }, 50);
+  }
+  spotlightInput.value=''; previewChip.classList.remove('show');
+}
+
+/* ============ INIT ============ */
+render();
+</script>
+</body>
+</html>
