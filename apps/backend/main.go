@@ -51,6 +51,8 @@ func main() {
 			r.Post("/", createExpenseHandler(db))
 			r.Get("/", listExpensesHandler(db))
 			r.Get("/{expenseID}", getExpenseHandler(db))
+			r.Put("/{expenseID}", updateExpenseHandler(db))
+			r.Delete("/{expenseID}", deleteExpenseHandler(db))
 			r.Post("/{expenseID}/receipt", createReceiptHandler(db))
 			r.Get("/{expenseID}/receipt", getReceiptHandler(db))
 		})

@@ -37,3 +37,16 @@ func (q *DBQueries) GetParticipantIDByUserID(ctx context.Context, userID string)
 	}
 	return pid, nil
 }
+
+func (q *DBQueries) IsUserInGroup(ctx context.Context, groupID, participantID string) (bool, error) {
+	var exists bool
+	err := q.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM public.list_members WHERE list_id = $1 AND participant_id = $2)`,
+		groupID, participantID,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check membership failed: %w", err)
+	}
+	return exists, nil
+}
+

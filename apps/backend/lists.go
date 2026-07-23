@@ -18,12 +18,23 @@ func (q *DBQueries) CreateList(ctx context.Context, name string, createdBy strin
 	}
 	defer tx.Rollback(ctx)
 
+	// Safely generate account number using sequence/transaction lock to prevent duplicate LST-XXXX generation under concurrency
+	var seqVal int64
+	err = tx.QueryRow(ctx, `SELECT nextval('public.list_account_seq')`).Scan(&seqVal)
+	if err != nil {
+		// Fallback: lock table if sequence doesn't exist in dev env
+		var maxNum int
+		_ = tx.QueryRow(ctx, `SELECT COALESCE(MAX(CAST(SUBSTRING(account_number FROM 5) AS INTEGER)), 0) FROM public.lists FOR UPDATE`).Scan(&maxNum)
+		seqVal = int64(maxNum + 1)
+	}
+	accountNumber := fmt.Sprintf("LST-%04d", seqVal)
+
 	var list List
 	err = tx.QueryRow(ctx,
-		`INSERT INTO public.lists (name, created_by)
-		 VALUES ($1, $2)
+		`INSERT INTO public.lists (name, created_by, account_number)
+		 VALUES ($1, $2, $3)
 		 RETURNING id, account_number, name, created_by, created_at`,
-		name, createdBy,
+		name, createdBy, accountNumber,
 	).Scan(&list.ID, &list.AccountNumber, &list.Name, &list.CreatedBy, &list.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("insert list: %w", err)
@@ -155,6 +166,13 @@ func getListHandler(q *DBQueries) http.HandlerFunc {
 		id := chi.URLParam(r, "groupID")
 		if id == "" {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "groupID is required"})
+			return
+		}
+
+		pid := participantIDFromCtx(r.Context())
+		inGroup, err := q.IsUserInGroup(r.Context(), id, pid)
+		if err != nil || !inGroup {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "access denied: not a member of group"})
 			return
 		}
 

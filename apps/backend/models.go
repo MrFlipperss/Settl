@@ -96,14 +96,15 @@ type AddMemberRequest struct {
 }
 
 type CreateExpenseRequest struct {
-	GroupID   *string           `json:"group_id"`
-	PayerID   string            `json:"payer_id"`
-	Amount    float64           `json:"amount"`
-	SplitType string            `json:"split_type"` // "equal"|"exact"|"percentage"|"shares" — applies to all splits
-	Category  *string           `json:"category"`
-	Note      *string           `json:"note"`
-	Timestamp *time.Time        `json:"timestamp"`
-	Splits    []CreateSplitItem `json:"splits"`
+	GroupID        *string           `json:"group_id"`
+	PayerID        string            `json:"payer_id"`
+	Amount         float64           `json:"amount"`
+	SplitType      string            `json:"split_type"` // "equal"|"exact"|"percentage"|"shares" — applies to all splits
+	Category       *string           `json:"category"`
+	Note           *string           `json:"note"`
+	IdempotencyKey *string           `json:"idempotency_key,omitempty"`
+	Timestamp      *time.Time        `json:"timestamp"`
+	Splits         []CreateSplitItem `json:"splits"`
 }
 
 type CreateSplitItem struct {

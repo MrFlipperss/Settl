@@ -20,6 +20,16 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 	}
 	defer tx.Rollback(ctx)
 
+	// Idempotency check if key present
+	if req.IdempotencyKey != nil && *req.IdempotencyKey != "" {
+		var existingID string
+		err := tx.QueryRow(ctx, `SELECT id FROM public.expenses WHERE idempotency_key = $1`, *req.IdempotencyKey).Scan(&existingID)
+		if err == nil && existingID != "" {
+			tx.Rollback(ctx)
+			return q.GetExpense(ctx, existingID)
+		}
+	}
+
 	splitType := req.SplitType
 
 	var expenseID string
@@ -34,10 +44,10 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 	}
 
 	err = tx.QueryRow(ctx,
-		`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at, idempotency_key)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 RETURNING id`,
-		req.GroupID, req.PayerID, req.Amount, category, req.Note, splitType, createdAt,
+		req.GroupID, req.PayerID, req.Amount, category, req.Note, splitType, createdAt, req.IdempotencyKey,
 	).Scan(&expenseID)
 	if err != nil {
 		return nil, fmt.Errorf("insert expense: %w", err)
@@ -70,6 +80,81 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 		Splits:    splits,
 	}
 	return expense, nil
+}
+
+func (q *DBQueries) UpdateExpense(ctx context.Context, id string, req CreateExpenseRequest, splits []Split) (*Expense, error) {
+	tx, err := q.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	category := "Uncategorized"
+	if req.Category != nil {
+		category = *req.Category
+	}
+
+	_, err = tx.Exec(ctx,
+		`UPDATE public.expenses
+		 SET payer_id = $1, amount = $2, category = $3, note = $4, split_type = $5
+		 WHERE id = $6`,
+		req.PayerID, req.Amount, category, req.Note, req.SplitType, id,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("update expense: %w", err)
+	}
+
+	// Delete existing splits for this expense
+	_, err = tx.Exec(ctx, `DELETE FROM public.expense_splits WHERE expense_id = $1`, id)
+	if err != nil {
+		return nil, fmt.Errorf("delete old splits: %w", err)
+	}
+
+	// Insert updated splits
+	for _, s := range splits {
+		_, err = tx.Exec(ctx,
+			`INSERT INTO public.expense_splits (expense_id, participant_id, share_amount, raw_input)
+			 VALUES ($1, $2, $3, $4)`,
+			id, s.ParticipantID, s.ShareAmount, s.RawInput,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("insert updated split: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit update tx: %w", err)
+	}
+
+	return q.GetExpense(ctx, id)
+}
+
+func (q *DBQueries) DeleteExpense(ctx context.Context, id string) error {
+	tx, err := q.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Clean up attached receipt details
+	_, _ = tx.Exec(ctx, `DELETE FROM public.receipt_details WHERE expense_id = $1`, id)
+
+	// Clean up splits
+	_, err = tx.Exec(ctx, `DELETE FROM public.expense_splits WHERE expense_id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete splits: %w", err)
+	}
+
+	// Delete expense
+	res, err := tx.Exec(ctx, `DELETE FROM public.expenses WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete expense: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (q *DBQueries) GetExpense(ctx context.Context, id string) (*Expense, error) {
@@ -153,6 +238,11 @@ func (q *DBQueries) ListExpenses(ctx context.Context, groupID *string, from, to 
 	return expenses, nil
 }
 
+func validateMaxDecimals(val float64, maxDecimals int) bool {
+	scaled := val * math.Pow10(maxDecimals)
+	return math.Abs(scaled-math.Round(scaled)) < 1e-6
+}
+
 func createExpenseHandler(q *DBQueries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req CreateExpenseRequest
@@ -161,9 +251,31 @@ func createExpenseHandler(q *DBQueries) http.HandlerFunc {
 			return
 		}
 
+		// Read Idempotency-Key header if not in JSON body
+		if req.IdempotencyKey == nil || *req.IdempotencyKey == "" {
+			if key := r.Header.Get("Idempotency-Key"); key != "" {
+				req.IdempotencyKey = &key
+			}
+		}
+
 		if req.PayerID == "" || req.Amount <= 0 || len(req.Splits) == 0 {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "payer_id, amount, and splits are required"})
 			return
+		}
+
+		if !validateMaxDecimals(req.Amount, 2) {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "amount cannot have more than 2 decimal places"})
+			return
+		}
+
+		// Verify membership if group expense
+		if req.GroupID != nil && *req.GroupID != "" {
+			callerPID := participantIDFromCtx(r.Context())
+			inGroup, err := q.IsUserInGroup(r.Context(), *req.GroupID, callerPID)
+			if err != nil || !inGroup {
+				writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "user does not belong to group"})
+				return
+			}
 		}
 
 		splits, err := resolveSplits(req)
@@ -190,6 +302,8 @@ func getExpenseHandler(q *DBQueries) http.HandlerFunc {
 			return
 		}
 
+		callerPID := participantIDFromCtx(r.Context())
+
 		expense, err := q.GetExpense(r.Context(), id)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
@@ -200,7 +314,105 @@ func getExpenseHandler(q *DBQueries) http.HandlerFunc {
 			return
 		}
 
+		// Authorization Check: Verify caller is payer, participant in split, or member of group
+		isParticipant := expense.PayerID == callerPID
+		if !isParticipant {
+			for _, s := range expense.Splits {
+				if s.ParticipantID == callerPID {
+					isParticipant = true
+					break
+				}
+			}
+		}
+		if !isParticipant && expense.ListID != nil && *expense.ListID != "" {
+			inGroup, err := q.IsUserInGroup(r.Context(), *expense.ListID, callerPID)
+			if err == nil && inGroup {
+				isParticipant = true
+			}
+		}
+
+		if !isParticipant {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "access denied: user does not belong to this expense or group"})
+			return
+		}
+
 		writeJSON(w, http.StatusOK, expense)
+	}
+}
+
+func updateExpenseHandler(q *DBQueries) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "expenseID")
+		if id == "" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "expenseID is required"})
+			return
+		}
+
+		callerPID := participantIDFromCtx(r.Context())
+		existing, err := q.GetExpense(r.Context(), id)
+		if err != nil || existing == nil {
+			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "expense not found"})
+			return
+		}
+
+		if existing.PayerID != callerPID {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "only payer can edit expense"})
+			return
+		}
+
+		var req CreateExpenseRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
+			return
+		}
+
+		if !validateMaxDecimals(req.Amount, 2) {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "amount cannot have more than 2 decimal places"})
+			return
+		}
+
+		splits, err := resolveSplits(req)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+			return
+		}
+
+		updated, err := q.UpdateExpense(r.Context(), id, req, splits)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, updated)
+	}
+}
+
+func deleteExpenseHandler(q *DBQueries) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "expenseID")
+		if id == "" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "expenseID is required"})
+			return
+		}
+
+		callerPID := participantIDFromCtx(r.Context())
+		existing, err := q.GetExpense(r.Context(), id)
+		if err != nil || existing == nil {
+			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "expense not found"})
+			return
+		}
+
+		if existing.PayerID != callerPID {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "only payer can delete expense"})
+			return
+		}
+
+		if err := q.DeleteExpense(r.Context(), id); err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -272,7 +484,7 @@ func resolveSplits(req CreateExpenseRequest) ([]Split, error) {
 				return nil, fmt.Errorf("share_count required for shares split (participant index %d)", i)
 			}
 			inp.RawValue = int64(*s.ShareCount)
-		// SplitEqual: RawValue is unused, zero is fine.
+			// SplitEqual: RawValue is unused, zero is fine.
 		}
 		inputs[i] = inp
 	}
