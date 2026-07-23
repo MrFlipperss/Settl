@@ -8,17 +8,30 @@ import (
 
 type pairwiseBalanceRow struct {
 	FromParticipant string
+	FromDisplayName string
 	ToParticipant   string
-	AmountOwed      float64
+	ToDisplayName   string
+	AmountOwedPaise int64
+}
+
+func safeUUIDDisplay(id string) string {
+	if len(id) >= 8 {
+		return id[:8]
+	}
+	return id
 }
 
 func (q *DBQueries) GetPairwiseBalances(ctx context.Context, personID *string) ([]pairwiseBalanceRow, error) {
-	query := `SELECT from_participant, to_participant, amount_owed
-		FROM public.pairwise_balances`
+	query := `SELECT b.from_participant, COALESCE(pf.display_name, ''),
+	                 b.to_participant, COALESCE(pt.display_name, ''),
+	                 CAST(b.amount_owed * 100 AS BIGINT)
+		FROM public.pairwise_balances b
+		LEFT JOIN public.profiles pf ON pf.participant_id = b.from_participant
+		LEFT JOIN public.profiles pt ON pt.participant_id = b.to_participant`
 	args := []interface{}{}
 
 	if personID != nil {
-		query += ` WHERE from_participant = $1 OR to_participant = $1`
+		query += ` WHERE b.from_participant = $1 OR b.to_participant = $1`
 		args = append(args, *personID)
 	}
 
@@ -31,23 +44,18 @@ func (q *DBQueries) GetPairwiseBalances(ctx context.Context, personID *string) (
 	var balances []pairwiseBalanceRow
 	for rows.Next() {
 		var b pairwiseBalanceRow
-		if err := rows.Scan(&b.FromParticipant, &b.ToParticipant, &b.AmountOwed); err != nil {
+		if err := rows.Scan(&b.FromParticipant, &b.FromDisplayName, &b.ToParticipant, &b.ToDisplayName, &b.AmountOwedPaise); err != nil {
 			return nil, fmt.Errorf("scan balance: %w", err)
+		}
+		if b.FromDisplayName == "" {
+			b.FromDisplayName = safeUUIDDisplay(b.FromParticipant)
+		}
+		if b.ToDisplayName == "" {
+			b.ToDisplayName = safeUUIDDisplay(b.ToParticipant)
 		}
 		balances = append(balances, b)
 	}
 	return balances, nil
-}
-
-func (q *DBQueries) GetProfileDisplayName(ctx context.Context, participantID string) (string, error) {
-	var name string
-	err := q.pool.QueryRow(ctx,
-		`SELECT display_name FROM public.profiles WHERE participant_id = $1`, participantID,
-	).Scan(&name)
-	if err != nil {
-		return participantID[:8], nil
-	}
-	return name, nil
 }
 
 func getBalancesHandler(q *DBQueries) http.HandlerFunc {
@@ -69,7 +77,7 @@ func getBalancesHandler(q *DBQueries) http.HandlerFunc {
 			return
 		}
 
-		var totalOwed, totalOwing float64
+		var totalOwed, totalOwing int64
 		var breakdown []BalanceEntry
 
 		for _, b := range balances {
@@ -78,30 +86,28 @@ func getBalancesHandler(q *DBQueries) http.HandlerFunc {
 
 			if b.FromParticipant == participantID {
 				// current user owes b.ToParticipant
-				totalOwing += b.AmountOwed
+				totalOwing += b.AmountOwedPaise
 				entry.UserID = b.ToParticipant
-				entry.Amount = b.AmountOwed
-				name, _ := q.GetProfileDisplayName(r.Context(), b.ToParticipant)
-				entry.UserName = name
+				entry.Amount = b.AmountOwedPaise
+				entry.UserName = b.ToDisplayName
 			} else if b.ToParticipant == participantID {
 				// b.FromParticipant owes current user
-				totalOwed += b.AmountOwed
+				totalOwed += b.AmountOwedPaise
 				entry.UserID = b.FromParticipant
-				entry.Amount = b.AmountOwed
-				name, _ := q.GetProfileDisplayName(r.Context(), b.FromParticipant)
-				entry.UserName = name
+				entry.Amount = b.AmountOwedPaise
+				entry.UserName = b.FromDisplayName
 			} else if personID != nil {
 				if b.FromParticipant == *personID {
 					entry.UserID = b.ToParticipant
-					entry.Amount = b.AmountOwed
+					entry.Amount = b.AmountOwedPaise
+					entry.UserName = b.ToDisplayName
 				} else if b.ToParticipant == *personID {
 					entry.UserID = b.FromParticipant
-					entry.Amount = b.AmountOwed
+					entry.Amount = b.AmountOwedPaise
+					entry.UserName = b.FromDisplayName
 				} else {
 					continue
 				}
-				name, _ := q.GetProfileDisplayName(r.Context(), entry.UserID)
-				entry.UserName = name
 			} else {
 				continue
 			}

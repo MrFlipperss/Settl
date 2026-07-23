@@ -44,26 +44,27 @@ type Expense struct {
 	ID        string    `json:"id"`
 	ListID    *string   `json:"group_id"`
 	PayerID   string    `json:"payer_id"`
-	Amount    float64   `json:"amount"`
+	Amount    int64     `json:"amount_paise"` // Stored and calculated as int64 paise
 	Category  string    `json:"category"`
 	Note      *string   `json:"note,omitempty"`
 	SplitType string    `json:"split_type"`
+	Version   int       `json:"version"` // Optimistic locking version
 	CreatedAt time.Time `json:"timestamp"`
 	Splits    []Split   `json:"splits"`
 }
 
 type Split struct {
-	ID            string   `json:"id,omitempty"`
-	ExpenseID     string   `json:"-"`
-	ParticipantID string   `json:"user_id"`
-	ShareAmount   float64  `json:"share_amount"`
-	RawInput      *float64 `json:"-"`
+	ID            string `json:"id,omitempty"`
+	ExpenseID     string `json:"-"`
+	ParticipantID string `json:"user_id"`
+	ShareAmount   int64  `json:"share_amount_paise"` // Stored as int64 paise
+	RawInput      *int64 `json:"-"`
 }
 
 type ReceiptDetail struct {
 	ExpenseID string    `json:"expense_id"`
 	Merchant  *string   `json:"merchant"`
-	OCRTotal  *float64  `json:"ocr_total"`
+	OCRTotal  *int64    `json:"ocr_total_paise,omitempty"`
 	OCRDate   *string   `json:"ocr_date"`
 	LineItems []string  `json:"line_items"`
 	CreatedBy string    `json:"created_by"`
@@ -75,14 +76,14 @@ type BalanceEntry struct {
 	UserName  string  `json:"user_name"`
 	GroupID   *string `json:"group_id,omitempty"`
 	GroupName *string `json:"group_name,omitempty"`
-	Amount    float64 `json:"amount"`
+	Amount    int64   `json:"amount_paise"`
 	Currency  string  `json:"currency"`
 }
 
 type BalancesResponse struct {
-	TotalOwed  float64        `json:"total_owed"`
-	TotalOwing float64        `json:"total_owing"`
-	Net        float64        `json:"net"`
+	TotalOwed  int64          `json:"total_owed_paise"`
+	TotalOwing int64          `json:"total_owing_paise"`
+	Net        int64          `json:"net_paise"`
 	Breakdown  []BalanceEntry `json:"breakdown"`
 }
 

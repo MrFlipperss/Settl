@@ -20,16 +20,7 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 	}
 	defer tx.Rollback(ctx)
 
-	// Idempotency check if key present
-	if req.IdempotencyKey != nil && *req.IdempotencyKey != "" {
-		var existingID string
-		err := tx.QueryRow(ctx, `SELECT id FROM public.expenses WHERE idempotency_key = $1`, *req.IdempotencyKey).Scan(&existingID)
-		if err == nil && existingID != "" {
-			tx.Rollback(ctx)
-			return q.GetExpense(ctx, existingID)
-		}
-	}
-
+	amountPaise := int64(math.Round(req.Amount * 100))
 	splitType := req.SplitType
 
 	var expenseID string
@@ -43,14 +34,35 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 		category = *req.Category
 	}
 
-	err = tx.QueryRow(ctx,
-		`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at, idempotency_key)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		 RETURNING id`,
-		req.GroupID, req.PayerID, req.Amount, category, req.Note, splitType, createdAt, req.IdempotencyKey,
-	).Scan(&expenseID)
-	if err != nil {
-		return nil, fmt.Errorf("insert expense: %w", err)
+	// Atomic INSERT ... ON CONFLICT DO NOTHING for idempotency key
+	if req.IdempotencyKey != nil && *req.IdempotencyKey != "" {
+		err = tx.QueryRow(ctx,
+			`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at, idempotency_key, version)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
+			 ON CONFLICT (idempotency_key) DO NOTHING
+			 RETURNING id`,
+			req.GroupID, req.PayerID, amountPaise, category, req.Note, splitType, createdAt, req.IdempotencyKey,
+		).Scan(&expenseID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// Duplicate detected via DB constraint: fetch existing expense
+				tx.Rollback(ctx)
+				var existingID string
+				_ = q.pool.QueryRow(ctx, `SELECT id FROM public.expenses WHERE idempotency_key = $1`, *req.IdempotencyKey).Scan(&existingID)
+				return q.GetExpense(ctx, existingID)
+			}
+			return nil, fmt.Errorf("insert expense with idempotency: %w", err)
+		}
+	} else {
+		err = tx.QueryRow(ctx,
+			`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at, version)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
+			 RETURNING id`,
+			req.GroupID, req.PayerID, amountPaise, category, req.Note, splitType, createdAt,
+		).Scan(&expenseID)
+		if err != nil {
+			return nil, fmt.Errorf("insert expense: %w", err)
+		}
 	}
 
 	for _, s := range splits {
@@ -72,36 +84,46 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 		ID:        expenseID,
 		ListID:    req.GroupID,
 		PayerID:   req.PayerID,
-		Amount:    req.Amount,
+		Amount:    amountPaise,
 		Category:  category,
 		Note:      req.Note,
 		SplitType: splitType,
+		Version:   1,
 		CreatedAt: createdAt,
 		Splits:    splits,
 	}
 	return expense, nil
 }
 
-func (q *DBQueries) UpdateExpense(ctx context.Context, id string, req CreateExpenseRequest, splits []Split) (*Expense, error) {
+func (q *DBQueries) UpdateExpense(ctx context.Context, id string, req CreateExpenseRequest, splits []Split, expectedVersion int) (*Expense, error) {
 	tx, err := q.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
+	amountPaise := int64(math.Round(req.Amount * 100))
 	category := "Uncategorized"
 	if req.Category != nil {
 		category = *req.Category
 	}
 
-	_, err = tx.Exec(ctx,
-		`UPDATE public.expenses
-		 SET payer_id = $1, amount = $2, category = $3, note = $4, split_type = $5
-		 WHERE id = $6`,
-		req.PayerID, req.Amount, category, req.Note, req.SplitType, id,
-	)
+	query := `UPDATE public.expenses
+		 SET payer_id = $1, amount = $2, category = $3, note = $4, split_type = $5, version = version + 1
+		 WHERE id = $6`
+	args := []interface{}{req.PayerID, amountPaise, category, req.Note, req.SplitType, id}
+
+	if expectedVersion > 0 {
+		query += ` AND version = $7`
+		args = append(args, expectedVersion)
+	}
+
+	res, err := tx.Exec(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("update expense: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return nil, fmt.Errorf("conflict or expense not found")
 	}
 
 	// Delete existing splits for this expense
@@ -159,12 +181,12 @@ func (q *DBQueries) DeleteExpense(ctx context.Context, id string) error {
 
 func (q *DBQueries) GetExpense(ctx context.Context, id string) (*Expense, error) {
 	row := q.pool.QueryRow(ctx,
-		`SELECT id, list_id, payer_id, amount, category, note, split_type, created_at
+		`SELECT id, list_id, payer_id, amount, category, note, split_type, COALESCE(version, 1), created_at
 		 FROM public.expenses WHERE id = $1`, id)
 
 	var e Expense
 	var listID *string
-	err := row.Scan(&e.ID, &listID, &e.PayerID, &e.Amount, &e.Category, &e.Note, &e.SplitType, &e.CreatedAt)
+	err := row.Scan(&e.ID, &listID, &e.PayerID, &e.Amount, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -377,7 +399,7 @@ func updateExpenseHandler(q *DBQueries) http.HandlerFunc {
 			return
 		}
 
-		updated, err := q.UpdateExpense(r.Context(), id, req, splits)
+		updated, err := q.UpdateExpense(r.Context(), id, req, splits, 0)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 			return
@@ -496,28 +518,26 @@ func resolveSplits(req CreateExpenseRequest) ([]Split, error) {
 
 	splits := make([]Split, count)
 	for i, r := range resolved {
-		shareRupees := float64(r.SharePaise) / 100.0
-		// Preserve the caller's raw input for audit purposes.
-		var rawInput float64
+		var rawInput int64
 		switch splitType {
 		case SplitExact:
 			if req.Splits[i].ExactAmount != nil {
-				rawInput = *req.Splits[i].ExactAmount
+				rawInput = int64(math.Round(*req.Splits[i].ExactAmount * 100))
 			}
 		case SplitPercentage:
 			if req.Splits[i].Percentage != nil {
-				rawInput = *req.Splits[i].Percentage
+				rawInput = int64(math.Round(*req.Splits[i].Percentage * 100))
 			}
 		case SplitShares:
 			if req.Splits[i].ShareCount != nil {
-				rawInput = float64(*req.Splits[i].ShareCount)
+				rawInput = int64(*req.Splits[i].ShareCount)
 			}
 		default:
-			rawInput = shareRupees
+			rawInput = r.SharePaise
 		}
 		splits[i] = Split{
 			ParticipantID: req.Splits[i].UserID,
-			ShareAmount:   shareRupees,
+			ShareAmount:   r.SharePaise,
 			RawInput:      &rawInput,
 		}
 	}

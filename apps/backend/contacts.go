@@ -8,12 +8,35 @@ import (
 	"time"
 )
 
+func NormalizePhoneNumber(phone string) string {
+	cleaned := ""
+	for _, ch := range phone {
+		if ch >= '0' && ch <= '9' {
+			cleaned += string(ch)
+		} else if ch == '+' && cleaned == "" {
+			cleaned += string(ch)
+		}
+	}
+	if len(cleaned) == 10 {
+		return "+91" + cleaned
+	}
+	if len(cleaned) == 11 && cleaned[0] == '0' {
+		return "+91" + cleaned[1:]
+	}
+	if len(cleaned) > 0 && cleaned[0] != '+' {
+		return "+" + cleaned
+	}
+	return cleaned
+}
+
 func (q *DBQueries) CreateContact(ctx context.Context, req CreateContactRequest, createdBy string) (*Contact, error) {
 	tx, err := q.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
+
+	normPhone := NormalizePhoneNumber(req.PhoneNumber)
 
 	var participantID string
 	err = tx.QueryRow(ctx,
@@ -26,7 +49,7 @@ func (q *DBQueries) CreateContact(ctx context.Context, req CreateContactRequest,
 	contact := &Contact{
 		ParticipantID: participantID,
 		DisplayName:   req.DisplayName,
-		PhoneNumber:   req.PhoneNumber,
+		PhoneNumber:   normPhone,
 		CreatedBy:     createdBy,
 		CreatedAt:     time.Now(),
 	}
@@ -34,7 +57,7 @@ func (q *DBQueries) CreateContact(ctx context.Context, req CreateContactRequest,
 	_, err = tx.Exec(ctx,
 		`INSERT INTO public.contacts (participant_id, display_name, phone_number, created_by)
 		 VALUES ($1, $2, $3, $4)`,
-		participantID, req.DisplayName, req.PhoneNumber, createdBy,
+		participantID, req.DisplayName, normPhone, createdBy,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert contact: %w", err)
@@ -48,11 +71,12 @@ func (q *DBQueries) CreateContact(ctx context.Context, req CreateContactRequest,
 }
 
 func (q *DBQueries) ClaimContacts(ctx context.Context, phoneNumber, newParticipantID string) (int, error) {
+	normPhone := NormalizePhoneNumber(phoneNumber)
 	result, err := q.pool.Exec(ctx,
 		`UPDATE public.contacts
 		 SET claimed_by_participant_id = $1
 		 WHERE phone_number = $2 AND claimed_by_participant_id IS NULL`,
-		newParticipantID, phoneNumber,
+		newParticipantID, normPhone,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("claim contacts: %w", err)
