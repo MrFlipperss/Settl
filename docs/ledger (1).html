@@ -417,9 +417,30 @@ const state = {
   ],
 };
 
+const RENDER_API_URL = "https://settl-kru1.onrender.com";
+let isBackendLive = false;
+
+async function checkRenderBackend() {
+  try {
+    const res = await fetch(`${RENDER_API_URL}/health`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.status === 'ok') {
+        isBackendLive = true;
+        console.log('[Settl HTML] Connected to Render live backend at', RENDER_API_URL);
+        toast('Connected to Render Backend (settl-kru1.onrender.com)');
+      }
+    }
+  } catch(e) {
+    console.warn('[Settl HTML] Backend check:', e);
+  }
+}
+checkRenderBackend();
+
 const money = n => (n<0?'-':'') + '₹' + Math.abs(Math.round(n)).toLocaleString('en-IN');
 function toast(msg){
   const t = document.getElementById('toast');
+  if(!t) return;
   t.textContent = msg; t.classList.add('show');
   clearTimeout(window.__toastT);
   window.__toastT = setTimeout(()=>t.classList.remove('show'), 1800);
