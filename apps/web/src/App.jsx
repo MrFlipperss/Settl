@@ -2,16 +2,12 @@ import React, { useState, useEffect } from 'react';
 import Navigation from './components/Navigation';
 import SpotlightBar from './components/SpotlightBar';
 import Dashboard from './components/Dashboard';
-import GroupsView from './components/GroupsView';
-import BudgetView from './components/BudgetView';
-import TicketWalletView from './components/TicketWalletView';
-import SubscriptionsView from './components/SubscriptionsView';
 import ExpenseModal from './components/ExpenseModal';
 import UpiQrModal from './components/UpiQrModal';
 import ReceiptOcrModal from './components/ReceiptOcrModal';
 import TipCalculatorModal from './components/TipCalculatorModal';
 import { SettlApi } from './services/api';
-import { computeFriendBalances, calculateSplits, rupeesToPaise } from './utils/splitMath';
+import { computeFriendBalances, calculateSplits } from './utils/splitMath';
 
 import {
   CURRENT_USER,
@@ -26,7 +22,6 @@ import {
 
 export default function App() {
   const [theme, setTheme] = useState('dark');
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'groups' | 'budget' | 'wallet'
 
   // Application Data State
   const [user] = useState(CURRENT_USER);
@@ -44,7 +39,6 @@ export default function App() {
   // Modal Controls State
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [presetForExpense, setPresetForExpense] = useState(null);
-
   const [settleQrState, setSettleQrState] = useState({ isOpen: false, targetPerson: null, amountPaise: 0, type: 'PAY' });
   const [showOcrModal, setShowOcrModal] = useState(false);
   const [showTipCalcModal, setShowTipCalcModal] = useState(false);
@@ -53,20 +47,19 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  // Compute friend net balances dynamically on expenses change
+  // Dynamically compute net balances on expense change
   useEffect(() => {
     const updatedFriends = computeFriendBalances(friends, expenses, user.id);
     setFriends(updatedFriends);
   }, [expenses, user.id]);
 
-  // Sync with live Render Backend on mount
+  // Sync with live Render backend
   useEffect(() => {
     async function initBackendSync() {
       try {
         const health = await SettlApi.checkHealth();
         if (health && health.status === 'ok') {
           setApiConnected(true);
-          console.log('[Settl] Connected to live Render Backend at https://settl-kru1.onrender.com');
 
           const [remoteGroups, remoteExpenses] = await Promise.allSettled([
             SettlApi.listGroups(),
@@ -81,7 +74,6 @@ export default function App() {
           }
         }
       } catch (err) {
-        console.log('[Settl] Render backend fallback mode:', err.message);
         setApiConnected(false);
       }
     }
@@ -92,22 +84,19 @@ export default function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
-  // Add new expense handler
+  // Save new expense
   const handleSaveExpense = async (newExpense) => {
     const updatedExpenses = [newExpense, ...expenses];
     setExpenses(updatedExpenses);
 
-    // Update group total volume if group_id exists
     if (newExpense.group_id) {
       setGroups(groups.map(g => g.id === newExpense.group_id ? { ...g, totalSpendPaise: g.totalSpendPaise + newExpense.amount_paise } : g));
     }
 
-    // Update category budget spent amount
     if (newExpense.category) {
       setBudgets(budgets.map(b => b.category === newExpense.category ? { ...b, spentPaise: b.spentPaise + newExpense.amount_paise } : b));
     }
 
-    // Push to Render backend API if connected
     if (apiConnected) {
       try {
         await SettlApi.createExpense({
@@ -122,12 +111,12 @@ export default function App() {
           splits: newExpense.splits
         });
       } catch (err) {
-        console.warn('Backend sync failed, saved locally:', err);
+        console.warn('Backend sync failed:', err);
       }
     }
   };
 
-  // Create new group handler
+  // Create new group
   const handleCreateGroup = async (newGroup) => {
     setGroups([newGroup, ...groups]);
 
@@ -140,7 +129,7 @@ export default function App() {
     }
   };
 
-  // Spotlight Natural Language Command Handler
+  // Execute Spotlight NLP Action
   const handleExecuteSpotlightAction = (actionResult) => {
     if (!actionResult) return;
 
@@ -152,20 +141,14 @@ export default function App() {
 
         if (payload.group_id) {
           const g = groups.find(item => item.id === payload.group_id);
-          if (g) {
-            participantsList = [user, ...friends.filter(f => g.members.includes(f.id))];
-          }
+          if (g) participantsList = [user, ...friends.filter(f => g.members.includes(f.id))];
         } else if (payload.person_id) {
           const f = friends.find(item => item.id === payload.person_id);
           if (f) participantsList = [user, f];
-        } else {
-          // If a friend's name was detected in text (e.g. Sarah)
-          if (actionResult.targetPerson) {
-            participantsList = [user, actionResult.targetPerson];
-          }
+        } else if (actionResult.targetPerson) {
+          participantsList = [user, actionResult.targetPerson];
         }
 
-        // Equal split calculation for participants
         const { splits } = calculateSplits(totalPaise, participantsList, 'equal');
 
         handleSaveExpense({
@@ -186,18 +169,16 @@ export default function App() {
       case 'SET_BUDGET': {
         const { category, amount } = actionResult.previewChip.payload;
         setBudgets(budgets.map(b => b.category.toLowerCase() === category.toLowerCase() ? { ...b, targetPaise: amount * 100 } : b));
-        setActiveTab('budget');
         break;
       }
 
-      case 'REQUEST_MONEY': {
-        const { personName, amount } = actionResult.previewChip.payload;
-        const friendMatch = friends.find(f => f.name.toLowerCase() === personName.toLowerCase()) || { name: personName, upi_vpa: `${personName.toLowerCase()}@upi` };
+      case 'UPI_ACTION': {
+        const { person, amount, isPay } = actionResult.previewChip.payload;
         setSettleQrState({
           isOpen: true,
-          targetPerson: friendMatch,
+          targetPerson: person,
           amountPaise: amount * 100,
-          type: 'REQUEST'
+          type: isPay ? 'PAY' : 'REQUEST'
         });
         break;
       }
@@ -205,18 +186,9 @@ export default function App() {
       case 'ADD_SUBSCRIPTION': {
         const { name, amount, cycle } = actionResult.previewChip.payload;
         setSubscriptions([
-          {
-            id: `sub_${Date.now()}`,
-            name,
-            amountPaise: amount * 100,
-            cycle,
-            nextRenewal: '2026-08-20',
-            category: 'Entertainment',
-            isTrial: false
-          },
+          { id: `sub_${Date.now()}`, name, amountPaise: amount * 100, cycle, nextRenewal: '2026-08-20', category: 'Entertainment', isTrial: false },
           ...subscriptions
         ]);
-        setActiveTab('wallet');
         break;
       }
 
@@ -226,108 +198,74 @@ export default function App() {
   };
 
   return (
-    <div className="app-viewport">
-      <div className="phone-frame">
-        
-        {/* Navigation Top Header */}
-        <Navigation
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          theme={theme}
-          toggleTheme={toggleTheme}
-          onOpenNewExpense={() => { setPresetForExpense(null); setShowExpenseModal(true); }}
-          onOpenOcr={() => setShowOcrModal(true)}
-          onOpenTipCalc={() => setShowTipCalcModal(true)}
-        />
+    <div className="console-container">
+      {/* Top Header */}
+      <Navigation
+        theme={theme}
+        toggleTheme={toggleTheme}
+        onOpenNewExpense={() => { setPresetForExpense(null); setShowExpenseModal(true); }}
+        onOpenOcr={() => setShowOcrModal(true)}
+        onOpenTipCalc={() => setShowTipCalcModal(true)}
+      />
 
-        {/* Global Spotlight Natural Language Command Bar */}
-        <SpotlightBar
-          onExecuteAction={handleExecuteSpotlightAction}
-          users={friends}
-          groups={groups}
-        />
+      {/* Spotlight Command Bar */}
+      <SpotlightBar
+        onExecuteAction={handleExecuteSpotlightAction}
+        users={friends}
+        groups={groups}
+        expenses={expenses}
+      />
 
-        {/* Dynamic Tab Views */}
-        <main style={{ flex: 1, overflowY: 'auto', paddingBottom: '20px' }}>
-          {activeTab === 'dashboard' && (
-            <Dashboard
-              user={user}
-              friends={friends}
-              groups={groups}
-              expenses={expenses}
-              presets={presets}
-              onOpenSettleQr={(friend, amountPaise, type) => setSettleQrState({ isOpen: true, targetPerson: friend, amountPaise, type })}
-              onOpenNewExpense={() => { setPresetForExpense(null); setShowExpenseModal(true); }}
-              onApplyPreset={(preset) => { setPresetForExpense(preset); setShowExpenseModal(true); }}
-            />
-          )}
-
-          {activeTab === 'groups' && (
-            <GroupsView
-              groups={groups}
-              friends={friends}
-              user={user}
-              onCreateGroup={handleCreateGroup}
-            />
-          )}
-
-          {activeTab === 'budget' && (
-            <BudgetView
-              budgets={budgets}
-              expenses={expenses}
-              onUpdateBudget={(cat, target) => setBudgets(budgets.map(b => b.category === cat ? { ...b, targetPaise: target } : b))}
-            />
-          )}
-
-          {activeTab === 'wallet' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <TicketWalletView
-                tickets={tickets}
-                onConvertTicketToExpense={handleSaveExpense}
-              />
-
-              <div style={{ padding: '0 16px' }}>
-                <SubscriptionsView
-                  subscriptions={subscriptions}
-                  onAddSubscription={(newSub) => setSubscriptions([newSub, ...subscriptions])}
-                />
-              </div>
-            </div>
-          )}
-        </main>
-
-        {/* Modals & Overlays */}
-        <ExpenseModal
-          isOpen={showExpenseModal}
-          onClose={() => { setShowExpenseModal(false); setPresetForExpense(null); }}
-          onSaveExpense={handleSaveExpense}
+      {/* Main Studio Console Layout (4 Quad Panels fitting on screen, 100vh) */}
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <Dashboard
           user={user}
           friends={friends}
           groups={groups}
-          initialPreset={presetForExpense}
+          expenses={expenses}
+          budgets={budgets}
+          subscriptions={subscriptions}
+          tickets={tickets}
+          presets={presets}
+          onOpenSettleQr={(friend, amountPaise, type) => setSettleQrState({ isOpen: true, targetPerson: friend, amountPaise, type })}
+          onOpenNewExpense={() => { setPresetForExpense(null); setShowExpenseModal(true); }}
+          onApplyPreset={(preset) => { setPresetForExpense(preset); setShowExpenseModal(true); }}
+          onCreateGroup={handleCreateGroup}
+          onConvertTicketToExpense={handleSaveExpense}
         />
-
-        <UpiQrModal
-          isOpen={settleQrState.isOpen}
-          onClose={() => setSettleQrState({ ...settleQrState, isOpen: false })}
-          targetPerson={settleQrState.targetPerson}
-          amountPaise={settleQrState.amountPaise}
-          type={settleQrState.type}
-        />
-
-        <ReceiptOcrModal
-          isOpen={showOcrModal}
-          onClose={() => setShowOcrModal(false)}
-          onSaveExpense={handleSaveExpense}
-        />
-
-        <TipCalculatorModal
-          isOpen={showTipCalcModal}
-          onClose={() => setShowTipCalcModal(false)}
-          onSaveExpense={handleSaveExpense}
-        />
-
       </div>
+
+      {/* Modals & Overlays */}
+      <ExpenseModal
+        isOpen={showExpenseModal}
+        onClose={() => { setShowExpenseModal(false); setPresetForExpense(null); }}
+        onSaveExpense={handleSaveExpense}
+        user={user}
+        friends={friends}
+        groups={groups}
+        initialPreset={presetForExpense}
+      />
+
+      <UpiQrModal
+        isOpen={settleQrState.isOpen}
+        onClose={() => setSettleQrState({ ...settleQrState, isOpen: false })}
+        targetPerson={settleQrState.targetPerson}
+        amountPaise={settleQrState.amountPaise}
+        type={settleQrState.type}
+      />
+
+      <ReceiptOcrModal
+        isOpen={showOcrModal}
+        onClose={() => setShowOcrModal(false)}
+        onSaveExpense={handleSaveExpense}
+      />
+
+      <TipCalculatorModal
+        isOpen={showTipCalcModal}
+        onClose={() => setShowTipCalcModal(false)}
+        onSaveExpense={handleSaveExpense}
+      />
+
     </div>
   );
 }

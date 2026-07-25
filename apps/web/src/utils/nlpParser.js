@@ -1,23 +1,23 @@
 /**
- * Rule-based Natural Language Interpreter for Settl Spotlight
- * Converts text like "₹100 dinner with sarah" into structured actions with preview chips.
+ * Fixed & Enhanced Spotlight NLP Parser for Settl
+ * Bug Fix: Uses word boundaries \b to prevent sub-string stripping (e.g. "dinner" -> "dner")
  */
 
 const CATEGORY_KEYWORDS = {
-  Food: ['dinner', 'lunch', 'breakfast', 'chai', 'coffee', 'swiggy', 'zomato', 'food', 'restaurant', 'pizza', 'biryani', 'drinks', 'cafe'],
-  Transport: ['uber', 'ola', 'cab', 'auto', 'metro', 'fuel', 'petrol', 'flight', 'train', 'bus', 'ticket', 'toll'],
-  Rent: ['rent', 'maintenance', 'electricity', 'water', 'wifi', 'maid', 'cook'],
-  Entertainment: ['movie', 'cinema', 'pvr', 'concert', 'game', 'bowling', 'netflix', 'spotify'],
-  Shopping: ['amazon', 'flipkart', 'myntra', 'groceries', 'supermarket', 'clothes', 'mall']
+  Food: ['dinner', 'lunch', 'breakfast', 'chai', 'coffee', 'swiggy', 'zomato', 'food', 'restaurant', 'pizza', 'biryani', 'drinks', 'cafe', 'bar', 'burger'],
+  Transport: ['uber', 'ola', 'cab', 'auto', 'metro', 'fuel', 'petrol', 'flight', 'train', 'bus', 'ticket', 'toll', 'parking'],
+  Rent: ['rent', 'maintenance', 'electricity', 'water', 'wifi', 'maid', 'cook', 'house'],
+  Entertainment: ['movie', 'cinema', 'pvr', 'concert', 'game', 'bowling', 'netflix', 'spotify', 'show'],
+  Shopping: ['amazon', 'flipkart', 'myntra', 'groceries', 'supermarket', 'clothes', 'mall', 'mart']
 };
 
-export function parseSpotlightQuery(queryText, availableUsers = [], availableGroups = []) {
+export function parseSpotlightQuery(queryText, availableUsers = [], availableGroups = [], availableExpenses = []) {
   if (!queryText || !queryText.trim()) return null;
 
   const raw = queryText.trim();
   const lower = raw.toLowerCase();
 
-  // Pattern 1: Budget updates ("set food budget 6000", "budget food 5000")
+  // Pattern 1: Budget commands ("set food budget 8000", "update rent budget 25000")
   const budgetMatch = lower.match(/(?:set|update)?\s*([a-z\s]+)?\s*budget\s*(?:for\s*([a-z\s]+))?\s*(?:to|is|=)?\s*₹?\s*(\d+)/i) ||
                       lower.match(/set\s+([a-z]+)\s+budget\s+(\d+)/i);
   if (budgetMatch) {
@@ -27,47 +27,46 @@ export function parseSpotlightQuery(queryText, availableUsers = [], availableGro
     
     return {
       type: 'SET_BUDGET',
-      actionTitle: `Set ${category} Budget`,
-      amount,
+      actionTitle: `Set ${category} Budget to ₹${amount.toLocaleString('en-IN')}`,
       category,
+      amount,
       previewChip: {
-        badge: 'BUDGET UPDATE',
+        badge: 'BUDGET COMMAND',
         badgeColor: 'gold',
-        details: `Set monthly target for ${category} to ₹${amount.toLocaleString('en-IN')}`,
+        title: `Set ${category} Budget`,
+        details: `Monthly limit: ₹${amount.toLocaleString('en-IN')}`,
         payload: { category, amount }
       }
     };
   }
 
-  // Pattern 2: UPI Money Requests ("request 500 from rahul", "ask sarah for 1200")
-  const requestMatch = lower.match(/(?:request|ask|collect|upi)\s*₹?\s*(\d+)\s*(?:from|of)\s*([a-z\s]+)/i) ||
-                       lower.match(/(?:request|ask)\s*([a-z\s]+)\s*(?:for)?\s*₹?\s*(\d+)/i);
-  if (requestMatch) {
-    let amount = parseInt(requestMatch[1], 10);
-    let personName = requestMatch[2];
-    if (isNaN(amount)) {
-      amount = parseInt(requestMatch[2], 10);
-      personName = requestMatch[1];
-    }
-    personName = personName ? personName.trim() : 'Friend';
+  // Pattern 2: UPI Requests / Payments ("request 500 from rahul", "pay 1200 to sarah")
+  const upiMatch = lower.match(/(?:request|ask|collect|pay|send)\s*₹?\s*(\d+)\s*(?:from|to|of)?\s*([a-z\s]+)?/i);
+  if (upiMatch && (lower.includes('request') || lower.includes('pay') || lower.includes('ask') || lower.includes('send'))) {
+    const isPay = lower.includes('pay') || lower.includes('send');
+    const amount = parseInt(upiMatch[1], 10);
+    let personName = (upiMatch[2] || 'Friend').trim();
+
+    const matchedPerson = availableUsers.find(u => u.name.toLowerCase().includes(personName.toLowerCase())) || { name: personName, upi_vpa: `${personName.toLowerCase()}@upi` };
 
     return {
-      type: 'REQUEST_MONEY',
-      actionTitle: `Generate UPI QR for ${personName}`,
+      type: 'UPI_ACTION',
+      actionTitle: isPay ? `Pay ₹${amount} via UPI to ${matchedPerson.name}` : `Request ₹${amount} via UPI from ${matchedPerson.name}`,
+      isPay,
       amount,
-      personName,
+      person: matchedPerson,
       previewChip: {
-        badge: 'UPI REQUEST',
-        badgeColor: 'blue',
-        details: `Generate UPI QR code to receive ₹${amount.toLocaleString('en-IN')} from ${personName}`,
-        payload: { personName, amount }
+        badge: isPay ? 'PAY UPI' : 'REQUEST UPI',
+        badgeColor: isPay ? 'green' : 'blue',
+        title: isPay ? `Pay ${matchedPerson.name}` : `Request from ${matchedPerson.name}`,
+        details: `Generate UPI QR for ₹${amount.toLocaleString('en-IN')}`,
+        payload: { person: matchedPerson, amount, isPay }
       }
     };
   }
 
-  // Pattern 3: Subscriptions ("add netflix 499 monthly", "subscription spotify 119")
-  const subMatch = lower.match(/(?:add|new|create)?\s*(?:subscription|sub)\s*([a-z0-9\s]+)\s*₹?\s*(\d+)\s*(monthly|yearly|annual)?/i) ||
-                   lower.match(/add\s+([a-z0-9\s]+)\s+₹?\s*(\d+)\s*(monthly|yearly|annual)?/i);
+  // Pattern 3: Subscriptions ("add netflix 499 monthly")
+  const subMatch = lower.match(/(?:add|new|create)?\s*(?:subscription|sub)\s*([a-z0-9\s]+)\s*₹?\s*(\d+)\s*(monthly|yearly|annual)?/i);
   if (subMatch && (lower.includes('monthly') || lower.includes('yearly') || lower.includes('sub') || lower.includes('netflix') || lower.includes('spotify'))) {
     const name = subMatch[1].trim();
     const amount = parseInt(subMatch[2], 10);
@@ -75,26 +74,25 @@ export function parseSpotlightQuery(queryText, availableUsers = [], availableGro
 
     return {
       type: 'ADD_SUBSCRIPTION',
-      actionTitle: `Add ${cycle} Subscription`,
+      actionTitle: `Track ${name} Subscription (₹${amount}/${cycle === 'Monthly' ? 'mo' : 'yr'})`,
       name,
       amount,
       cycle,
       previewChip: {
-        badge: 'RECURRING SUB',
+        badge: 'SUBSCRIPTION',
         badgeColor: 'purple',
-        details: `Track ${name} (₹${amount}/${cycle === 'Monthly' ? 'mo' : 'yr'})`,
+        title: `Recurring ${name}`,
+        details: `₹${amount}/${cycle === 'Monthly' ? 'mo' : 'yr'} renewal alert`,
         payload: { name, amount, cycle }
       }
     };
   }
 
-  // Pattern 4: Expense Logging ("₹100 dinner with sarah", "250 swiggy flatmates", "paid 600 taxi")
-  // Extract amount
+  // Pattern 4: Natural Language Expense Logging ("₹100 dinner with Sarah")
   const amountMatch = raw.match(/(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d{1,2})?)/i);
   if (amountMatch) {
     const amount = parseFloat(amountMatch[1]);
     
-    // Extract person/group
     let matchedPerson = null;
     let matchedGroup = null;
 
@@ -106,8 +104,8 @@ export function parseSpotlightQuery(queryText, availableUsers = [], availableGro
       if (lower.includes(g.name.toLowerCase()) || lower.includes(g.account_number.toLowerCase())) matchedGroup = g;
     });
 
-    // Detect category from keywords
-    let detectedCategory = 'General';
+    // Detect category
+    let detectedCategory = 'Food';
     for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
       if (keywords.some(kw => lower.includes(kw))) {
         detectedCategory = cat;
@@ -115,19 +113,24 @@ export function parseSpotlightQuery(queryText, availableUsers = [], availableGro
       }
     }
 
-    // Clean note description
+    // BUG FIX: Use \b word boundaries so "dinner" does NOT get stripped to "dner"!
     let note = raw
       .replace(/(?:₹|rs\.?|inr)?\s*\d+(?:\.\d{1,2})?/gi, '')
-      .replace(/with|and|for|paid|spent|in|on/gi, '')
+      .replace(/\b(?:with|and|for|paid|spent|in|on|trip)\b/gi, '')
       .trim();
 
-    if (!note) note = `${detectedCategory} expense`;
+    // Capitalize first letter of note cleanly
+    if (!note) {
+      note = `${detectedCategory} expense`;
+    } else {
+      note = note.charAt(0).toUpperCase() + note.slice(1);
+    }
 
-    const targetLabel = matchedGroup ? matchedGroup.name : (matchedPerson ? matchedPerson.name : 'Personal');
+    const splitSummary = matchedGroup ? `Group split (${matchedGroup.name})` : (matchedPerson ? `50/50 split with ${matchedPerson.name}` : '100% Personal');
 
     return {
       type: 'CREATE_EXPENSE',
-      actionTitle: `Log ₹${amount} Expense`,
+      actionTitle: `Log ₹${amount} ${note}`,
       amount,
       category: detectedCategory,
       note,
@@ -135,8 +138,9 @@ export function parseSpotlightQuery(queryText, availableUsers = [], availableGro
       targetGroup: matchedGroup,
       previewChip: {
         badge: 'EXPENSE DRAFT',
-        badgeColor: 'green',
-        details: `₹${amount} • ${detectedCategory} • Split with ${targetLabel} (${note})`,
+        badgeColor: 'gold',
+        title: `₹${amount} • ${note}`,
+        details: `${detectedCategory} • ${splitSummary}`,
         payload: {
           amount,
           category: detectedCategory,
@@ -148,13 +152,20 @@ export function parseSpotlightQuery(queryText, availableUsers = [], availableGro
     };
   }
 
+  // Search Fallback
+  const matchingFriends = availableUsers.filter(u => u.name.toLowerCase().includes(lower));
+  const matchingGroups = availableGroups.filter(g => g.name.toLowerCase().includes(lower) || g.account_number.toLowerCase().includes(lower));
+  const matchingExpenses = availableExpenses.filter(e => e.note.toLowerCase().includes(lower) || e.category.toLowerCase().includes(lower));
+
   return {
-    type: 'UNKNOWN',
-    actionTitle: 'Custom Action',
+    type: 'SEARCH',
+    actionTitle: `Search ledger for "${queryText}"`,
+    searchResults: { friends: matchingFriends, groups: matchingGroups, expenses: matchingExpenses },
     previewChip: {
-      badge: 'SEARCH / ADD',
-      badgeColor: 'gray',
-      details: `Search ledger or parse "${queryText}"`,
+      badge: 'SEARCH',
+      badgeColor: 'cyan',
+      title: `Search "${queryText}"`,
+      details: `Found ${matchingFriends.length} contacts, ${matchingGroups.length} groups, ${matchingExpenses.length} entries`,
       payload: { query: queryText }
     }
   };
