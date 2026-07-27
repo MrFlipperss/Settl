@@ -21,7 +21,7 @@ export default function GroupsView({ groups = [], friends = [], user, onCreateGr
       name: newGroupName.trim(),
       currency: 'INR',
       created_at: new Date().toISOString(),
-      members: ['usr_me_001', ...selectedMemberIds],
+      members: ['00000000-0000-0000-0000-000000000001', ...selectedMemberIds],
       totalSpendPaise: 0,
       coverImage: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=600&auto=format&fit=crop&q=80'
     };

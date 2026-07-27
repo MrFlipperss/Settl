@@ -12,10 +12,10 @@ export const CURRENT_USER = {
 };
 
 export const FRIENDS = [
-  { id: 'usr_sarah_002', name: 'Sarah', phone: '+919812345678', upi_vpa: 'sarah@upi', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80', balancePaise: 45000 }, // +₹450 owed to me
-  { id: 'usr_rahul_003', name: 'Rahul', phone: '+919876012345', upi_vpa: 'rahul@paytm', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80', balancePaise: -32000 }, // -₹320 I owe Rahul
-  { id: 'usr_priya_004', name: 'Priyanshu', phone: '+919988776655', upi_vpa: 'priyanshu@ybl', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80', balancePaise: 125000 }, // +₹1250 owed to me
-  { id: 'usr_ananya_005', name: 'Ananya', phone: '+919123456789', upi_vpa: 'ananya@icici', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80', balancePaise: 0 },
+  { id: '00000000-0000-0000-0000-000000000002', name: 'Sarah', phone: '+919812345678', upi_vpa: 'sarah@upi', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80', balancePaise: 45000 },
+  { id: '00000000-0000-0000-0000-000000000003', name: 'Rahul', phone: '+919876012345', upi_vpa: 'rahul@paytm', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80', balancePaise: -32000 },
+  { id: '00000000-0000-0000-0000-000000000004', name: 'Priyanshu', phone: '+919988776655', upi_vpa: 'priyanshu@ybl', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80', balancePaise: 125000 },
+  { id: '00000000-0000-0000-0000-000000000005', name: 'Ananya', phone: '+919123456789', upi_vpa: 'ananya@icici', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80', balancePaise: 0 },
 ];
 
 export const INITIAL_GROUPS = [
@@ -25,7 +25,7 @@ export const INITIAL_GROUPS = [
     name: 'Goa Trip 2026',
     currency: 'INR',
     created_at: '2026-06-10T10:00:00Z',
-    members: ['usr_me_001', 'usr_sarah_002', 'usr_rahul_003', 'usr_priya_004'],
+    members: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000004'],
     totalSpendPaise: 4850000,
     coverImage: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=600&auto=format&fit=crop&q=80'
   },
@@ -35,7 +35,7 @@ export const INITIAL_GROUPS = [
     name: 'Flatmates 402',
     currency: 'INR',
     created_at: '2026-01-01T00:00:00Z',
-    members: ['usr_me_001', 'usr_rahul_003', 'usr_ananya_005'],
+    members: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000005'],
     totalSpendPaise: 12400000,
     coverImage: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=600&auto=format&fit=crop&q=80'
   },
@@ -45,7 +45,7 @@ export const INITIAL_GROUPS = [
     name: 'Weekend Foodies',
     currency: 'INR',
     created_at: '2026-05-15T18:30:00Z',
-    members: ['usr_me_001', 'usr_sarah_002', 'usr_ananya_005'],
+    members: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000005'],
     totalSpendPaise: 1845000,
     coverImage: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80'
   }
@@ -55,7 +55,7 @@ export const INITIAL_EXPENSES = [
   {
     id: 'exp_101',
     group_id: 'grp_0042',
-    payer_id: 'usr_me_001',
+    payer_id: '00000000-0000-0000-0000-000000000001',
     amount_paise: 360000, // ₹3,600
     currency: 'INR',
     category: 'Food',
@@ -64,16 +64,16 @@ export const INITIAL_EXPENSES = [
     receipt_url: 'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=80',
     idempotency_key: 'idemp-101-uuid',
     splits: [
-      { user_id: 'usr_me_001', split_type: 'equal', share_amount: 900 },
-      { user_id: 'usr_sarah_002', split_type: 'equal', share_amount: 900 },
-      { user_id: 'usr_rahul_003', split_type: 'equal', share_amount: 900 },
-      { user_id: 'usr_priya_004', split_type: 'equal', share_amount: 900 }
+      { user_id: '00000000-0000-0000-0000-000000000001', split_type: 'equal', share_amount: 900 },
+      { user_id: '00000000-0000-0000-0000-000000000002', split_type: 'equal', share_amount: 900 },
+      { user_id: '00000000-0000-0000-0000-000000000003', split_type: 'equal', share_amount: 900 },
+      { user_id: '00000000-0000-0000-0000-000000000004', split_type: 'equal', share_amount: 900 }
     ]
   },
   {
     id: 'exp_102',
     group_id: 'grp_0043',
-    payer_id: 'usr_rahul_003',
+    payer_id: '00000000-0000-0000-0000-000000000003',
     amount_paise: 2400000, // ₹24,000
     currency: 'INR',
     category: 'Rent',
@@ -82,15 +82,15 @@ export const INITIAL_EXPENSES = [
     receipt_url: null,
     idempotency_key: 'idemp-102-uuid',
     splits: [
-      { user_id: 'usr_me_001', split_type: 'exact', share_amount: 8000 },
-      { user_id: 'usr_rahul_003', split_type: 'exact', share_amount: 8000 },
-      { user_id: 'usr_ananya_005', split_type: 'exact', share_amount: 8000 }
+      { user_id: '00000000-0000-0000-0000-000000000001', split_type: 'exact', share_amount: 8000 },
+      { user_id: '00000000-0000-0000-0000-000000000003', split_type: 'exact', share_amount: 8000 },
+      { user_id: '00000000-0000-0000-0000-000000000005', split_type: 'exact', share_amount: 8000 }
     ]
   },
   {
     id: 'exp_103',
     group_id: 'grp_0044',
-    payer_id: 'usr_me_001',
+    payer_id: '00000000-0000-0000-0000-000000000001',
     amount_paise: 145000, // ₹1,450
     currency: 'INR',
     category: 'Food',
@@ -99,15 +99,15 @@ export const INITIAL_EXPENSES = [
     receipt_url: null,
     idempotency_key: 'idemp-103-uuid',
     splits: [
-      { user_id: 'usr_me_001', split_type: 'percentage', share_amount: 435, percentage: 30 },
-      { user_id: 'usr_sarah_002', split_type: 'percentage', share_amount: 725, percentage: 50 },
-      { user_id: 'usr_ananya_005', split_type: 'percentage', share_amount: 290, percentage: 20 }
+      { user_id: '00000000-0000-0000-0000-000000000001', split_type: 'percentage', share_amount: 435, percentage: 30 },
+      { user_id: '00000000-0000-0000-0000-000000000002', split_type: 'percentage', share_amount: 725, percentage: 50 },
+      { user_id: '00000000-0000-0000-0000-000000000005', split_type: 'percentage', share_amount: 290, percentage: 20 }
     ]
   },
   {
     id: 'exp_104',
     group_id: null, // 1:1 friend expense
-    payer_id: 'usr_sarah_002',
+    payer_id: '00000000-0000-0000-0000-000000000002',
     amount_paise: 90000, // ₹900
     currency: 'INR',
     category: 'Entertainment',
@@ -116,8 +116,8 @@ export const INITIAL_EXPENSES = [
     receipt_url: null,
     idempotency_key: 'idemp-104-uuid',
     splits: [
-      { user_id: 'usr_me_001', split_type: 'shares', share_amount: 450, share_count: 1 },
-      { user_id: 'usr_sarah_002', split_type: 'shares', share_amount: 450, share_count: 1 }
+      { user_id: '00000000-0000-0000-0000-000000000001', split_type: 'shares', share_amount: 450, share_count: 1 },
+      { user_id: '00000000-0000-0000-0000-000000000002', split_type: 'shares', share_amount: 450, share_count: 1 }
     ]
   }
 ];

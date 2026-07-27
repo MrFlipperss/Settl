@@ -1,10 +1,14 @@
--- Seed the dev bypass user so the Go backend's dev auth fallback can write to
--- foreign-keyed tables (participants.id is uuid, referenced by expenses, lists, etc.)
+-- Seed all participants used by the frontend mock data so that expenses
+-- created from the app can reference valid participant UUIDs.
 --
--- The hardcoded UUIDs below must match auth.go's dev bypass values.
+-- The dev bypass user (0000...001) must also match auth.go's hardcoded values.
 
-INSERT INTO public.participants (id, kind)
-VALUES ('00000000-0000-0000-0000-000000000001', 'user')
+INSERT INTO public.participants (id, kind) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'user'),
+  ('00000000-0000-0000-0000-000000000002', 'user'),
+  ('00000000-0000-0000-0000-000000000003', 'user'),
+  ('00000000-0000-0000-0000-000000000004', 'user'),
+  ('00000000-0000-0000-0000-000000000005', 'user')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.profiles (participant_id, user_id, display_name)

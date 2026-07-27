@@ -71,7 +71,7 @@ export default function Dashboard({
       name: newGroupName.trim(),
       currency: 'INR',
       created_at: new Date().toISOString(),
-      members: ['usr_me_001', ...selectedMemberIds],
+      members: ['00000000-0000-0000-0000-000000000001', ...selectedMemberIds],
       totalSpendPaise: 0
     };
 
