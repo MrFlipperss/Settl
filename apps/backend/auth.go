@@ -135,7 +135,7 @@ func AuthMiddleware(jwtSecret string, db *DBQueries) func(http.Handler) http.Han
 
 			// Dev mode fallback: allow unauthenticated requests with a hardcoded dev user
 			if tokenStr == "" || tokenStr == "dev_token" {
-				userID := "00000000-0000-0000-0000-000000000001"
+				userID := "b8c17831-3032-409f-a03d-3ca1d2415a3c"
 				participantID := "00000000-0000-0000-0000-000000000001"
 				if db != nil {
 					if pid, err := db.GetParticipantIDByUserID(r.Context(), userID); err == nil && pid != "" {

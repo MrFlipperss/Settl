@@ -6,6 +6,5 @@ ALTER TABLE public.expenses
   ADD COLUMN IF NOT EXISTS idempotency_key text,
   ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_expenses_idempotency_key
-  ON public.expenses(idempotency_key)
-  WHERE idempotency_key IS NOT NULL;
+ALTER TABLE public.expenses
+  ADD CONSTRAINT uq_expenses_idempotency_key UNIQUE (idempotency_key);
