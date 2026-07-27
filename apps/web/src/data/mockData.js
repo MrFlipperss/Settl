@@ -4,7 +4,7 @@
  */
 
 export const CURRENT_USER = {
-  id: 'usr_me_001',
+  id: '00000000-0000-0000-0000-000000000001',
   name: 'Advaith (You)',
   phone: '+919876543210', // E.164 normalized
   upi_vpa: 'advaith@okaxis',

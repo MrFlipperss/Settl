@@ -280,8 +280,15 @@ func createExpenseHandler(q *DBQueries) http.HandlerFunc {
 			}
 		}
 
-		if req.PayerID == "" || req.Amount <= 0 || len(req.Splits) == 0 {
-			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "payer_id, amount, and splits are required"})
+		callerPID := participantIDFromCtx(r.Context())
+		if callerPID == "" {
+			writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+			return
+		}
+		req.PayerID = callerPID
+
+		if req.Amount <= 0 || len(req.Splits) == 0 {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "amount and splits are required"})
 			return
 		}
 
@@ -292,7 +299,6 @@ func createExpenseHandler(q *DBQueries) http.HandlerFunc {
 
 		// Verify membership if group expense
 		if req.GroupID != nil && *req.GroupID != "" {
-			callerPID := participantIDFromCtx(r.Context())
 			inGroup, err := q.IsUserInGroup(r.Context(), *req.GroupID, callerPID)
 			if err != nil || !inGroup {
 				writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "user does not belong to group"})
@@ -387,6 +393,8 @@ func updateExpenseHandler(q *DBQueries) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 			return
 		}
+
+		req.PayerID = callerPID
 
 		if !validateMaxDecimals(req.Amount, 2) {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "amount cannot have more than 2 decimal places"})
