@@ -7,9 +7,10 @@ import (
 )
 
 type Config struct {
-	Port        int
-	DatabaseURL string
-	JWTSecret   string
+	Port            int
+	DatabaseURL     string
+	JWTSecret       string
+	SupabaseJWKSURL string
 }
 
 func LoadConfig() Config {
@@ -34,8 +35,9 @@ func LoadConfig() Config {
 	}
 
 	return Config{
-		Port:        port,
-		DatabaseURL: dbURL,
-		JWTSecret:   jwtSecret,
+		Port:            port,
+		DatabaseURL:     dbURL,
+		JWTSecret:       jwtSecret,
+		SupabaseJWKSURL: os.Getenv("SUPABASE_JWKS_URL"),
 	}
 }

@@ -173,7 +173,7 @@ export default function Dashboard({
               <div>
                 <span className="badge-gold font-mono" style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '3px' }}>{g.account_number}</span>
                 <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '2px' }}>{g.name}</div>
-                <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{g.members.length} members</div>
+                <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{g.member_count ?? g.members?.length ?? 0} members</div>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent-gold)' }}>

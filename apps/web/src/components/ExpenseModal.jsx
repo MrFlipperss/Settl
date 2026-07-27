@@ -77,6 +77,7 @@ export default function ExpenseModal({ isOpen, onClose, onSaveExpense, user, fri
       note: note.trim(),
       timestamp: new Date().toISOString(),
       idempotency_key: `idemp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      split_type: splitMode,
       splits
     };
 

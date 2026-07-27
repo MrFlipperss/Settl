@@ -133,8 +133,8 @@ func AuthMiddleware(jwtSecret string, db *DBQueries) func(http.Handler) http.Han
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := extractBearerToken(r)
 
-			// Dev mode or unauthenticated fallback for initial deployment testing
-			if tokenStr == "" || tokenStr == "dev_token" || jwtSecret == "" {
+			// Dev mode fallback: allow unauthenticated requests with a hardcoded dev user
+			if tokenStr == "" || tokenStr == "dev_token" {
 				userID := "00000000-0000-0000-0000-000000000001"
 				participantID := "00000000-0000-0000-0000-000000000001"
 				if db != nil {

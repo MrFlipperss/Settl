@@ -67,10 +67,25 @@ export default function App() {
           ]);
 
           if (remoteGroups.status === 'fulfilled' && Array.isArray(remoteGroups.value) && remoteGroups.value.length > 0) {
-            setGroups(remoteGroups.value);
+            setGroups(remoteGroups.value.map(g => ({
+              ...g,
+              members: g.members || [],
+              totalSpendPaise: g.total_spend_paise || g.totalSpendPaise || 0,
+              account_number: g.account_number || `GRP-${String(Math.floor(Math.random() * 9000) + 1000)}`,
+            })));
           }
           if (remoteExpenses.status === 'fulfilled' && Array.isArray(remoteExpenses.value) && remoteExpenses.value.length > 0) {
-            setExpenses(remoteExpenses.value);
+            setExpenses(remoteExpenses.value.map(e => ({
+              ...e,
+              group_id: e.group_id || e.list_id,
+              splits: (e.splits || []).map(s => ({
+                user_id: s.user_id || s.participant_id,
+                id: s.user_id || s.participant_id,
+                amountPaise: s.share_amount_paise || 0,
+                share_amount: s.share_amount_paise ? s.share_amount_paise / 100 : 0,
+                split_type: 'equal',
+              })),
+            })));
           }
         }
       } catch (err) {
@@ -98,17 +113,30 @@ export default function App() {
     }
 
     if (apiConnected) {
+      const splitType = newExpense.split_type || newExpense.splits?.[0]?.split_type || 'equal';
+      const transformedSplits = (newExpense.splits || []).map(s => {
+        const item = { user_id: s.user_id || s.id };
+        if (splitType === 'exact') {
+          item.exact_amount = s.share_amount || (s.amountPaise ? s.amountPaise / 100 : 0);
+        } else if (splitType === 'percentage') {
+          item.percentage = s.percentage || 0;
+        } else if (splitType === 'shares') {
+          item.share_count = s.share_count || s.shareCount || 1;
+        }
+        return item;
+      });
+
       try {
         await SettlApi.createExpense({
           group_id: newExpense.group_id,
           payer_id: newExpense.payer_id || user.id,
           amount: newExpense.amount_paise / 100,
-          currency: 'INR',
           category: newExpense.category,
           note: newExpense.note,
+          split_type: splitType,
           timestamp: newExpense.timestamp,
           idempotency_key: newExpense.idempotency_key,
-          splits: newExpense.splits
+          splits: transformedSplits
         });
       } catch (err) {
         console.warn('Backend sync failed:', err);
@@ -161,6 +189,7 @@ export default function App() {
           note: payload.note,
           timestamp: new Date().toISOString(),
           idempotency_key: `idemp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          split_type: 'equal',
           splits
         });
         break;

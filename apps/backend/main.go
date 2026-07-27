@@ -17,7 +17,11 @@ import (
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, Idempotency-Key, X-CSRF-Token")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -33,6 +37,10 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 func main() {
 	cfg := LoadConfig()
+
+	if cfg.SupabaseJWKSURL != "" {
+		globalJWKSCache = initJWKSCache(cfg.SupabaseJWKSURL)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -6,10 +6,10 @@
 *.dylib
 bin/
 apps/backend/backend.exe
+apps/backend/backend
 
 # OS generated files
 .DS_Store
-._*
 Thumbs.db
 
 # IDEs and Editors
