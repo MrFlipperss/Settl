@@ -35,13 +35,14 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 	}
 
 	// Atomic INSERT ... ON CONFLICT DO NOTHING for idempotency key
+	amountRupees := float64(amountPaise) / 100.0
 	if req.IdempotencyKey != nil && *req.IdempotencyKey != "" {
 		err = tx.QueryRow(ctx,
 			`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at, idempotency_key, version)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
 			 ON CONFLICT (idempotency_key) DO NOTHING
 			 RETURNING id`,
-			req.GroupID, req.PayerID, amountPaise, category, req.Note, splitType, createdAt, req.IdempotencyKey,
+			req.GroupID, req.PayerID, amountRupees, category, req.Note, splitType, createdAt, req.IdempotencyKey,
 		).Scan(&expenseID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -58,7 +59,7 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 			`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at, version)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
 			 RETURNING id`,
-			req.GroupID, req.PayerID, amountPaise, category, req.Note, splitType, createdAt,
+			req.GroupID, req.PayerID, amountRupees, category, req.Note, splitType, createdAt,
 		).Scan(&expenseID)
 		if err != nil {
 			return nil, fmt.Errorf("insert expense: %w", err)
@@ -66,10 +67,11 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 	}
 
 	for _, s := range splits {
+		shareRupees := float64(s.ShareAmount) / 100.0
 		_, err = tx.Exec(ctx,
 			`INSERT INTO public.expense_splits (expense_id, participant_id, share_amount, raw_input)
 			 VALUES ($1, $2, $3, $4)`,
-			expenseID, s.ParticipantID, s.ShareAmount, s.RawInput,
+			expenseID, s.ParticipantID, shareRupees, s.RawInput,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("insert split: %w", err)
@@ -108,10 +110,11 @@ func (q *DBQueries) UpdateExpense(ctx context.Context, id string, req CreateExpe
 		category = *req.Category
 	}
 
+	amountRupees := float64(amountPaise) / 100.0
 	query := `UPDATE public.expenses
 		 SET payer_id = $1, amount = $2, category = $3, note = $4, split_type = $5, version = version + 1
 		 WHERE id = $6`
-	args := []interface{}{req.PayerID, amountPaise, category, req.Note, req.SplitType, id}
+	args := []interface{}{req.PayerID, amountRupees, category, req.Note, req.SplitType, id}
 
 	if expectedVersion > 0 {
 		query += ` AND version = $7`
@@ -134,10 +137,11 @@ func (q *DBQueries) UpdateExpense(ctx context.Context, id string, req CreateExpe
 
 	// Insert updated splits
 	for _, s := range splits {
+		shareRupees := float64(s.ShareAmount) / 100.0
 		_, err = tx.Exec(ctx,
 			`INSERT INTO public.expense_splits (expense_id, participant_id, share_amount, raw_input)
 			 VALUES ($1, $2, $3, $4)`,
-			id, s.ParticipantID, s.ShareAmount, s.RawInput,
+			id, s.ParticipantID, shareRupees, s.RawInput,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("insert updated split: %w", err)
@@ -186,13 +190,15 @@ func (q *DBQueries) GetExpense(ctx context.Context, id string) (*Expense, error)
 
 	var e Expense
 	var listID *string
-	err := row.Scan(&e.ID, &listID, &e.PayerID, &e.Amount, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt)
+	var amountFloat float64
+	err := row.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("get expense: %w", err)
 	}
+	e.Amount = int64(math.Round(amountFloat * 100))
 	e.ListID = listID
 
 	rows, err := q.pool.Query(ctx,
@@ -205,9 +211,11 @@ func (q *DBQueries) GetExpense(ctx context.Context, id string) (*Expense, error)
 
 	for rows.Next() {
 		var s Split
-		if err := rows.Scan(&s.ID, &s.ExpenseID, &s.ParticipantID, &s.ShareAmount, &s.RawInput); err != nil {
+		var shareFloat float64
+		if err := rows.Scan(&s.ID, &s.ExpenseID, &s.ParticipantID, &shareFloat, &s.RawInput); err != nil {
 			return nil, fmt.Errorf("scan split: %w", err)
 		}
+		s.ShareAmount = int64(math.Round(shareFloat * 100))
 		e.Splits = append(e.Splits, s)
 	}
 
@@ -250,9 +258,11 @@ func (q *DBQueries) ListExpenses(ctx context.Context, groupID *string, from, to 
 	for rows.Next() {
 		var e Expense
 		var listID *string
-		if err := rows.Scan(&e.ID, &listID, &e.PayerID, &e.Amount, &e.Category, &e.Note, &e.SplitType, &e.CreatedAt); err != nil {
+		var amountFloat float64
+		if err := rows.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan expense: %w", err)
 		}
+		e.Amount = int64(math.Round(amountFloat * 100))
 		e.ListID = listID
 		expenses = append(expenses, e)
 	}
