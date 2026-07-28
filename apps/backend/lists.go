@@ -52,7 +52,7 @@ func (q *DBQueries) CreateList(ctx context.Context, req CreateGroupRequest, crea
 	}
 
 	_, err = tx.Exec(ctx,
-		`INSERT INTO public.list_members (list_id, participant_id, created_at, updated_at) VALUES ($1, $2, $3, $3)`,
+		`INSERT INTO public.list_members (list_id, participant_id, updated_at) VALUES ($1, $2, $3)`,
 		list.ID, createdBy, now,
 	)
 	if err != nil {
@@ -114,8 +114,8 @@ func (q *DBQueries) ListListsByMember(ctx context.Context, participantID string)
 func (q *DBQueries) AddListMember(ctx context.Context, listID, participantID string) error {
 	now := time.Now()
 	_, err := q.pool.Exec(ctx,
-		`INSERT INTO public.list_members (list_id, participant_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, $3)
+		`INSERT INTO public.list_members (list_id, participant_id, updated_at)
+		 VALUES ($1, $2, $3)
 		 ON CONFLICT DO NOTHING`,
 		listID, participantID, now,
 	)
