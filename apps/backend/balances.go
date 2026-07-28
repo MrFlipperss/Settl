@@ -77,42 +77,78 @@ func getBalancesHandler(q *DBQueries) http.HandlerFunc {
 			return
 		}
 
-		var totalOwed, totalOwing int64
-		var breakdown []BalanceEntry
+		// Net all rows against each counterparty into a single signed amount
+		// before building the breakdown. pairwise_balances stores one
+		// directional row per (from, to) pair per expense; without netting
+		// here, two people who owe each other from different expenses would
+		// show up as two separate, seemingly-conflicting breakdown entries
+		// instead of one net figure.
+		//
+		// netPaise > 0 means the counterparty owes the reference person
+		// (the authenticated viewer, or personID when set as a query param);
+		// netPaise < 0 means the reference person owes them.
+		type netEntry struct {
+			userID   string
+			userName string
+			netPaise int64
+		}
+		order := []string{}
+		nets := make(map[string]*netEntry)
+
+		addNet := func(counterpartyID, counterpartyName string, signedPaise int64) {
+			e, ok := nets[counterpartyID]
+			if !ok {
+				e = &netEntry{userID: counterpartyID, userName: counterpartyName}
+				nets[counterpartyID] = e
+				order = append(order, counterpartyID)
+			}
+			e.netPaise += signedPaise
+		}
+
+		reference := participantID
+		if personID != nil {
+			reference = *personID
+		}
 
 		for _, b := range balances {
-			var entry BalanceEntry
-			entry.Currency = "INR"
-
-			if b.FromParticipant == participantID {
-				// current user owes b.ToParticipant
-				totalOwing += b.AmountOwedPaise
-				entry.UserID = b.ToParticipant
-				entry.Amount = b.AmountOwedPaise
-				entry.UserName = b.ToDisplayName
-			} else if b.ToParticipant == participantID {
-				// b.FromParticipant owes current user
-				totalOwed += b.AmountOwedPaise
-				entry.UserID = b.FromParticipant
-				entry.Amount = b.AmountOwedPaise
-				entry.UserName = b.FromDisplayName
-			} else if personID != nil {
-				if b.FromParticipant == *personID {
-					entry.UserID = b.ToParticipant
-					entry.Amount = b.AmountOwedPaise
-					entry.UserName = b.ToDisplayName
-				} else if b.ToParticipant == *personID {
-					entry.UserID = b.FromParticipant
-					entry.Amount = b.AmountOwedPaise
-					entry.UserName = b.FromDisplayName
-				} else {
-					continue
-				}
-			} else {
+			switch {
+			case b.FromParticipant == reference && b.ToParticipant == reference:
+				continue
+			case b.FromParticipant == reference:
+				// reference owes b.ToParticipant
+				addNet(b.ToParticipant, b.ToDisplayName, -b.AmountOwedPaise)
+			case b.ToParticipant == reference:
+				// b.FromParticipant owes reference
+				addNet(b.FromParticipant, b.FromDisplayName, b.AmountOwedPaise)
+			default:
 				continue
 			}
+		}
 
-			breakdown = append(breakdown, entry)
+		var totalOwed, totalOwing int64
+		breakdown := make([]BalanceEntry, 0, len(order))
+		for _, id := range order {
+			e := nets[id]
+			if e.netPaise == 0 {
+				// Fully settled with this person once netted — omit rather
+				// than show a stale +/-0 line.
+				continue
+			}
+			amount := e.netPaise
+			if amount < 0 {
+				amount = -amount
+			}
+			if e.netPaise > 0 {
+				totalOwed += amount
+			} else {
+				totalOwing += amount
+			}
+			breakdown = append(breakdown, BalanceEntry{
+				UserID:   e.userID,
+				UserName: e.userName,
+				Amount:   amount,
+				Currency: "INR",
+			})
 		}
 
 		resp := BalancesResponse{
@@ -120,10 +156,6 @@ func getBalancesHandler(q *DBQueries) http.HandlerFunc {
 			TotalOwing: totalOwing,
 			Net:        totalOwed - totalOwing,
 			Breakdown:  breakdown,
-		}
-
-		if resp.Breakdown == nil {
-			resp.Breakdown = []BalanceEntry{}
 		}
 
 		writeJSON(w, http.StatusOK, resp)

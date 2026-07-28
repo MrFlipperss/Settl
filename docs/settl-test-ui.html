@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Settl — API Test Console</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#2a2f3a;
+  --text:#e7e9ee; --muted:#8b93a3; --accent:#5b8def; --accent2:#3f6fd6;
+  --green:#3ecf8e; --red:#ef5f6b; --amber:#e8b34c; --mono:'SF Mono',Consolas,'Courier New',monospace;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Inter,sans-serif;}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 20px 80px;}
+h1{font-size:19px;margin:0 0 2px;font-weight:700;}
+.sub{color:var(--muted);font-size:13px;margin-bottom:18px;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;}
+.card h2{font-size:14px;margin:0 0 12px;color:var(--text);display:flex;align-items:center;gap:8px;}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+input, select, textarea{
+  background:var(--panel2);border:1px solid var(--border);color:var(--text);
+  border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;outline:none;
+}
+input:focus, select:focus, textarea:focus{border-color:var(--accent);}
+label{font-size:11px;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em;}
+.field{flex:1;min-width:140px;}
+button{
+  background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 14px;
+  font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;
+}
+button:hover{background:var(--accent2);}
+button:disabled{opacity:.45;cursor:not-allowed;}
+button.ghost{background:transparent;border:1px solid var(--border);color:var(--text);}
+button.ghost:hover{background:var(--panel2);}
+button.danger{background:var(--red);}
+button.small{padding:5px 10px;font-size:12px;}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 10px;border-radius:20px;background:var(--panel2);border:1px solid var(--border);}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);}
+.dot.ok{background:var(--green);}
+.dot.bad{background:var(--red);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media(max-width:800px){.grid2{grid-template-columns:1fr;}}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:6px 8px;border-bottom:1px solid var(--border);}
+td{padding:8px;border-bottom:1px solid var(--border);}
+tr:last-child td{border-bottom:none;}
+.amt{font-family:var(--mono);font-weight:600;}
+.amt.pos{color:var(--green);}
+.amt.neg{color:var(--red);}
+.muted{color:var(--muted);}
+.mono{font-family:var(--mono);font-size:12px;}
+.empty{color:var(--muted);font-size:13px;padding:14px 0;text-align:center;}
+.log{background:#0a0c10;border:1px solid var(--border);border-radius:6px;padding:10px;max-height:220px;overflow-y:auto;font-family:var(--mono);font-size:11.5px;line-height:1.6;}
+.log .l-req{color:#7fa8ff;}
+.log .l-ok{color:var(--green);}
+.log .l-err{color:var(--red);}
+.log .l-info{color:var(--muted);}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.hidden{display:none !important;}
+.split-row{display:grid;grid-template-columns:1fr 90px 30px;gap:8px;align-items:center;margin-bottom:6px;}
+.split-row .who{font-size:13px;}
+.chip-list{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.chip{background:var(--panel2);border:1px solid var(--border);padding:4px 10px;border-radius:20px;font-size:12px;cursor:pointer;}
+.chip.active{background:var(--accent);border-color:var(--accent);}
+.chip.you{opacity:.6;cursor:default;}
+.toast-stack{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:99;}
+.toast{background:var(--panel2);border:1px solid var(--border);padding:10px 14px;border-radius:8px;font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,.4);animation:in .15s ease-out;}
+.toast.err{border-color:var(--red);}
+.toast.ok{border-color:var(--green);}
+@keyframes in{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+.section-note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5;}
+a{color:var(--accent);}
+.auth-card{max-width:400px;margin:60px auto;}
+.tabbar{display:flex;gap:4px;margin-bottom:14px;}
+.tabbar button{flex:1;background:var(--panel2);color:var(--muted);}
+.tabbar button.active{background:var(--accent);color:#fff;}
+.kv{font-size:12px;color:var(--muted);}
+.kv b{color:var(--text);}
+</style>
+</head>
+<body>
+
+<div class="wrap" id="app"></div>
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+/* ============================================================
+   SETTL API TEST CONSOLE
+   Single-file harness. Talks to:
+     1) Supabase Auth REST API directly (signup/login) — no Go backend involved.
+     2) The Go backend's /api/v1 routes using the Supabase access_token as Bearer auth.
+   No backend code is touched by this file.
+   ============================================================ */
+
+const LS = {
+  apiUrl: 'settl_test_api_url',
+  supaUrl: 'settl_test_supa_url',
+  supaKey: 'settl_test_supa_anon_key',
+  session: 'settl_test_session',
+};
+
+const state = {
+  apiUrl: localStorage.getItem(LS.apiUrl) || 'https://settl-kru1.onrender.com',
+  supaUrl: localStorage.getItem(LS.supaUrl) || 'https://rgrswhlyuvpicfbajhen.supabase.co',
+  supaKey: localStorage.getItem(LS.supaKey) || '',
+  session: JSON.parse(localStorage.getItem(LS.session) || 'null'), // {access_token, user:{id,email}}
+  apiHealthy: null,
+  groups: [],
+  activeGroupId: null,
+  groupMembers: [], // [{id, name}] resolved participant ids for active group (best-effort; API doesn't expose names beyond profile)
+  expenses: [],
+  balances: null,
+  contacts: [], // locally created contacts this session, for quick reuse
+  splitDraft: [], // [{participantId, name, amount}]
+  logLines: [],
+};
+
+function save(key, val){ localStorage.setItem(key, typeof val === 'string' ? val : JSON.stringify(val)); }
+function toast(msg, kind){
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' ' + kind : '');
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+function money(paise){
+  const n = (paise||0)/100;
+  return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function log(kind, msg){
+  state.logLines.unshift({ kind, msg, t: new Date().toLocaleTimeString() });
+  state.logLines = state.logLines.slice(0, 80);
+  renderLog();
+}
+function renderLog(){
+  const el = document.getElementById('logBox');
+  if(!el) return;
+  el.innerHTML = state.logLines.map(l => `<div class="l-${l.kind}">[${l.t}] ${escapeHtml(l.msg)}</div>`).join('');
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ============ SUPABASE AUTH (direct REST calls, no backend involved) ============ */
+
+async function supaSignup(email, password){
+  const url = `${state.supaUrl.replace(/\/$/,'')}/auth/v1/signup`;
+  log('req', `POST ${url}`);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': state.supaKey },
+    body: JSON.stringify({ email, password })
+  });
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok){ log('err', `Signup failed: ${data.msg || data.error_description || res.status}`); throw new Error(data.msg || data.error_description || `HTTP ${res.status}`); }
+  log('ok', `Signup ok for ${email}`);
+  return data;
+}
+
+async function supaLogin(email, password){
+  const url = `${state.supaUrl.replace(/\/$/,'')}/auth/v1/token?grant_type=password`;
+  log('req', `POST ${url}`);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': state.supaKey },
+    body: JSON.stringify({ email, password })
+  });
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok){ log('err', `Login failed: ${data.msg || data.error_description || res.status}`); throw new Error(data.msg || data.error_description || `HTTP ${res.status}`); }
+  log('ok', `Login ok for ${email}`);
+  return data; // { access_token, refresh_token, user: {...} }
+}
+
+function setSession(data){
+  state.session = { access_token: data.access_token, user: data.user };
+  save(LS.session, state.session);
+}
+function clearSession(){
+  state.session = null;
+  localStorage.removeItem(LS.session);
+}
+
+/* ============ GO BACKEND API ============ */
+
+async function api(path, opts = {}){
+  const url = `${state.apiUrl.replace(/\/$/,'')}${path}`;
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${state.session ? state.session.access_token : 'dev_token'}`,
+    ...(opts.headers || {})
+  };
+  log('req', `${opts.method || 'GET'} ${path}`);
+  let res;
+  try{
+    res = await fetch(url, { ...opts, headers });
+  }catch(e){
+    log('err', `Network error: ${e.message}`);
+    throw e;
+  }
+  const text = await res.text();
+  let data;
+  try{ data = text ? JSON.parse(text) : null; }catch{ data = text; }
+  if(!res.ok){
+    const msg = (data && data.error) || res.statusText || `HTTP ${res.status}`;
+    log('err', `${res.status} ${path}: ${msg}`);
+    throw new Error(msg);
+  }
+  log('ok', `${res.status} ${path}`);
+  return data;
+}
+
+async function checkHealth(){
+  try{
+    const h = await api('/health');
+    state.apiHealthy = !!(h && h.status === 'ok');
+  }catch{
+    state.apiHealthy = false;
+  }
+  renderHealthPill();
+}
+
+/* ============ AUTOMATIC BOOTSTRAP ACTIONS ============ */
+
+// "Do more automatically": after login, silently pull groups + balances so the
+// user lands on a populated dashboard instead of an empty shell.
+async function bootstrapAfterAuth(){
+  await checkHealth();
+  await refreshGroups();
+  await refreshBalances();
+}
+
+async function refreshGroups(){
+  try{
+    const groups = await api('/api/v1/groups');
+    state.groups = Array.isArray(groups) ? groups : [];
+    if(!state.activeGroupId && state.groups.length){
+      state.activeGroupId = state.groups[0].id;
+    }
+  }catch(e){ /* logged already */ }
+  render();
+}
+
+async function refreshExpenses(){
+  if(!state.activeGroupId){ state.expenses = []; render(); return; }
+  try{
+    const q = `?groupID=${encodeURIComponent(state.activeGroupId)}`;
+    const list = await api(`/api/v1/expenses${q}`);
+    state.expenses = Array.isArray(list) ? list : [];
+  }catch(e){ state.expenses = []; }
+  render();
+}
+
+async function refreshBalances(){
+  try{
+    const b = await api('/api/v1/balances');
+    state.balances = b;
+  }catch(e){ state.balances = null; }
+  render();
+}
+
+async function refreshAll(){
+  await Promise.all([refreshGroups(), refreshBalances()]);
+  if(state.activeGroupId) await refreshExpenses();
+}
+
+/* ============ ACTIONS ============ */
+
+async function doSignup(email, password){
+  await supaSignup(email, password);
+  toast('Account created — logging you in…', 'ok');
+  // Supabase auto-confirm may be off; try login regardless.
+  try{
+    const data = await supaLogin(email, password);
+    setSession(data);
+    toast(`Welcome, ${email}`, 'ok');
+    await bootstrapAfterAuth();
+  }catch(e){
+    toast('Signed up, but login failed — check if email confirmation is required in Supabase, or use Login tab.', 'err');
+  }
+  render();
+}
+
+async function doLogin(email, password){
+  const data = await supaLogin(email, password);
+  setSession(data);
+  toast(`Welcome back, ${email}`, 'ok');
+  await bootstrapAfterAuth();
+  render();
+}
+
+function doLogout(){
+  clearSession();
+  state.groups = []; state.activeGroupId = null; state.expenses = []; state.balances = null;
+  toast('Logged out');
+  render();
+}
+
+async function doCreateGroup(name){
+  if(!name || !name.trim()){ toast('Enter a group name', 'err'); return; }
+  const g = await api('/api/v1/groups', { method: 'POST', body: JSON.stringify({ name: name.trim(), currency: 'INR' }) });
+  toast(`Group "${g.name || name}" created`, 'ok');
+  await refreshGroups();
+  if(g && g.id){ state.activeGroupId = g.id; await refreshExpenses(); }
+  render();
+}
+
+async function doAddMember(userId){
+  if(!state.activeGroupId){ toast('Pick a group first', 'err'); return; }
+  if(!userId || !userId.trim()){ toast('Enter a user/participant ID', 'err'); return; }
+  await api(`/api/v1/groups/${state.activeGroupId}/members`, { method: 'POST', body: JSON.stringify({ user_id: userId.trim() }) });
+  toast('Member added', 'ok');
+  await refreshGroups();
+  render();
+}
+
+async function doCreateContact(name, phone){
+  if(!name.trim() || !phone.trim()){ toast('Name and phone required', 'err'); return; }
+  const c = await api('/api/v1/contacts', { method: 'POST', body: JSON.stringify({ display_name: name.trim(), phone_number: phone.trim() }) });
+  state.contacts.unshift(c);
+  toast(`Contact "${name}" created — participant_id copied to clipboard-ready field`, 'ok');
+  render();
+}
+
+function addSplitRow(){
+  state.splitDraft.push({ participantId: '', name: '', amount: '' });
+  render();
+}
+function removeSplitRow(i){
+  state.splitDraft.splice(i, 1);
+  render();
+}
+
+async function doCreateExpense(form){
+  const amount = parseFloat(form.amount);
+  if(!amount || amount <= 0){ toast('Enter a valid amount', 'err'); return; }
+  if(!state.activeGroupId){ toast('Pick a group first', 'err'); return; }
+
+  const splitType = form.splitType;
+  const splits = state.splitDraft
+    .filter(r => r.participantId.trim())
+    .map(r => {
+      const item = { user_id: r.participantId.trim() };
+      if(splitType === 'exact') item.exact_amount = parseFloat(r.amount) || 0;
+      if(splitType === 'percentage') item.percentage = parseFloat(r.amount) || 0;
+      if(splitType === 'shares') item.share_count = parseInt(r.amount) || 1;
+      return item;
+    });
+
+  if(splits.length === 0){ toast('Add at least one participant to split with', 'err'); return; }
+
+  const payload = {
+    group_id: state.activeGroupId,
+    amount,
+    category: form.category || 'Uncategorized',
+    note: form.note || '',
+    split_type: splitType,
+    splits
+  };
+
+  await api('/api/v1/expenses', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': `test-ui-${Date.now()}-${Math.random().toString(36).slice(2,8)}` },
+    body: JSON.stringify(payload)
+  });
+  toast('Expense logged', 'ok');
+  state.splitDraft = [];
+  // Auto-refresh everything touched by this action.
+  await Promise.all([refreshExpenses(), refreshBalances()]);
+  render();
+}
+
+async function doDeleteExpense(id){
+  if(!confirm('Delete this expense?')) return;
+  await api(`/api/v1/expenses/${id}`, { method: 'DELETE' });
+  toast('Expense deleted', 'ok');
+  await Promise.all([refreshExpenses(), refreshBalances()]);
+  render();
+}
+
+/* ============ RENDER ============ */
+
+function renderHealthPill(){
+  const el = document.getElementById('healthPill');
+  if(!el) return;
+  if(state.apiHealthy === null){
+    el.innerHTML = `<span class="dot"></span> checking API…`;
+  }else if(state.apiHealthy){
+    el.innerHTML = `<span class="dot ok"></span> API reachable`;
+  }else{
+    el.innerHTML = `<span class="dot bad"></span> API unreachable`;
+  }
+}
+
+function render(){
+  const app = document.getElementById('app');
+  if(!state.session){
+    app.innerHTML = renderAuthScreen();
+    wireAuthScreen();
+    return;
+  }
+  app.innerHTML = renderDashboard();
+  wireDashboard();
+  renderHealthPill();
+  renderLog();
+}
+
+function renderAuthScreen(){
+  return `
+    <h1>Settl — API Test Console</h1>
+    <div class="sub">Sign up or log in with a real Supabase account. This talks directly to Supabase Auth — the Go backend is never touched for login.</div>
+
+    <div class="card">
+      <h2>Connection settings</h2>
+      <div class="row">
+        <div class="field">
+          <label>Go backend API URL</label>
+          <input id="cfgApiUrl" value="${escapeHtml(state.apiUrl)}" />
+        </div>
+        <div class="field">
+          <label>Supabase project URL</label>
+          <input id="cfgSupaUrl" value="${escapeHtml(state.supaUrl)}" />
+        </div>
+        <div class="field">
+          <label>Supabase anon key</label>
+          <input id="cfgSupaKey" placeholder="paste anon key" value="${escapeHtml(state.supaKey)}" />
+        </div>
+      </div>
+      <div class="section-note">Find the anon key in your Supabase dashboard → Project Settings → API. It's safe to use client-side (it's the public key). Saved only in this browser's localStorage.</div>
+    </div>
+
+    <div class="card auth-card">
+      <div class="tabbar">
+        <button id="tabLogin" class="active">Log in</button>
+        <button id="tabSignup">Sign up</button>
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Email</label>
+        <input id="authEmail" type="email" placeholder="you@example.com" style="width:100%;" />
+      </div>
+      <div class="field" style="margin-bottom:14px;">
+        <label>Password</label>
+        <input id="authPassword" type="password" placeholder="••••••••" style="width:100%;" />
+      </div>
+      <button id="authSubmit" style="width:100%;">Log in</button>
+      <div class="section-note" id="authNote"></div>
+    </div>
+  `;
+}
+
+function wireAuthScreen(){
+  document.getElementById('cfgApiUrl').addEventListener('change', e => { state.apiUrl = e.target.value.trim(); save(LS.apiUrl, state.apiUrl); });
+  document.getElementById('cfgSupaUrl').addEventListener('change', e => { state.supaUrl = e.target.value.trim(); save(LS.supaUrl, state.supaUrl); });
+  document.getElementById('cfgSupaKey').addEventListener('change', e => { state.supaKey = e.target.value.trim(); save(LS.supaKey, state.supaKey); });
+
+  let mode = 'login';
+  const tabLogin = document.getElementById('tabLogin');
+  const tabSignup = document.getElementById('tabSignup');
+  const submitBtn = document.getElementById('authSubmit');
+  const note = document.getElementById('authNote');
+
+  tabLogin.onclick = () => { mode = 'login'; tabLogin.classList.add('active'); tabSignup.classList.remove('active'); submitBtn.textContent = 'Log in'; note.textContent=''; };
+  tabSignup.onclick = () => { mode = 'signup'; tabSignup.classList.add('active'); tabLogin.classList.remove('active'); submitBtn.textContent = 'Create account'; note.textContent=''; };
+
+  submitBtn.onclick = async () => {
+    const email = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPassword').value;
+    if(!state.supaKey){ toast('Enter your Supabase anon key above first', 'err'); return; }
+    if(!email || !password){ toast('Email and password required', 'err'); return; }
+    submitBtn.disabled = true;
+    try{
+      if(mode === 'signup') await doSignup(email, password);
+      else await doLogin(email, password);
+    }catch(e){
+      note.textContent = e.message;
+      note.style.color = 'var(--red)';
+    }finally{
+      submitBtn.disabled = false;
+    }
+  };
+}
+
+function renderDashboard(){
+  const activeGroup = state.groups.find(g => g.id === state.activeGroupId);
+  return `
+    <div class="topbar">
+      <div>
+        <h1>Settl — API Test Console</h1>
+        <div class="sub">Logged in as <b>${escapeHtml(state.session.user.email)}</b> · participant resolved server-side from your JWT</div>
+      </div>
+      <div class="row">
+        <span class="pill" id="healthPill"></span>
+        <button class="ghost small" id="btnRefreshAll">Refresh all</button>
+        <button class="ghost small" id="btnLogout">Log out</button>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Groups</h2>
+        <div class="row" style="margin-bottom:10px;">
+          <input id="newGroupName" class="field" placeholder="New group name (e.g. Goa Trip)" />
+          <button id="btnCreateGroup">Create</button>
+        </div>
+        ${state.groups.length ? `
+          <div class="chip-list">
+            ${state.groups.map(g => `<span class="chip ${g.id === state.activeGroupId ? 'active' : ''}" data-group="${g.id}">${escapeHtml(g.name)}</span>`).join('')}
+          </div>
+        ` : `<div class="empty">No groups yet — create one above.</div>`}
+        ${activeGroup ? `
+          <div class="section-note">Active group: <b>${escapeHtml(activeGroup.name)}</b> · id <span class="mono">${activeGroup.id}</span></div>
+          <div class="row" style="margin-top:10px;">
+            <input id="newMemberId" class="field" placeholder="Participant/user ID to add" />
+            <button class="ghost small" id="btnAddMember">Add member</button>
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="card">
+        <h2>Quick contact (for splitting with someone outside your account)</h2>
+        <div class="row">
+          <input id="contactName" class="field" placeholder="Name" />
+          <input id="contactPhone" class="field" placeholder="Phone (10-digit or +91...)" />
+          <button class="ghost small" id="btnCreateContact">Create contact</button>
+        </div>
+        ${state.contacts.length ? `
+          <div class="section-note">Created this session — click to copy participant_id:</div>
+          <div class="chip-list">
+            ${state.contacts.map(c => `<span class="chip" data-copy="${c.participant_id}">${escapeHtml(c.display_name)} · ${c.participant_id.slice(0,8)}</span>`).join('')}
+          </div>
+        ` : ''}
+        <div class="section-note">Contacts are ad-hoc participants (e.g. a friend without an account yet). Use their participant_id in the expense splits below.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Log an expense ${activeGroup ? `in "${escapeHtml(activeGroup.name)}"` : ''}</h2>
+      ${!activeGroup ? `<div class="empty">Select or create a group above first.</div>` : renderExpenseForm()}
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Balances (auto-refreshed after every action)</h2>
+        ${renderBalances()}
+      </div>
+
+      <div class="card">
+        <h2>Expenses ${activeGroup ? `in "${escapeHtml(activeGroup.name)}"` : ''}</h2>
+        ${renderExpensesList()}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Request log</h2>
+      <div class="log" id="logBox"></div>
+    </div>
+  `;
+}
+
+function renderExpenseForm(){
+  return `
+    <div class="row">
+      <div class="field">
+        <label>Amount (₹)</label>
+        <input id="expAmount" type="number" step="0.01" placeholder="500.00" />
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <input id="expCategory" placeholder="Food" />
+      </div>
+      <div class="field">
+        <label>Note</label>
+        <input id="expNote" placeholder="Dinner at Toit" />
+      </div>
+      <div class="field">
+        <label>Split type</label>
+        <select id="expSplitType">
+          <option value="equal">Equal</option>
+          <option value="exact">Exact amounts</option>
+          <option value="percentage">Percentage</option>
+          <option value="shares">Shares</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <label>Splits — you're the payer by default; add every participant (including yourself if they should also owe a share)</label>
+      <div id="splitRows">
+        ${state.splitDraft.map((r, i) => `
+          <div class="split-row">
+            <input class="split-pid" data-i="${i}" placeholder="participant_id (yours, or a contact's)" value="${escapeHtml(r.participantId)}" />
+            <input class="split-amt" data-i="${i}" placeholder="amt/%/shares" value="${escapeHtml(r.amount)}" />
+            <button class="ghost small" data-remove="${i}">✕</button>
+          </div>
+        `).join('')}
+      </div>
+      <button class="ghost small" id="btnAddSplitRow">+ Add participant</button>
+      <div class="section-note">
+        For <b>Equal</b> split, leave the amount column blank — the backend computes shares. For <b>Exact</b>/<b>Percentage</b>/<b>Shares</b>, fill in each participant's value; they must sum to the total (or 100% / total shares respectively).
+        Your own participant ID is your Supabase user id: <span class="mono">${state.session.user.id}</span>
+      </div>
+    </div>
+
+    <button id="btnSubmitExpense" style="margin-top:12px;">Log expense</button>
+  `;
+}
+
+function renderBalances(){
+  if(!state.balances) return `<div class="empty">No balance data yet.</div>`;
+  const b = state.balances;
+  const breakdown = b.breakdown || [];
+  return `
+    <div class="row" style="margin-bottom:12px;">
+      <div class="kv">Owed to you<br/><span class="amt pos" style="font-size:18px;">${money(b.total_owed_paise)}</span></div>
+      <div class="kv">You owe<br/><span class="amt neg" style="font-size:18px;">${money(b.total_owing_paise)}</span></div>
+      <div class="kv">Net<br/><span class="amt ${b.net_paise >= 0 ? 'pos' : 'neg'}" style="font-size:18px;">${money(Math.abs(b.net_paise))} ${b.net_paise >= 0 ? '(you\'re owed)' : '(you owe)'}</span></div>
+    </div>
+    ${breakdown.length ? `
+      <table>
+        <thead><tr><th>Person</th><th>Direction</th><th>Amount</th></tr></thead>
+        <tbody>
+          ${breakdown.map(e => `
+            <tr>
+              <td>${escapeHtml(e.user_name || e.user_id.slice(0,8))}</td>
+              <td class="muted">${e.amount_paise > 0 ? (b.total_owed_paise !== undefined ? 'net' : '') : ''}</td>
+              <td class="amt">${money(e.amount_paise)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    ` : `<div class="empty">All settled — no outstanding balances.</div>`}
+  `;
+}
+
+function renderExpensesList(){
+  if(!state.activeGroupId) return `<div class="empty">Select a group first.</div>`;
+  if(!state.expenses.length) return `<div class="empty">No expenses logged yet.</div>`;
+  return `
+    <table>
+      <thead><tr><th>Note</th><th>Category</th><th>Amount</th><th></th></tr></thead>
+      <tbody>
+        ${state.expenses.map(e => `
+          <tr>
+            <td>${escapeHtml(e.note || '—')}</td>
+            <td class="muted">${escapeHtml(e.category || '—')}</td>
+            <td class="amt">${money(e.amount_paise || Math.round((e.amount||0)*100))}</td>
+            <td><button class="ghost small" data-del-expense="${e.id}">Delete</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function wireDashboard(){
+  document.getElementById('btnLogout').onclick = doLogout;
+  document.getElementById('btnRefreshAll').onclick = async () => { await refreshAll(); toast('Refreshed'); };
+
+  document.getElementById('btnCreateGroup').onclick = async () => {
+    const name = document.getElementById('newGroupName').value;
+    try{ await doCreateGroup(name); }catch(e){ toast(e.message, 'err'); }
+  };
+
+  document.querySelectorAll('[data-group]').forEach(el => {
+    el.onclick = async () => {
+      state.activeGroupId = el.getAttribute('data-group');
+      await refreshExpenses();
+      render();
+    };
+  });
+
+  const addMemberBtn = document.getElementById('btnAddMember');
+  if(addMemberBtn){
+    addMemberBtn.onclick = async () => {
+      const id = document.getElementById('newMemberId').value;
+      try{ await doAddMember(id); }catch(e){ toast(e.message, 'err'); }
+    };
+  }
+
+  document.getElementById('btnCreateContact').onclick = async () => {
+    const name = document.getElementById('contactName').value;
+    const phone = document.getElementById('contactPhone').value;
+    try{ await doCreateContact(name, phone); }catch(e){ toast(e.message, 'err'); }
+  };
+
+  document.querySelectorAll('[data-copy]').forEach(el => {
+    el.onclick = () => {
+      navigator.clipboard?.writeText(el.getAttribute('data-copy'));
+      toast('participant_id copied');
+    };
+  });
+
+  const addSplitBtn = document.getElementById('btnAddSplitRow');
+  if(addSplitBtn) addSplitBtn.onclick = addSplitRow;
+
+  document.querySelectorAll('.split-pid').forEach(el => {
+    el.addEventListener('change', () => {
+      const i = parseInt(el.getAttribute('data-i'));
+      state.splitDraft[i].participantId = el.value;
+    });
+  });
+  document.querySelectorAll('.split-amt').forEach(el => {
+    el.addEventListener('change', () => {
+      const i = parseInt(el.getAttribute('data-i'));
+      state.splitDraft[i].amount = el.value;
+    });
+  });
+  document.querySelectorAll('[data-remove]').forEach(el => {
+    el.onclick = () => removeSplitRow(parseInt(el.getAttribute('data-remove')));
+  });
+
+  const submitExpenseBtn = document.getElementById('btnSubmitExpense');
+  if(submitExpenseBtn){
+    submitExpenseBtn.onclick = async () => {
+      const form = {
+        amount: document.getElementById('expAmount').value,
+        category: document.getElementById('expCategory').value,
+        note: document.getElementById('expNote').value,
+        splitType: document.getElementById('expSplitType').value,
+      };
+      submitExpenseBtn.disabled = true;
+      try{ await doCreateExpense(form); }
+      catch(e){ toast(e.message, 'err'); }
+      finally{ submitExpenseBtn.disabled = false; }
+    };
+  }
+
+  document.querySelectorAll('[data-del-expense]').forEach(el => {
+    el.onclick = async () => {
+      try{ await doDeleteExpense(el.getAttribute('data-del-expense')); }
+      catch(e){ toast(e.message, 'err'); }
+    };
+  });
+}
+
+/* ============ INIT ============ */
+(async function init(){
+  render();
+  if(state.session){
+    await bootstrapAfterAuth();
+  }
+})();
+</script>
+</body>
+</html>
