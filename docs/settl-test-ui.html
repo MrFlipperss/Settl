@@ -783,8 +783,8 @@ function renderExpenseForm(){
     </div>
     <div class="row" style="margin-top:6px;">
       <label class="pill" style="cursor:pointer;">
-        <input type="checkbox" id="expUseGroup" ${state.activeGroupId ? 'checked' : ''} ${state.activeGroupId ? '' : 'disabled'} />
-        Attach to collection ${state.activeGroupId ? `"${escapeHtml(state.groups.find(g => g.id === state.activeGroupId)?.name || '')}"` : '(select a collection first)'}
+        <input type="checkbox" id="expUseGroup" ${state.activeGroupId ? 'checked' : ''} />
+        Attach to collection ${state.activeGroupId ? `"${escapeHtml(state.groups.find(g => g.id === state.activeGroupId)?.name || '')}"` : '(none — standalone payment)'}
       </label>
       <label class="pill" style="cursor:pointer;">
         <input type="checkbox" id="expClientId" /> Supply client-generated ID
