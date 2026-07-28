@@ -70,6 +70,9 @@ func main() {
 	// session) but skips the "profile must already exist" check.
 	r.Post("/api/v1/profile", createProfileHandler(cfg, db))
 
+	// Debug UI — no auth (it's just an HTML shell; data fetch requires auth)
+	r.Get("/debug", debugPageHandler(db))
+
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(AuthMiddleware(cfg, db))
 
@@ -97,10 +100,7 @@ func main() {
 		r.Post("/contacts/claim", claimContactsHandler(db))
 		r.Get("/changes", getChangesHandler(db))
 
-		r.Route("/debug", func(r chi.Router) {
-			r.Get("/", debugPageHandler(db))
-			r.Get("/data", debugAPIHandler(db))
-		})
+		r.Get("/debug/data", debugAPIHandler(db))
 	})
 
 	srv := &http.Server{
