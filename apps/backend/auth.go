@@ -128,6 +128,45 @@ func parseRSAPublicKey(nStr, eStr string) (*rsa.PublicKey, error) {
 	}, nil
 }
 
+// verifyJWT validates a Supabase-issued access token (HMAC or RSA/JWKS) and
+// returns its claims. It does not touch the database or require a profile to
+// already exist — that's the caller's job. Shared by AuthMiddleware and the
+// profile-creation handler, which needs to identify the caller before any
+// profile row exists.
+func verifyJWT(jwtSecret, tokenStr string) (jwt.MapClaims, error) {
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); ok {
+			return []byte(jwtSecret), nil
+		}
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); ok {
+			kid, ok := token.Header["kid"].(string)
+			if !ok {
+				return nil, fmt.Errorf("missing kid header")
+			}
+			if globalJWKSCache != nil {
+				return globalJWKSCache.GetPublicKey(kid)
+			}
+			return nil, fmt.Errorf("JWKS not initialized")
+		}
+		return nil, jwt.ErrSignatureInvalid
+	})
+	if err != nil || !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, fmt.Errorf("invalid token claims")
+	}
+
+	userID, ok := claims["sub"].(string)
+	if !ok || userID == "" {
+		return nil, fmt.Errorf("invalid subject")
+	}
+
+	return claims, nil
+}
+
 func AuthMiddleware(jwtSecret string, db *DBQueries) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -148,42 +187,17 @@ func AuthMiddleware(jwtSecret string, db *DBQueries) func(http.Handler) http.Han
 				return
 			}
 
-			token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-				if _, ok := token.Method.(*jwt.SigningMethodHMAC); ok {
-					return []byte(jwtSecret), nil
-				}
-				if _, ok := token.Method.(*jwt.SigningMethodRSA); ok {
-					kid, ok := token.Header["kid"].(string)
-					if !ok {
-						return nil, fmt.Errorf("missing kid header")
-					}
-					if globalJWKSCache != nil {
-						return globalJWKSCache.GetPublicKey(kid)
-					}
-					return nil, fmt.Errorf("JWKS not initialized")
-				}
-				return nil, jwt.ErrSignatureInvalid
-			})
-			if err != nil || !token.Valid {
-				writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "invalid token"})
+			claims, err := verifyJWT(jwtSecret, tokenStr)
+			if err != nil {
+				writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: err.Error()})
 				return
 			}
 
-			claims, ok := token.Claims.(jwt.MapClaims)
-			if !ok {
-				writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "invalid token claims"})
-				return
-			}
-
-			userID, ok := claims["sub"].(string)
-			if !ok || userID == "" {
-				writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "invalid subject"})
-				return
-			}
+			userID, _ := claims["sub"].(string)
 
 			participantID, err := db.GetParticipantIDByUserID(r.Context(), userID)
 			if err != nil {
-				writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "user not found"})
+				writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "user not found — call POST /api/v1/profile first to complete signup"})
 				return
 			}
 

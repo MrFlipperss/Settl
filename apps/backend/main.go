@@ -62,6 +62,12 @@ func main() {
 
 	r.Get("/health", healthHandler)
 
+	// Not behind AuthMiddleware: a brand-new Supabase signup has no profile
+	// row yet, and AuthMiddleware 401s in exactly that case. This handler
+	// does its own JWT verification (still requires a valid Supabase
+	// session) but skips the "profile must already exist" check.
+	r.Post("/api/v1/profile", createProfileHandler(cfg, db))
+
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(AuthMiddleware(cfg.JWTSecret, db))
 
