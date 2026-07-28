@@ -91,7 +91,9 @@ func main() {
 		r.Get("/balances", getBalancesHandler(db))
 
 		r.Post("/contacts", createContactHandler(db))
+		r.Get("/contacts/search", searchContactsHandler(db))
 		r.Post("/contacts/claim", claimContactsHandler(db))
+		r.Get("/changes", getChangesHandler(db))
 	})
 
 	srv := &http.Server{

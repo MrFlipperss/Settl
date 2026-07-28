@@ -14,6 +14,8 @@ type Profile struct {
 	PhoneNumber   string    `json:"phone_number"`
 	UPIID         *string   `json:"upi_id"`
 	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
+	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 }
 
 type Contact struct {
@@ -23,6 +25,9 @@ type Contact struct {
 	CreatedBy              string    `json:"created_by"`
 	ClaimedByParticipantID *string   `json:"claimed_by_participant_id"`
 	CreatedAt              time.Time `json:"created_at"`
+	UpdatedAt              *time.Time `json:"updated_at,omitempty"`
+	DeletedAt              *time.Time `json:"deleted_at,omitempty"`
+	Version                int       `json:"version"`
 }
 
 type List struct {
@@ -31,6 +36,9 @@ type List struct {
 	Name          string    `json:"name"`
 	CreatedBy     string    `json:"created_by"`
 	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
+	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
+	Version       int       `json:"version"`
 	MemberCount   int       `json:"member_count"`
 }
 
@@ -38,27 +46,34 @@ type ListMember struct {
 	ListID        string    `json:"list_id"`
 	ParticipantID string    `json:"participant_id"`
 	AddedAt       time.Time `json:"added_at"`
+	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
+	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 }
 
 type Expense struct {
 	ID        string    `json:"id"`
 	ListID    *string   `json:"group_id"`
 	PayerID   string    `json:"payer_id"`
-	Amount    int64     `json:"amount_paise"` // Stored and calculated as int64 paise
+	Amount    int64     `json:"amount_paise"`
 	Category  string    `json:"category"`
 	Note      *string   `json:"note,omitempty"`
 	SplitType string    `json:"split_type"`
-	Version   int       `json:"version"` // Optimistic locking version
+	Version   int       `json:"version"`
 	CreatedAt time.Time `json:"timestamp"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 	Splits    []Split   `json:"splits"`
 }
 
 type Split struct {
-	ID            string `json:"id,omitempty"`
-	ExpenseID     string `json:"-"`
-	ParticipantID string `json:"user_id"`
-	ShareAmount   int64  `json:"share_amount_paise"` // Stored as int64 paise
-	RawInput      *int64 `json:"-"`
+	ID            string     `json:"id,omitempty"`
+	ExpenseID     string     `json:"-"`
+	ParticipantID string     `json:"user_id"`
+	ShareAmount   int64      `json:"share_amount_paise"`
+	RawInput      *int64     `json:"-"`
+	CreatedAt     time.Time  `json:"created_at,omitempty"`
+	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
+	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 }
 
 type ReceiptDetail struct {
@@ -69,6 +84,8 @@ type ReceiptDetail struct {
 	LineItems []string  `json:"line_items"`
 	CreatedBy string    `json:"created_by"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
 type BalanceEntry struct {
@@ -88,8 +105,9 @@ type BalancesResponse struct {
 }
 
 type CreateGroupRequest struct {
+	ID       *string `json:"id,omitempty"`
 	Name     string  `json:"name"`
-	Currency *string `json:"currency"`
+	Currency *string `json:"currency,omitempty"`
 }
 
 type AddMemberRequest struct {
@@ -97,10 +115,11 @@ type AddMemberRequest struct {
 }
 
 type CreateExpenseRequest struct {
+	ID             *string           `json:"id,omitempty"`
 	GroupID        *string           `json:"group_id"`
 	PayerID        string            `json:"payer_id"`
 	Amount         float64           `json:"amount"`
-	SplitType      string            `json:"split_type"` // "equal"|"exact"|"percentage"|"shares" — applies to all splits
+	SplitType      string            `json:"split_type"`
 	Category       *string           `json:"category"`
 	Note           *string           `json:"note"`
 	IdempotencyKey *string           `json:"idempotency_key,omitempty"`
@@ -116,8 +135,9 @@ type CreateSplitItem struct {
 }
 
 type CreateContactRequest struct {
-	DisplayName string `json:"display_name"`
-	PhoneNumber string `json:"phone_number"`
+	ID          *string `json:"id,omitempty"`
+	DisplayName string  `json:"display_name"`
+	PhoneNumber string  `json:"phone_number"`
 }
 
 type ClaimContactsRequest struct {
@@ -138,4 +158,21 @@ type HealthResponse struct {
 
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+type ContactSearchResult struct {
+	ParticipantID string `json:"participant_id"`
+	DisplayName   string `json:"display_name"`
+	PhoneNumber   string `json:"phone_number"`
+}
+
+type ChangesRequest struct {
+	Since time.Time `json:"since"`
+}
+
+type ChangesResponse struct {
+	Expenses []Expense `json:"expenses"`
+	Lists    []List    `json:"lists"`
+	Contacts []Contact `json:"contacts"`
+	AsOf     time.Time `json:"as_of"`
 }
