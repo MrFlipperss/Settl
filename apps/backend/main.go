@@ -96,6 +96,11 @@ func main() {
 		r.Get("/contacts/search", searchContactsHandler(db))
 		r.Post("/contacts/claim", claimContactsHandler(db))
 		r.Get("/changes", getChangesHandler(db))
+
+		r.Route("/debug", func(r chi.Router) {
+			r.Get("/", debugPageHandler(db))
+			r.Get("/data", debugAPIHandler(db))
+		})
 	})
 
 	srv := &http.Server{
