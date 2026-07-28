@@ -98,26 +98,50 @@ const LS = {
   supaUrl: 'settl_test_supa_url',
   supaKey: 'settl_test_supa_anon_key',
   session: 'settl_test_session',
+  people: 'settl_people_cache',
 };
 
 const state = {
   apiUrl: localStorage.getItem(LS.apiUrl) || 'https://settl-kru1.onrender.com',
   supaUrl: localStorage.getItem(LS.supaUrl) || 'https://rgrswhlyuvpicfbajhen.supabase.co',
   supaKey: localStorage.getItem(LS.supaKey) || '',
-  session: JSON.parse(localStorage.getItem(LS.session) || 'null'), // {access_token, user:{id,email}}
-  profile: null, // { participant_id, user_id, display_name, phone_number, upi_id } — from POST /api/v1/profile
+  session: JSON.parse(localStorage.getItem(LS.session) || 'null'),
+  profile: null,
   apiHealthy: null,
   groups: [],
   activeGroupId: null,
-  groupMembers: [], // [{id, name}] resolved participant ids for active group (best-effort; API doesn't expose names beyond profile)
+  groupMembers: [],
   expenses: [],
   balances: null,
-  contacts: [], // contacts created/looked up this session, keyed by phone — {display_name, phone_number, participant_id}
-  splitDraft: [], // [{phone, name, participantId, amount}] — phone is the primary thing you type; participantId is resolved from it
+  contacts: [],
+  people: JSON.parse(localStorage.getItem(LS.people) || '[]'),
+  splitDraft: [],
   logLines: [],
 };
 
 function save(key, val){ localStorage.setItem(key, typeof val === 'string' ? val : JSON.stringify(val)); }
+
+function cachePerson(id, name, phone){
+  if(!id) return;
+  const existing = state.people.find(p => p.participant_id === id);
+  if(existing){
+    if(name) existing.display_name = name;
+    if(phone) existing.phone_number = phone;
+  } else {
+    state.people.push({ participant_id: id, display_name: name || id.slice(0,8), phone_number: phone || '' });
+  }
+  save(LS.people, state.people);
+}
+
+function cachePeopleFromExpenses(expenses){
+  for(const e of expenses){
+    if(e.payer_id) cachePerson(e.payer_id, e.payer_name);
+    if(e.splits) for(const s of e.splits){
+      if(s.user_id || s.participant_id) cachePerson(s.user_id || s.participant_id);
+    }
+  }
+}
+
 function toast(msg, kind){
   const el = document.createElement('div');
   el.className = 'toast' + (kind ? ' ' + kind : '');
@@ -230,6 +254,7 @@ async function ensureProfile(displayName, phoneNumber){
   if(phoneNumber) body.phone_number = phoneNumber;
   const profile = await api('/api/v1/profile', { method: 'POST', body: JSON.stringify(body) });
   state.profile = profile;
+  if(profile) cachePerson(profile.participant_id, profile.display_name, profile.phone_number);
   return profile;
 }
 
@@ -271,6 +296,7 @@ async function refreshExpenses(){
     }
     const list = await api(`/api/v1/expenses${q}`);
     state.expenses = Array.isArray(list) ? list : [];
+    cachePeopleFromExpenses(state.expenses);
   }catch(e){ state.expenses = []; }
   render();
 }
@@ -346,7 +372,14 @@ async function resolveParticipantByPhone(phone, fallbackName){
   const cached = state.contacts.find(c => c.phone_number_input === norm);
   if(cached) return cached;
 
-  // Search existing contacts first — avoids unnecessary contact creation.
+  // Check local offline cache first.
+  const local = state.people.find(p => p.phone_number && p.phone_number.replace(/\D/g,'').includes(norm.replace(/\D/g,'')));
+  if(local){
+    state.contacts.unshift({ ...local, phone_number_input: norm });
+    return state.contacts[0];
+  }
+
+  // Search via API.
   try{
     const results = await api(`/api/v1/contacts/search?q=${encodeURIComponent(norm)}`);
     if(Array.isArray(results) && results.length > 0){
@@ -358,15 +391,16 @@ async function resolveParticipantByPhone(phone, fallbackName){
         phone_number_input: norm,
       };
       state.contacts.unshift(entry);
+      cachePerson(match.participant_id, match.display_name, match.phone_number);
       return entry;
     }
   }catch(e){ /* search not available? fall through to creation */ }
 
-  // No existing contact found — create one.
   const name = (fallbackName && fallbackName.trim()) || norm;
   const c = await api('/api/v1/contacts', { method: 'POST', body: JSON.stringify({ display_name: name, phone_number: norm }) });
   c.phone_number_input = norm;
   state.contacts.unshift(c);
+  cachePerson(c.participant_id, c.display_name, c.phone_number);
   return c;
 }
 
@@ -453,6 +487,26 @@ async function doDeleteExpense(id){
 
 /* ============ RENDER ============ */
 
+function renderLocalPeople(){
+  const el = document.getElementById('localPeopleResults');
+  if(!el) return;
+  const q = (document.getElementById('localSearchQuery')?.value || '').toLowerCase().trim();
+  let filtered = state.people;
+  if(q){
+    filtered = filtered.filter(p =>
+      (p.display_name || '').toLowerCase().includes(q) ||
+      (p.phone_number || '').includes(q)
+    );
+  }
+  if(!filtered.length){
+    el.innerHTML = `<div class="empty">${q ? 'No names match your filter.' : 'No cached people yet.'}</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="chip-list">${filtered.slice(0,40).map(p =>
+    `<span class="chip" title="pid: ${p.participant_id} · ${p.phone_number || ''}">${escapeHtml(p.display_name)}</span>`
+  ).join('')}</div>${filtered.length > 40 ? `<div class="muted" style="font-size:11px;margin-top:4px;">… and ${filtered.length-40} more</div>` : ''}`;
+}
+
 function renderHealthPill(){
   const el = document.getElementById('healthPill');
   if(!el) return;
@@ -481,6 +535,7 @@ function render(){
   wireDashboard();
   renderHealthPill();
   renderLog();
+  renderLocalPeople();
 }
 
 function renderProfileSetupScreen(){
@@ -648,24 +703,23 @@ function renderDashboard(){
       </div>
 
       <div class="card">
-        <h2>Contact Search</h2>
+        <h2>People <span class="muted" style="font-weight:400;font-size:11px;">${state.people.length} locally cached</span></h2>
         <div class="row" style="margin-bottom:8px;">
-          <input id="contactSearchQuery" class="field" placeholder="Search by name or phone…" />
-          <button class="ghost small" id="btnSearchContacts">Search</button>
+          <input id="contactSearchQuery" class="field" placeholder="Search API by name or phone…" />
+          <button class="ghost small" id="btnSearchContacts">API search</button>
+          <input id="localSearchQuery" class="field" placeholder="Filter local cache…" oninput="renderLocalPeople()" />
         </div>
         <div id="contactSearchResults"></div>
+        <div id="localPeopleResults">
+          ${state.people.length ? `<div class="chip-list">${state.people.slice(0,30).map(p => `<span class="chip" title="pid: ${p.participant_id} · ${p.phone_number || ''}">${escapeHtml(p.display_name)}</span>`).join('')}</div>` : '<div class="empty">No cached people yet. As you create expenses, add members, or search contacts, they will appear here for offline access.</div>'}
+        </div>
         <div style="border-top:1px solid var(--border);margin:10px 0 8px;"></div>
         <div class="row">
           <input id="contactPhone" class="field" placeholder="Phone (10-digit or +91...)" />
           <input id="contactName" class="field" placeholder="Name" />
           <button class="ghost small" id="btnCreateContact">Save new contact</button>
+          <button class="ghost small danger" id="btnClearCache" style="margin-left:auto;">Clear cache</button>
         </div>
-        ${state.contacts.length ? `
-          <div class="section-note">Created/resolved this session:</div>
-          <div class="chip-list">
-            ${state.contacts.map(c => `<span class="chip" title="pid: ${c.participant_id} · v${c.version||1}">${escapeHtml(c.display_name)} · ${escapeHtml(c.phone_number_input || c.phone_number)}</span>`).join('')}
-          </div>
-        ` : ''}
       </div>
     </div>
 
@@ -849,6 +903,7 @@ function wireDashboard(){
     if(!q){ toast('Enter a search query', 'err'); return; }
     try{
       const results = await api(`/api/v1/contacts/search?q=${encodeURIComponent(q)}`);
+      if(Array.isArray(results)) for(const r of results) cachePerson(r.participant_id, r.display_name, r.phone_number);
       const el = document.getElementById('contactSearchResults');
       if(!Array.isArray(results) || results.length === 0){
         el.innerHTML = '<div class="empty">No matching contacts found.</div>';
@@ -868,6 +923,13 @@ function wireDashboard(){
       toast(`Contact "${c.display_name}" ready`, 'ok');
       render();
     }catch(e){ toast(e.message, 'err'); }
+  };
+
+  document.getElementById('btnClearCache').onclick = () => {
+    state.people = [];
+    save(LS.people, state.people);
+    render();
+    toast('Local people cache cleared', 'ok');
   };
 
   // Changes / Sync
