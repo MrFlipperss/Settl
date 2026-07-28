@@ -264,9 +264,11 @@ async function refreshGroups(){
 }
 
 async function refreshExpenses(){
-  if(!state.activeGroupId){ state.expenses = []; render(); return; }
   try{
-    const q = `?groupID=${encodeURIComponent(state.activeGroupId)}`;
+    let q = '';
+    if(state.activeGroupId){
+      q = `?groupID=${encodeURIComponent(state.activeGroupId)}`;
+    }
     const list = await api(`/api/v1/expenses${q}`);
     state.expenses = Array.isArray(list) ? list : [];
   }catch(e){ state.expenses = []; }
@@ -332,15 +334,11 @@ async function doCreateGroup(name){
   render();
 }
 
-// Phone number is the real identity anchor in this system (every profile and
-// every contact has one — see contacts.go / the profiles table). The backend
-// has no "look up participant by phone" route, so this resolves against
-// contacts already created *this session* first; if the phone hasn't been
-// seen yet, it creates a new contact via the existing POST /api/v1/contacts
-// route. That mirrors the schema's own documented behavior: multiple contact
-// rows can exist for one phone number, and they all net together once that
-// phone number signs up for real (via claimContactsHandler / the new
-// profile-creation auto-claim).
+// Phone number is the real identity anchor. Resolves a phone number to a
+// participant_id by: 1) searching via GET /contacts/search?q=<phone> (new),
+// 2) checking the local session cache, 3) creating a new contact on the fly.
+// The search-first approach means the frontend never needs to create contacts
+// just to check if someone already exists.
 async function resolveParticipantByPhone(phone, fallbackName){
   const norm = phone.trim();
   if(!norm) throw new Error('Phone number required');
@@ -348,9 +346,26 @@ async function resolveParticipantByPhone(phone, fallbackName){
   const cached = state.contacts.find(c => c.phone_number_input === norm);
   if(cached) return cached;
 
+  // Search existing contacts first — avoids unnecessary contact creation.
+  try{
+    const results = await api(`/api/v1/contacts/search?q=${encodeURIComponent(norm)}`);
+    if(Array.isArray(results) && results.length > 0){
+      const match = results[0];
+      const entry = {
+        participant_id: match.participant_id,
+        display_name: match.display_name,
+        phone_number: match.phone_number,
+        phone_number_input: norm,
+      };
+      state.contacts.unshift(entry);
+      return entry;
+    }
+  }catch(e){ /* search not available? fall through to creation */ }
+
+  // No existing contact found — create one.
   const name = (fallbackName && fallbackName.trim()) || norm;
   const c = await api('/api/v1/contacts', { method: 'POST', body: JSON.stringify({ display_name: name, phone_number: norm }) });
-  c.phone_number_input = norm; // remember what the user actually typed, for cache lookups
+  c.phone_number_input = norm;
   state.contacts.unshift(c);
   return c;
 }
@@ -377,14 +392,20 @@ function removeSplitRow(i){
 async function doCreateExpense(form){
   const amount = parseFloat(form.amount);
   if(!amount || amount <= 0){ toast('Enter a valid amount', 'err'); return; }
-  if(!state.activeGroupId){ toast('Pick a group first', 'err'); return; }
+
+  const useGroup = document.getElementById('expUseGroup')?.checked && state.activeGroupId;
+  const useClientId = document.getElementById('expClientId')?.checked;
 
   const splitType = form.splitType;
   const rows = state.splitDraft.filter(r => r.phone.trim() || r.isSelf);
 
   const splits = [];
   for(const r of rows){
-    const participantId = r.isSelf ? state.profile.participant_id : (await resolveParticipantByPhone(r.phone, r.name)).participant_id;
+    let participantId = r.participantId || (r.isSelf ? state.profile.participant_id : null);
+    if(!participantId){
+      const resolved = await resolveParticipantByPhone(r.phone, r.name);
+      participantId = resolved.participant_id;
+    }
     const item = { user_id: participantId };
     if(splitType === 'exact') item.exact_amount = parseFloat(r.amount) || 0;
     if(splitType === 'percentage') item.percentage = parseFloat(r.amount) || 0;
@@ -395,7 +416,6 @@ async function doCreateExpense(form){
   if(splits.length === 0){ toast('Add at least one participant to split with', 'err'); return; }
 
   const payload = {
-    group_id: state.activeGroupId,
     amount,
     category: form.category || 'Uncategorized',
     note: form.note || '',
@@ -403,14 +423,22 @@ async function doCreateExpense(form){
     splits
   };
 
+  if(useGroup){
+    payload.group_id = state.activeGroupId;
+  }
+
+  if(useClientId){
+    payload.id = crypto.randomUUID();
+  }
+
   await api('/api/v1/expenses', {
     method: 'POST',
     headers: { 'Idempotency-Key': `test-ui-${Date.now()}-${Math.random().toString(36).slice(2,8)}` },
     body: JSON.stringify(payload)
   });
-  toast('Expense logged', 'ok');
+  const groupLabel = useGroup ? ` in "${state.groups.find(g => g.id === state.activeGroupId)?.name || ''}"` : ' (no collection)';
+  toast(`Expense logged${groupLabel}`, 'ok');
   state.splitDraft = [];
-  // Auto-refresh everything touched by this action.
   await Promise.all([refreshExpenses(), refreshBalances()]);
   render();
 }
@@ -598,59 +626,73 @@ function renderDashboard(){
 
     <div class="grid2">
       <div class="card">
-        <h2>Groups</h2>
+        <h2>Collections</h2>
         <div class="row" style="margin-bottom:10px;">
-          <input id="newGroupName" class="field" placeholder="New group name (e.g. Goa Trip)" />
+          <input id="newGroupName" class="field" placeholder="New collection name (e.g. Goa Trip)" />
           <button id="btnCreateGroup">Create</button>
         </div>
         ${state.groups.length ? `
           <div class="chip-list">
             ${state.groups.map(g => `<span class="chip ${g.id === state.activeGroupId ? 'active' : ''}" data-group="${g.id}">${escapeHtml(g.name)}</span>`).join('')}
           </div>
-        ` : `<div class="empty">No groups yet — create one above.</div>`}
+        ` : `<div class="empty">No collections yet — expenses can be created without one.</div>`}
+        <div class="section-note">Collections are optional reusable lists of people. Expenses no longer require a group — toggle "Attach to collection" below if you want one.</div>
         ${activeGroup ? `
-          <div class="section-note">Active group: <b>${escapeHtml(activeGroup.name)}</b> · id <span class="mono">${activeGroup.id}</span></div>
-          <div class="row" style="margin-top:10px;">
+          <div class="section-note" style="margin-top:6px;">Active: <b>${escapeHtml(activeGroup.name)}</b> · id <span class="mono">${activeGroup.id}</span></div>
+          <div class="row" style="margin-top:8px;">
             <input id="newMemberPhone" class="field" placeholder="Phone number" />
             <input id="newMemberName" class="field" placeholder="Name (if new)" />
             <button class="ghost small" id="btnAddMember">Add member</button>
           </div>
-          <div class="section-note">Adding by phone: if that number already belongs to a contact you've created or someone's signed-up account, it resolves to them; otherwise a new contact is created on the spot.</div>
         ` : ''}
       </div>
 
       <div class="card">
-        <h2>Contacts</h2>
+        <h2>Contact Search</h2>
+        <div class="row" style="margin-bottom:8px;">
+          <input id="contactSearchQuery" class="field" placeholder="Search by name or phone…" />
+          <button class="ghost small" id="btnSearchContacts">Search</button>
+        </div>
+        <div id="contactSearchResults"></div>
+        <div style="border-top:1px solid var(--border);margin:10px 0 8px;"></div>
         <div class="row">
           <input id="contactPhone" class="field" placeholder="Phone (10-digit or +91...)" />
           <input id="contactName" class="field" placeholder="Name" />
-          <button class="ghost small" id="btnCreateContact">Save contact</button>
+          <button class="ghost small" id="btnCreateContact">Save new contact</button>
         </div>
         ${state.contacts.length ? `
-          <div class="section-note">Resolved this session:</div>
+          <div class="section-note">Created/resolved this session:</div>
           <div class="chip-list">
             ${state.contacts.map(c => `<span class="chip" title="participant_id ${c.participant_id}">${escapeHtml(c.display_name)} · ${escapeHtml(c.phone_number_input || c.phone_number)}</span>`).join('')}
           </div>
         ` : ''}
-        <div class="section-note">Phone number is how every person — signed up or not — is identified in this system. You don't need to create a contact here first: adding a member or a split participant by phone below will create one automatically if it doesn't exist yet.</div>
       </div>
     </div>
 
     <div class="card">
-      <h2>Log an expense ${activeGroup ? `in "${escapeHtml(activeGroup.name)}"` : ''}</h2>
-      ${!activeGroup ? `<div class="empty">Select or create a group above first.</div>` : renderExpenseForm()}
+      <h2>Log an expense ${activeGroup ? `(active collection: "${escapeHtml(activeGroup.name)}")` : '(no collection selected)'}</h2>
+      ${renderExpenseForm()}
     </div>
 
     <div class="grid2">
       <div class="card">
-        <h2>Balances (auto-refreshed after every action)</h2>
+        <h2>Balances (auto-refreshed)</h2>
         ${renderBalances()}
       </div>
 
       <div class="card">
-        <h2>Expenses ${activeGroup ? `in "${escapeHtml(activeGroup.name)}"` : ''}</h2>
+        <h2>Expenses</h2>
         ${renderExpensesList()}
       </div>
+    </div>
+
+    <div class="card">
+      <h2>Sync / Changes</h2>
+      <div class="row">
+        <input id="changesSince" class="field" placeholder="Since (RFC3339, e.g. 2025-01-01T00:00:00Z)" value="${new Date(Date.now() - 86400000).toISOString()}" />
+        <button class="ghost small" id="btnFetchChanges">Fetch changes</button>
+      </div>
+      <div id="changesResults"></div>
     </div>
 
     <div class="card">
@@ -685,9 +727,18 @@ function renderExpenseForm(){
         </select>
       </div>
     </div>
+    <div class="row" style="margin-top:6px;">
+      <label class="pill" style="cursor:pointer;">
+        <input type="checkbox" id="expUseGroup" ${state.activeGroupId ? 'checked' : ''} ${state.activeGroupId ? '' : 'disabled'} />
+        Attach to collection ${state.activeGroupId ? `"${escapeHtml(state.groups.find(g => g.id === state.activeGroupId)?.name || '')}"` : '(select a collection first)'}
+      </label>
+      <label class="pill" style="cursor:pointer;">
+        <input type="checkbox" id="expClientId" /> Supply client-generated ID
+      </label>
+    </div>
 
     <div style="margin-top:12px;">
-      <label>Splits — you're the payer by default; add every participant by phone number (including yourself if you also owe a share)</label>
+      <label>Splits — you're the payer; add participants by phone number (including yourself if you owe a share)</label>
       <div id="splitRows">
         ${state.splitDraft.map((r, i) => `
           <div class="split-row">
@@ -706,8 +757,8 @@ function renderExpenseForm(){
         <button class="ghost small" id="btnAddSelfSplit">+ Add myself</button>
       </div>
       <div class="section-note">
-        For <b>Equal</b> split, leave the amount column blank — the backend computes shares. For <b>Exact</b>/<b>Percentage</b>/<b>Shares</b>, fill in each participant's value; they must sum to the total (or 100% / total shares respectively).
-        A new phone number here creates a contact automatically when you submit.
+        <b>Equal</b>: leave amount blank. <b>Exact</b>/<b>Percentage</b>/<b>Shares</b>: fill each participant's value (must sum to total / 100% / total shares).
+        New phone numbers create contacts automatically on submit.
       </div>
     </div>
 
@@ -743,17 +794,18 @@ function renderBalances(){
 }
 
 function renderExpensesList(){
-  if(!state.activeGroupId) return `<div class="empty">Select a group first.</div>`;
-  if(!state.expenses.length) return `<div class="empty">No expenses logged yet.</div>`;
+  if(!state.expenses.length) return `<div class="empty">${state.activeGroupId ? 'No expenses in this collection yet.' : 'No expenses yet — create one above (no collection needed).'}</div>`;
+  const showGroup = !state.activeGroupId;
   return `
     <table>
-      <thead><tr><th>Note</th><th>Category</th><th>Amount</th><th></th></tr></thead>
+      <thead><tr>${showGroup ? '<th>Collection</th>' : ''}<th>Note</th><th>Amount</th><th>Updated</th><th></th></tr></thead>
       <tbody>
         ${state.expenses.map(e => `
           <tr>
+            ${showGroup ? `<td class="muted">${escapeHtml(e.group_id ? (state.groups.find(g => g.id === e.group_id)?.name || e.group_id.slice(0,8)) : '—')}</td>` : ''}
             <td>${escapeHtml(e.note || '—')}</td>
-            <td class="muted">${escapeHtml(e.category || '—')}</td>
-            <td class="amt">${money(e.amount_paise || Math.round((e.amount||0)*100))}</td>
+            <td class="amt">${money(e.amount_paise || 0)}</td>
+            <td class="muted mono" style="font-size:10px;">${e.updated_at ? new Date(e.updated_at).toLocaleDateString() : '—'}</td>
             <td><button class="ghost small" data-del-expense="${e.id}">Delete</button></td>
           </tr>
         `).join('')}
@@ -791,6 +843,23 @@ function wireDashboard(){
     };
   }
 
+  // Contact search
+  document.getElementById('btnSearchContacts').onclick = async () => {
+    const q = document.getElementById('contactSearchQuery').value.trim();
+    if(!q){ toast('Enter a search query', 'err'); return; }
+    try{
+      const results = await api(`/api/v1/contacts/search?q=${encodeURIComponent(q)}`);
+      const el = document.getElementById('contactSearchResults');
+      if(!Array.isArray(results) || results.length === 0){
+        el.innerHTML = '<div class="empty">No matching contacts found.</div>';
+      }else{
+        el.innerHTML = `<table><thead><tr><th>Name</th><th>Phone</th><th>Participant ID</th></tr></thead><tbody>
+          ${results.map(r => `<tr><td>${escapeHtml(r.display_name)}</td><td class="mono">${escapeHtml(r.phone_number)}</td><td class="mono" style="font-size:10px;">${r.participant_id}</td></tr>`).join('')}
+        </tbody></table>`;
+      }
+    }catch(e){ toast(e.message, 'err'); }
+  };
+
   document.getElementById('btnCreateContact').onclick = async () => {
     const phone = document.getElementById('contactPhone').value;
     const name = document.getElementById('contactName').value;
@@ -798,6 +867,22 @@ function wireDashboard(){
       const c = await resolveParticipantByPhone(phone, name);
       toast(`Contact "${c.display_name}" ready`, 'ok');
       render();
+    }catch(e){ toast(e.message, 'err'); }
+  };
+
+  // Changes / Sync
+  document.getElementById('btnFetchChanges').onclick = async () => {
+    const since = document.getElementById('changesSince').value.trim();
+    if(!since){ toast('Enter a "since" timestamp', 'err'); return; }
+    try{
+      const ch = await api(`/api/v1/changes?since=${encodeURIComponent(since)}`);
+      const el = document.getElementById('changesResults');
+      el.innerHTML = `<div class="section-note" style="margin-top:8px;">
+        <b>${(ch.expenses||[]).length}</b> expense(s) · <b>${(ch.lists||[]).length}</b> collection(s) · <b>${(ch.contacts||[]).length}</b> contact(s) changed since <span class="mono">${escapeHtml(since)}</span> (as of <span class="mono">${new Date(ch.as_of).toLocaleString()}</span>)
+      </div>`;
+      if((ch.expenses||[]).length){
+        el.innerHTML += `<div style="margin-top:6px;font-size:12px;color:var(--muted);">Changed expense IDs: ${ch.expenses.map(e => `<span class="mono">${e.id.slice(0,8)}</span>`).join(', ')}</div>`;
+      }
     }catch(e){ toast(e.message, 'err'); }
   };
 
