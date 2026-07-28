@@ -19,7 +19,6 @@ func (q *DBQueries) UpsertReceiptDetail(ctx context.Context, expenseID string, r
 		ocrPaise = &p
 	}
 
-	now := time.Now()
 	rd := &ReceiptDetail{
 		ExpenseID: expenseID,
 		Merchant:  req.Merchant,
@@ -27,21 +26,19 @@ func (q *DBQueries) UpsertReceiptDetail(ctx context.Context, expenseID string, r
 		OCRDate:   req.OCRDate,
 		LineItems: req.LineItems,
 		CreatedBy: createdBy,
-		CreatedAt: now,
-		UpdatedAt: &now,
+		CreatedAt: time.Now(),
 	}
 
 	_, err := q.pool.Exec(ctx,
-		`INSERT INTO public.receipt_details (expense_id, merchant, ocr_total, ocr_date, line_items, created_by, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+		`INSERT INTO public.receipt_details (expense_id, merchant, ocr_total, ocr_date, line_items, created_by, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (expense_id)
 		 DO UPDATE SET merchant = EXCLUDED.merchant,
 		               ocr_total = EXCLUDED.ocr_total,
 		               ocr_date = EXCLUDED.ocr_date,
 		               line_items = EXCLUDED.line_items,
-		               created_by = EXCLUDED.created_by,
-		               updated_at = EXCLUDED.updated_at`,
-		expenseID, req.Merchant, ocrPaise, req.OCRDate, req.LineItems, createdBy, now,
+		               created_by = EXCLUDED.created_by`,
+		expenseID, req.Merchant, ocrPaise, req.OCRDate, req.LineItems, createdBy, time.Now(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("upsert receipt detail: %w", err)
@@ -52,11 +49,11 @@ func (q *DBQueries) UpsertReceiptDetail(ctx context.Context, expenseID string, r
 
 func (q *DBQueries) GetReceiptDetail(ctx context.Context, expenseID string) (*ReceiptDetail, error) {
 	row := q.pool.QueryRow(ctx,
-		`SELECT expense_id, merchant, ocr_total, ocr_date, line_items, created_by, created_at, updated_at, deleted_at
+		`SELECT expense_id, merchant, ocr_total, ocr_date, line_items, created_by, created_at
 		 FROM public.receipt_details WHERE expense_id = $1`, expenseID)
 
 	var rd ReceiptDetail
-	err := row.Scan(&rd.ExpenseID, &rd.Merchant, &rd.OCRTotal, &rd.OCRDate, &rd.LineItems, &rd.CreatedBy, &rd.CreatedAt, &rd.UpdatedAt, &rd.DeletedAt)
+	err := row.Scan(&rd.ExpenseID, &rd.Merchant, &rd.OCRTotal, &rd.OCRDate, &rd.LineItems, &rd.CreatedBy, &rd.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

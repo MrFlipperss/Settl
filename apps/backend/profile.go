@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -25,11 +24,11 @@ type CreateProfileRequest struct {
 // state for a brand-new signup before they've called CreateProfile.
 func (q *DBQueries) GetProfileByUserID(ctx context.Context, userID string) (*Profile, error) {
 	row := q.pool.QueryRow(ctx,
-		`SELECT participant_id, user_id, display_name, phone_number, upi_id, created_at, updated_at, deleted_at
+		`SELECT participant_id, user_id, display_name, phone_number, upi_id, created_at
 		 FROM public.profiles WHERE user_id = $1`, userID)
 
 	var p Profile
-	err := row.Scan(&p.ParticipantID, &p.UserID, &p.DisplayName, &p.PhoneNumber, &p.UPIID, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt)
+	err := row.Scan(&p.ParticipantID, &p.UserID, &p.DisplayName, &p.PhoneNumber, &p.UPIID, &p.CreatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -47,7 +46,6 @@ func (q *DBQueries) GetProfileByUserID(ctx context.Context, userID string) (*Pro
 // nets onto their real account.
 func (q *DBQueries) CreateProfile(ctx context.Context, userID string, req CreateProfileRequest) (*Profile, error) {
 	normPhone := NormalizePhoneNumber(req.PhoneNumber)
-	now := time.Now()
 
 	tx, err := q.pool.Begin(ctx)
 	if err != nil {
@@ -57,17 +55,16 @@ func (q *DBQueries) CreateProfile(ctx context.Context, userID string, req Create
 
 	var participantID string
 	err = tx.QueryRow(ctx,
-		`INSERT INTO public.participants (kind, created_at, updated_at) VALUES ('user', $1, $1) RETURNING id`,
-		now,
+		`INSERT INTO public.participants (kind) VALUES ('user') RETURNING id`,
 	).Scan(&participantID)
 	if err != nil {
 		return nil, fmt.Errorf("insert participant: %w", err)
 	}
 
 	_, err = tx.Exec(ctx,
-		`INSERT INTO public.profiles (participant_id, user_id, display_name, phone_number, upi_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $6)`,
-		participantID, userID, req.DisplayName, normPhone, req.UPIID, now,
+		`INSERT INTO public.profiles (participant_id, user_id, display_name, phone_number, upi_id)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		participantID, userID, req.DisplayName, normPhone, req.UPIID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert profile: %w", err)
@@ -75,9 +72,9 @@ func (q *DBQueries) CreateProfile(ctx context.Context, userID string, req Create
 
 	_, err = tx.Exec(ctx,
 		`UPDATE public.contacts
-		 SET claimed_by_participant_id = $1, updated_at = $2
-		 WHERE phone_number = $3 AND claimed_by_participant_id IS NULL`,
-		participantID, now, normPhone,
+		 SET claimed_by_participant_id = $1
+		 WHERE phone_number = $2 AND claimed_by_participant_id IS NULL`,
+		participantID, normPhone,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("claim contacts: %w", err)

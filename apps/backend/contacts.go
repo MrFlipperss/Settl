@@ -61,14 +61,12 @@ func (q *DBQueries) CreateContact(ctx context.Context, req CreateContactRequest,
 		PhoneNumber:   normPhone,
 		CreatedBy:     createdBy,
 		CreatedAt:     now,
-		UpdatedAt:     &now,
-		Version:       1,
 	}
 
 	_, err = tx.Exec(ctx,
-		`INSERT INTO public.contacts (participant_id, display_name, phone_number, created_by, created_at, updated_at, version)
-		 VALUES ($1, $2, $3, $4, $5, $5, 1)`,
-		participantID, req.DisplayName, normPhone, createdBy, now,
+		`INSERT INTO public.contacts (participant_id, display_name, phone_number, created_by)
+		 VALUES ($1, $2, $3, $4)`,
+		participantID, req.DisplayName, normPhone, createdBy,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert contact: %w", err)
@@ -83,12 +81,11 @@ func (q *DBQueries) CreateContact(ctx context.Context, req CreateContactRequest,
 
 func (q *DBQueries) ClaimContacts(ctx context.Context, phoneNumber, newParticipantID string) (int, error) {
 	normPhone := NormalizePhoneNumber(phoneNumber)
-	now := time.Now()
 	result, err := q.pool.Exec(ctx,
 		`UPDATE public.contacts
-		 SET claimed_by_participant_id = $1, updated_at = $2
-		 WHERE phone_number = $3 AND claimed_by_participant_id IS NULL`,
-		newParticipantID, now, normPhone,
+		 SET claimed_by_participant_id = $1
+		 WHERE phone_number = $2 AND claimed_by_participant_id IS NULL`,
+		newParticipantID, normPhone,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("claim contacts: %w", err)
@@ -98,11 +95,11 @@ func (q *DBQueries) ClaimContacts(ctx context.Context, phoneNumber, newParticipa
 
 func (q *DBQueries) GetContact(ctx context.Context, participantID string) (*Contact, error) {
 	row := q.pool.QueryRow(ctx,
-		`SELECT participant_id, display_name, phone_number, created_by, claimed_by_participant_id, created_at, updated_at, deleted_at, version
+		`SELECT participant_id, display_name, phone_number, created_by, claimed_by_participant_id, created_at
 		 FROM public.contacts WHERE participant_id = $1`, participantID)
 
 	var c Contact
-	err := row.Scan(&c.ParticipantID, &c.DisplayName, &c.PhoneNumber, &c.CreatedBy, &c.ClaimedByParticipantID, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt, &c.Version)
+	err := row.Scan(&c.ParticipantID, &c.DisplayName, &c.PhoneNumber, &c.CreatedBy, &c.ClaimedByParticipantID, &c.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get contact: %w", err)
 	}
