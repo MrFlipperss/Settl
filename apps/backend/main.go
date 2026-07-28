@@ -69,7 +69,7 @@ func main() {
 	r.Post("/api/v1/profile", createProfileHandler(cfg, db))
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(AuthMiddleware(cfg.JWTSecret, db))
+		r.Use(AuthMiddleware(cfg, db))
 
 		r.Route("/groups", func(r chi.Router) {
 			r.Post("/", createListHandler(db))

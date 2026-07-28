@@ -110,7 +110,7 @@ func createProfileHandler(cfg Config, q *DBQueries) http.HandlerFunc {
 		if tokenStr == "dev_token" {
 			userID = "b8c17831-3032-409f-a03d-3ca1d2415a3c"
 		} else {
-			claims, err := verifyJWT(cfg.JWTSecret, tokenStr)
+			claims, err := verifyJWT(tokenStr, cfg)
 			if err != nil {
 				writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: err.Error()})
 				return

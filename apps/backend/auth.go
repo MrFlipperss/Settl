@@ -133,46 +133,89 @@ func parseRSAPublicKey(nStr, eStr string) (*rsa.PublicKey, error) {
 // already exist — that's the caller's job. Shared by AuthMiddleware and the
 // profile-creation handler, which needs to identify the caller before any
 // profile row exists.
-func verifyJWT(jwtSecret, tokenStr string) (jwt.MapClaims, error) {
-	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); ok {
-			return []byte(jwtSecret), nil
-		}
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); ok {
-			kid, ok := token.Header["kid"].(string)
-			if !ok {
-				return nil, fmt.Errorf("missing kid header")
+//
+// If local JWT verification fails and cfg.SupabaseURL / cfg.SupabaseAnonKey
+// are set, it falls back to calling the Supabase Auth REST API — this avoids
+// needing to know the project's JWT secret on every deployment.
+func verifyJWT(tokenStr string, cfg Config) (jwt.MapClaims, error) {
+	var claims jwt.MapClaims
+
+	// 1) Try local JWT verification iff we have a JWT secret configured.
+	if cfg.JWTSecret != "" {
+		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); ok {
+				return []byte(cfg.JWTSecret), nil
 			}
-			if globalJWKSCache != nil {
-				return globalJWKSCache.GetPublicKey(kid)
+			if _, ok := token.Method.(*jwt.SigningMethodRSA); ok {
+				kid, ok := token.Header["kid"].(string)
+				if !ok {
+					return nil, fmt.Errorf("missing kid header")
+				}
+				if globalJWKSCache != nil {
+					return globalJWKSCache.GetPublicKey(kid)
+				}
+				return nil, fmt.Errorf("JWKS not initialized")
 			}
-			return nil, fmt.Errorf("JWKS not initialized")
+			return nil, jwt.ErrSignatureInvalid
+		})
+		if err == nil && token.Valid {
+			claims, _ = token.Claims.(jwt.MapClaims)
+			if claims != nil {
+				if sub, _ := claims["sub"].(string); sub != "" {
+					return claims, nil
+				}
+			}
 		}
-		return nil, jwt.ErrSignatureInvalid
-	})
-	if err != nil || !token.Valid {
+	}
+
+	// 2) Fall back to Supabase Auth REST API verification.
+	if cfg.SupabaseURL != "" && cfg.SupabaseAnonKey != "" {
+		return verifyViaSupabaseAPI(cfg.SupabaseURL, cfg.SupabaseAnonKey, tokenStr)
+	}
+
+	return nil, fmt.Errorf("invalid token")
+}
+
+// verifyViaSupabaseAPI validates an access token by calling the Supabase Auth
+// REST API's /auth/v1/user endpoint. Returns claims with "sub" set to the
+// user's id.
+func verifyViaSupabaseAPI(supabaseURL, anonKey, tokenStr string) (jwt.MapClaims, error) {
+	u := strings.TrimRight(supabaseURL, "/") + "/auth/v1/user"
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("verify via supa: create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+tokenStr)
+	req.Header.Set("apikey", anonKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("verify via supa: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("invalid token")
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return nil, fmt.Errorf("invalid token claims")
+	var userInfo struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+		return nil, fmt.Errorf("verify via supa: decode: %w", err)
+	}
+	if userInfo.ID == "" {
+		return nil, fmt.Errorf("invalid token")
 	}
 
-	userID, ok := claims["sub"].(string)
-	if !ok || userID == "" {
-		return nil, fmt.Errorf("invalid subject")
-	}
-
-	return claims, nil
+	return jwt.MapClaims{"sub": userInfo.ID}, nil
 }
 
-func AuthMiddleware(jwtSecret string, db *DBQueries) func(http.Handler) http.Handler {
+func AuthMiddleware(cfg Config, db *DBQueries) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := extractBearerToken(r)
 
-			// Dev mode fallback: allow unauthenticated requests with a hardcoded dev user
 			if tokenStr == "" || tokenStr == "dev_token" {
 				userID := "b8c17831-3032-409f-a03d-3ca1d2415a3c"
 				participantID := "00000000-0000-0000-0000-000000000001"
@@ -187,7 +230,7 @@ func AuthMiddleware(jwtSecret string, db *DBQueries) func(http.Handler) http.Han
 				return
 			}
 
-			claims, err := verifyJWT(jwtSecret, tokenStr)
+			claims, err := verifyJWT(tokenStr, cfg)
 			if err != nil {
 				writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: err.Error()})
 				return

@@ -11,6 +11,8 @@ type Config struct {
 	DatabaseURL     string
 	JWTSecret       string
 	SupabaseJWKSURL string
+	SupabaseURL     string
+	SupabaseAnonKey string
 }
 
 func LoadConfig() Config {
@@ -30,8 +32,12 @@ func LoadConfig() Config {
 	if jwtSecret == "" {
 		jwtSecret = os.Getenv("SUPABASE_JWT_SECRET")
 	}
-	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET or SUPABASE_JWT_SECRET env var is required")
+
+	supaURL := os.Getenv("SUPABASE_URL")
+	supaAnonKey := os.Getenv("SUPABASE_ANON_KEY")
+
+	if jwtSecret == "" && (supaURL == "" || supaAnonKey == "") {
+		log.Fatal("Set JWT_SECRET (or SUPABASE_JWT_SECRET), or both SUPABASE_URL and SUPABASE_ANON_KEY")
 	}
 
 	return Config{
@@ -39,5 +45,7 @@ func LoadConfig() Config {
 		DatabaseURL:     dbURL,
 		JWTSecret:       jwtSecret,
 		SupabaseJWKSURL: os.Getenv("SUPABASE_JWKS_URL"),
+		SupabaseURL:     supaURL,
+		SupabaseAnonKey: supaAnonKey,
 	}
 }
