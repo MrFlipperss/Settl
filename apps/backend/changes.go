@@ -37,12 +37,12 @@ func (q *DBQueries) GetChanges(ctx context.Context, since time.Time, participant
 
 func (q *DBQueries) GetChangedExpenses(ctx context.Context, since time.Time, participantID string) ([]Expense, error) {
 	query := `SELECT DISTINCT e.id, e.list_id, e.payer_id, e.amount, e.category, e.note,
-	                  e.split_type, COALESCE(e.version, 1), e.created_at
+	                  e.split_type, COALESCE(e.version, 1), e.created_at, e.updated_at
 		FROM public.expenses e
 		LEFT JOIN public.expense_splits es ON es.expense_id = e.id
 		WHERE (e.payer_id = $1 OR es.participant_id = $1)
-		  AND e.created_at > $2
-		ORDER BY e.created_at DESC`
+		  AND (e.updated_at > $2 OR e.created_at > $2)
+		ORDER BY GREATEST(e.created_at, COALESCE(e.updated_at, e.created_at)) DESC`
 
 	rows, err := q.pool.Query(ctx, query, participantID, since)
 	if err != nil {
@@ -55,7 +55,7 @@ func (q *DBQueries) GetChangedExpenses(ctx context.Context, since time.Time, par
 		var e Expense
 		var listID *string
 		var amountFloat float64
-		if err := rows.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt, &e.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan expense: %w", err)
 		}
 		e.Amount = int64(math.Round(amountFloat * 100))
@@ -67,11 +67,13 @@ func (q *DBQueries) GetChangedExpenses(ctx context.Context, since time.Time, par
 
 func (q *DBQueries) GetChangedLists(ctx context.Context, since time.Time, participantID string) ([]List, error) {
 	query := `SELECT DISTINCT l.id, l.account_number, l.name, l.created_by, l.created_at,
+	                  l.updated_at, l.deleted_at, COALESCE(l.version, 1),
 	                  (SELECT count(*) FROM public.list_members lm WHERE lm.list_id = l.id) AS member_count
 		FROM public.lists l
 		JOIN public.list_members lm ON lm.list_id = l.id
-		WHERE lm.participant_id = $1 AND l.created_at > $2
-		ORDER BY l.created_at DESC`
+		WHERE lm.participant_id = $1
+		  AND (l.updated_at > $2 OR l.created_at > $2 OR l.deleted_at > $2)
+		ORDER BY GREATEST(l.created_at, COALESCE(l.updated_at, l.created_at)) DESC`
 
 	rows, err := q.pool.Query(ctx, query, participantID, since)
 	if err != nil {
@@ -82,7 +84,7 @@ func (q *DBQueries) GetChangedLists(ctx context.Context, since time.Time, partic
 	var lists []List
 	for rows.Next() {
 		var list List
-		if err := rows.Scan(&list.ID, &list.AccountNumber, &list.Name, &list.CreatedBy, &list.CreatedAt, &list.MemberCount); err != nil {
+		if err := rows.Scan(&list.ID, &list.AccountNumber, &list.Name, &list.CreatedBy, &list.CreatedAt, &list.UpdatedAt, &list.DeletedAt, &list.Version, &list.MemberCount); err != nil {
 			return nil, fmt.Errorf("scan list: %w", err)
 		}
 		lists = append(lists, list)
@@ -92,10 +94,11 @@ func (q *DBQueries) GetChangedLists(ctx context.Context, since time.Time, partic
 
 func (q *DBQueries) GetChangedContacts(ctx context.Context, since time.Time, participantID string) ([]Contact, error) {
 	query := `SELECT c.participant_id, c.display_name, c.phone_number, c.created_by,
-	                  c.claimed_by_participant_id, c.created_at
+	                  c.claimed_by_participant_id, c.created_at, c.updated_at, c.deleted_at, c.version
 		FROM public.contacts c
-		WHERE c.created_by = $1 AND c.created_at > $2
-		ORDER BY c.created_at DESC`
+		WHERE c.created_by = $1
+		  AND (c.updated_at > $2 OR c.created_at > $2)
+		ORDER BY GREATEST(c.created_at, COALESCE(c.updated_at, c.created_at)) DESC`
 
 	rows, err := q.pool.Query(ctx, query, participantID, since)
 	if err != nil {
@@ -106,7 +109,7 @@ func (q *DBQueries) GetChangedContacts(ctx context.Context, since time.Time, par
 	var contacts []Contact
 	for rows.Next() {
 		var c Contact
-		if err := rows.Scan(&c.ParticipantID, &c.DisplayName, &c.PhoneNumber, &c.CreatedBy, &c.ClaimedByParticipantID, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ParticipantID, &c.DisplayName, &c.PhoneNumber, &c.CreatedBy, &c.ClaimedByParticipantID, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt, &c.Version); err != nil {
 			return nil, fmt.Errorf("scan contact: %w", err)
 		}
 		contacts = append(contacts, c)

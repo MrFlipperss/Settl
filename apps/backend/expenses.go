@@ -23,7 +23,8 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 	amountPaise := int64(math.Round(req.Amount * 100))
 	splitType := req.SplitType
 
-	createdAt := time.Now()
+	now := time.Now()
+	createdAt := now
 	if req.Timestamp != nil {
 		createdAt = *req.Timestamp
 	}
@@ -44,19 +45,19 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 	if req.IdempotencyKey != nil && *req.IdempotencyKey != "" {
 		if hasID {
 			err = tx.QueryRow(ctx,
-				`INSERT INTO public.expenses (id, list_id, payer_id, amount, category, note, split_type, created_at, idempotency_key, version)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)
+				`INSERT INTO public.expenses (id, list_id, payer_id, amount, category, note, split_type, created_at, updated_at, idempotency_key, version)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)
 				 ON CONFLICT (idempotency_key) DO NOTHING
 				 RETURNING id`,
-				expenseID, req.GroupID, req.PayerID, amountRupees, category, req.Note, splitType, createdAt, req.IdempotencyKey,
+				expenseID, req.GroupID, req.PayerID, amountRupees, category, req.Note, splitType, createdAt, now, req.IdempotencyKey,
 			).Scan(&expenseID)
 		} else {
 			err = tx.QueryRow(ctx,
-				`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at, idempotency_key, version)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
+				`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at, updated_at, idempotency_key, version)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)
 				 ON CONFLICT (idempotency_key) DO NOTHING
 				 RETURNING id`,
-				req.GroupID, req.PayerID, amountRupees, category, req.Note, splitType, createdAt, req.IdempotencyKey,
+				req.GroupID, req.PayerID, amountRupees, category, req.Note, splitType, createdAt, now, req.IdempotencyKey,
 			).Scan(&expenseID)
 		}
 		if err != nil {
@@ -71,17 +72,17 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 	} else {
 		if hasID {
 			err = tx.QueryRow(ctx,
-				`INSERT INTO public.expenses (id, list_id, payer_id, amount, category, note, split_type, created_at, version)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
+				`INSERT INTO public.expenses (id, list_id, payer_id, amount, category, note, split_type, created_at, updated_at, version)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)
 				 RETURNING id`,
-				expenseID, req.GroupID, req.PayerID, amountRupees, category, req.Note, splitType, createdAt,
+				expenseID, req.GroupID, req.PayerID, amountRupees, category, req.Note, splitType, createdAt, now,
 			).Scan(&expenseID)
 		} else {
 			err = tx.QueryRow(ctx,
-				`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at, version)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
+				`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at, updated_at, version)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
 				 RETURNING id`,
-				req.GroupID, req.PayerID, amountRupees, category, req.Note, splitType, createdAt,
+				req.GroupID, req.PayerID, amountRupees, category, req.Note, splitType, createdAt, now,
 			).Scan(&expenseID)
 		}
 		if err != nil {
@@ -92,9 +93,9 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 	for _, s := range splits {
 		shareRupees := float64(s.ShareAmount) / 100.0
 		_, err = tx.Exec(ctx,
-			`INSERT INTO public.expense_splits (expense_id, participant_id, share_amount, raw_input)
-			 VALUES ($1, $2, $3, $4)`,
-			expenseID, s.ParticipantID, shareRupees, s.RawInput,
+			`INSERT INTO public.expense_splits (expense_id, participant_id, share_amount, raw_input, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			expenseID, s.ParticipantID, shareRupees, s.RawInput, now, now,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("insert split: %w", err)
@@ -115,6 +116,7 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 		SplitType: splitType,
 		Version:   1,
 		CreatedAt: createdAt,
+		UpdatedAt: &now,
 		Splits:    splits,
 	}
 	return expense, nil
@@ -133,14 +135,15 @@ func (q *DBQueries) UpdateExpense(ctx context.Context, id string, req CreateExpe
 		category = *req.Category
 	}
 
+	now := time.Now()
 	amountRupees := float64(amountPaise) / 100.0
 	query := `UPDATE public.expenses
-		 SET payer_id = $1, amount = $2, category = $3, note = $4, split_type = $5, version = version + 1
-		 WHERE id = $6`
-	args := []interface{}{req.PayerID, amountRupees, category, req.Note, req.SplitType, id}
+		 SET payer_id = $1, amount = $2, category = $3, note = $4, split_type = $5, version = version + 1, updated_at = $6
+		 WHERE id = $7`
+	args := []interface{}{req.PayerID, amountRupees, category, req.Note, req.SplitType, now, id}
 
 	if expectedVersion > 0 {
-		query += ` AND version = $7`
+		query += ` AND version = $8`
 		args = append(args, expectedVersion)
 	}
 
@@ -152,17 +155,17 @@ func (q *DBQueries) UpdateExpense(ctx context.Context, id string, req CreateExpe
 		return nil, fmt.Errorf("conflict or expense not found")
 	}
 
-	_, err = tx.Exec(ctx, `DELETE FROM public.expense_splits WHERE expense_id = $1`, id)
+	_, err = tx.Exec(ctx, `UPDATE public.expense_splits SET deleted_at = $1 WHERE expense_id = $2`, now, id)
 	if err != nil {
-		return nil, fmt.Errorf("delete old splits: %w", err)
+		return nil, fmt.Errorf("soft delete old splits: %w", err)
 	}
 
 	for _, s := range splits {
 		shareRupees := float64(s.ShareAmount) / 100.0
 		_, err = tx.Exec(ctx,
-			`INSERT INTO public.expense_splits (expense_id, participant_id, share_amount, raw_input)
-			 VALUES ($1, $2, $3, $4)`,
-			id, s.ParticipantID, shareRupees, s.RawInput,
+			`INSERT INTO public.expense_splits (expense_id, participant_id, share_amount, raw_input, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $5)`,
+			id, s.ParticipantID, shareRupees, s.RawInput, now,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("insert updated split: %w", err)
@@ -206,13 +209,13 @@ func (q *DBQueries) DeleteExpense(ctx context.Context, id string) error {
 
 func (q *DBQueries) GetExpense(ctx context.Context, id string) (*Expense, error) {
 	row := q.pool.QueryRow(ctx,
-		`SELECT id, list_id, payer_id, amount, category, note, split_type, COALESCE(version, 1), created_at
+		`SELECT id, list_id, payer_id, amount, category, note, split_type, COALESCE(version, 1), created_at, updated_at
 		 FROM public.expenses WHERE id = $1`, id)
 
 	var e Expense
 	var listID *string
 	var amountFloat float64
-	err := row.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt)
+	err := row.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -223,8 +226,8 @@ func (q *DBQueries) GetExpense(ctx context.Context, id string) (*Expense, error)
 	e.ListID = listID
 
 	rows, err := q.pool.Query(ctx,
-		`SELECT id, expense_id, participant_id, share_amount, raw_input
-		 FROM public.expense_splits WHERE expense_id = $1`, id)
+		`SELECT id, expense_id, participant_id, share_amount, raw_input, created_at, updated_at
+		 FROM public.expense_splits WHERE expense_id = $1 AND deleted_at IS NULL`, id)
 	if err != nil {
 		return nil, fmt.Errorf("get splits: %w", err)
 	}
@@ -233,7 +236,7 @@ func (q *DBQueries) GetExpense(ctx context.Context, id string) (*Expense, error)
 	for rows.Next() {
 		var s Split
 		var shareFloat float64
-		if err := rows.Scan(&s.ID, &s.ExpenseID, &s.ParticipantID, &shareFloat, &s.RawInput); err != nil {
+		if err := rows.Scan(&s.ID, &s.ExpenseID, &s.ParticipantID, &shareFloat, &s.RawInput, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan split: %w", err)
 		}
 		s.ShareAmount = int64(math.Round(shareFloat * 100))
@@ -244,10 +247,10 @@ func (q *DBQueries) GetExpense(ctx context.Context, id string) (*Expense, error)
 }
 
 func (q *DBQueries) ListExpenses(ctx context.Context, groupID *string, from, to *time.Time, participantID string) ([]Expense, error) {
-	query := `SELECT DISTINCT e.id, e.list_id, e.payer_id, e.amount, e.category, e.note, e.split_type, COALESCE(e.version, 1), e.created_at
+	query := `SELECT DISTINCT e.id, e.list_id, e.payer_id, e.amount, e.category, e.note, e.split_type, COALESCE(e.version, 1), e.created_at, e.updated_at
 		FROM public.expenses e
 		LEFT JOIN public.expense_splits es ON es.expense_id = e.id
-		WHERE (e.payer_id = $1 OR es.participant_id = $1)`
+		WHERE e.deleted_at IS NULL AND (e.payer_id = $1 OR es.participant_id = $1)`
 	args := []interface{}{participantID}
 	argIdx := 2
 
@@ -280,7 +283,7 @@ func (q *DBQueries) ListExpenses(ctx context.Context, groupID *string, from, to 
 		var e Expense
 		var listID *string
 		var amountFloat float64
-		if err := rows.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt, &e.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan expense: %w", err)
 		}
 		e.Amount = int64(math.Round(amountFloat * 100))

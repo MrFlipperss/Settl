@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -17,6 +18,8 @@ func (q *DBQueries) CreateList(ctx context.Context, req CreateGroupRequest, crea
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
+
+	now := time.Now()
 
 	var seqVal int64
 	err = tx.QueryRow(ctx, `SELECT nextval('public.list_account_seq')`).Scan(&seqVal)
@@ -31,26 +34,26 @@ func (q *DBQueries) CreateList(ctx context.Context, req CreateGroupRequest, crea
 	hasID := req.ID != nil && *req.ID != ""
 	if hasID {
 		err = tx.QueryRow(ctx,
-			`INSERT INTO public.lists (id, name, created_by, account_number)
-			 VALUES ($1, $2, $3, $4)
-			 RETURNING id, account_number, name, created_by, created_at`,
-			*req.ID, req.Name, createdBy, accountNumber,
-		).Scan(&list.ID, &list.AccountNumber, &list.Name, &list.CreatedBy, &list.CreatedAt)
+			`INSERT INTO public.lists (id, name, created_by, account_number, created_at, updated_at, version)
+			 VALUES ($1, $2, $3, $4, $5, $5, 1)
+			 RETURNING id, account_number, name, created_by, created_at, updated_at, version`,
+			*req.ID, req.Name, createdBy, accountNumber, now,
+		).Scan(&list.ID, &list.AccountNumber, &list.Name, &list.CreatedBy, &list.CreatedAt, &list.UpdatedAt, &list.Version)
 	} else {
 		err = tx.QueryRow(ctx,
-			`INSERT INTO public.lists (name, created_by, account_number)
-			 VALUES ($1, $2, $3)
-			 RETURNING id, account_number, name, created_by, created_at`,
-			req.Name, createdBy, accountNumber,
-		).Scan(&list.ID, &list.AccountNumber, &list.Name, &list.CreatedBy, &list.CreatedAt)
+			`INSERT INTO public.lists (name, created_by, account_number, created_at, updated_at, version)
+			 VALUES ($1, $2, $3, $4, $4, 1)
+			 RETURNING id, account_number, name, created_by, created_at, updated_at, version`,
+			req.Name, createdBy, accountNumber, now,
+		).Scan(&list.ID, &list.AccountNumber, &list.Name, &list.CreatedBy, &list.CreatedAt, &list.UpdatedAt, &list.Version)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("insert list: %w", err)
 	}
 
 	_, err = tx.Exec(ctx,
-		`INSERT INTO public.list_members (list_id, participant_id) VALUES ($1, $2)`,
-		list.ID, createdBy,
+		`INSERT INTO public.list_members (list_id, participant_id, created_at, updated_at) VALUES ($1, $2, $3, $3)`,
+		list.ID, createdBy, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("add creator to list: %w", err)
@@ -67,12 +70,13 @@ func (q *DBQueries) CreateList(ctx context.Context, req CreateGroupRequest, crea
 
 func (q *DBQueries) GetList(ctx context.Context, id string) (*List, error) {
 	row := q.pool.QueryRow(ctx,
-		`SELECT l.id, l.account_number, l.name, l.created_by, l.created_at,
+		`SELECT l.id, l.account_number, l.name, l.created_by, l.created_at, l.updated_at, l.deleted_at,
+		        COALESCE(l.version, 1),
 		        (SELECT count(*) FROM public.list_members lm WHERE lm.list_id = l.id) AS member_count
 		 FROM public.lists l WHERE l.id = $1`, id)
 
 	var list List
-	err := row.Scan(&list.ID, &list.AccountNumber, &list.Name, &list.CreatedBy, &list.CreatedAt, &list.MemberCount)
+	err := row.Scan(&list.ID, &list.AccountNumber, &list.Name, &list.CreatedBy, &list.CreatedAt, &list.UpdatedAt, &list.DeletedAt, &list.Version, &list.MemberCount)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -84,11 +88,12 @@ func (q *DBQueries) GetList(ctx context.Context, id string) (*List, error) {
 
 func (q *DBQueries) ListListsByMember(ctx context.Context, participantID string) ([]List, error) {
 	rows, err := q.pool.Query(ctx,
-		`SELECT l.id, l.account_number, l.name, l.created_by, l.created_at,
+		`SELECT l.id, l.account_number, l.name, l.created_by, l.created_at, l.updated_at, l.deleted_at,
+		        COALESCE(l.version, 1),
 		        (SELECT count(*) FROM public.list_members lm WHERE lm.list_id = l.id) AS member_count
 		 FROM public.lists l
 		 JOIN public.list_members lm ON lm.list_id = l.id
-		 WHERE lm.participant_id = $1
+		 WHERE lm.participant_id = $1 AND l.deleted_at IS NULL
 		 ORDER BY l.created_at DESC`, participantID)
 	if err != nil {
 		return nil, fmt.Errorf("list lists: %w", err)
@@ -98,7 +103,7 @@ func (q *DBQueries) ListListsByMember(ctx context.Context, participantID string)
 	var lists []List
 	for rows.Next() {
 		var list List
-		if err := rows.Scan(&list.ID, &list.AccountNumber, &list.Name, &list.CreatedBy, &list.CreatedAt, &list.MemberCount); err != nil {
+		if err := rows.Scan(&list.ID, &list.AccountNumber, &list.Name, &list.CreatedBy, &list.CreatedAt, &list.UpdatedAt, &list.DeletedAt, &list.Version, &list.MemberCount); err != nil {
 			return nil, fmt.Errorf("scan list: %w", err)
 		}
 		lists = append(lists, list)
@@ -107,11 +112,12 @@ func (q *DBQueries) ListListsByMember(ctx context.Context, participantID string)
 }
 
 func (q *DBQueries) AddListMember(ctx context.Context, listID, participantID string) error {
+	now := time.Now()
 	_, err := q.pool.Exec(ctx,
-		`INSERT INTO public.list_members (list_id, participant_id)
-		 VALUES ($1, $2)
+		`INSERT INTO public.list_members (list_id, participant_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $3)
 		 ON CONFLICT DO NOTHING`,
-		listID, participantID,
+		listID, participantID, now,
 	)
 	if err != nil {
 		return fmt.Errorf("add list member: %w", err)
