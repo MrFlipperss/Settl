@@ -45,12 +45,12 @@ func (q *DBQueries) debugDump(ctx context.Context) []debugQuery {
 		SQL   string
 	}{
 		{"participants", "SELECT id, kind FROM public.participants ORDER BY id"},
-		{"profiles", "SELECT participant_id, user_id, display_name, phone, upi_vpa FROM public.profiles ORDER BY participant_id"},
-		{"lists", "SELECT id, account_number, name, currency, created_at FROM public.lists ORDER BY created_at DESC"},
-		{"list_members", "SELECT list_id, participant_id FROM public.list_members ORDER BY list_id"},
+		{"profiles", "SELECT participant_id, user_id, display_name, phone_number, upi_id, created_at FROM public.profiles ORDER BY participant_id"},
+		{"lists", "SELECT id, account_number, name, created_by, created_at FROM public.lists ORDER BY created_at DESC"},
+		{"list_members", "SELECT list_id, participant_id, added_at FROM public.list_members ORDER BY list_id"},
 		{"expenses", "SELECT id, list_id, payer_id, amount, category, note, split_type, version, created_at FROM public.expenses ORDER BY created_at DESC"},
 		{"expense_splits", "SELECT id, expense_id, participant_id, share_amount, raw_input FROM public.expense_splits ORDER BY expense_id"},
-		{"contacts", "SELECT id, owner_id, participant_id, display_name, phone, upi_vpa, created_at FROM public.contacts ORDER BY created_at DESC"},
+		{"contacts", "SELECT participant_id, display_name, phone_number, created_by, claimed_by_participant_id, created_at FROM public.contacts ORDER BY created_at DESC"},
 	}
 
 	var results []debugQuery
