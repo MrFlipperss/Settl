@@ -633,12 +633,12 @@ function renderDashboard(){
         </div>
         ${state.groups.length ? `
           <div class="chip-list">
-            ${state.groups.map(g => `<span class="chip ${g.id === state.activeGroupId ? 'active' : ''}" data-group="${g.id}">${escapeHtml(g.name)}</span>`).join('')}
+            ${state.groups.map(g => `<span class="chip ${g.id === state.activeGroupId ? 'active' : ''}" data-group="${g.id}" title="v${g.version||1} · ${g.updated_at ? new Date(g.updated_at).toLocaleString() : ''}">${escapeHtml(g.name)}</span>`).join('')}
           </div>
         ` : `<div class="empty">No collections yet — expenses can be created without one.</div>`}
         <div class="section-note">Collections are optional reusable lists of people. Expenses no longer require a group — toggle "Attach to collection" below if you want one.</div>
         ${activeGroup ? `
-          <div class="section-note" style="margin-top:6px;">Active: <b>${escapeHtml(activeGroup.name)}</b> · id <span class="mono">${activeGroup.id}</span></div>
+          <div class="section-note" style="margin-top:6px;">Active: <b>${escapeHtml(activeGroup.name)}</b> · v${activeGroup.version||1} · <span class="mono" style="font-size:10px;">${activeGroup.id}</span> · ${activeGroup.updated_at ? `updated ${new Date(activeGroup.updated_at).toLocaleDateString()}` : ''}</div>
           <div class="row" style="margin-top:8px;">
             <input id="newMemberPhone" class="field" placeholder="Phone number" />
             <input id="newMemberName" class="field" placeholder="Name (if new)" />
@@ -663,7 +663,7 @@ function renderDashboard(){
         ${state.contacts.length ? `
           <div class="section-note">Created/resolved this session:</div>
           <div class="chip-list">
-            ${state.contacts.map(c => `<span class="chip" title="participant_id ${c.participant_id}">${escapeHtml(c.display_name)} · ${escapeHtml(c.phone_number_input || c.phone_number)}</span>`).join('')}
+            ${state.contacts.map(c => `<span class="chip" title="pid: ${c.participant_id} · v${c.version||1}">${escapeHtml(c.display_name)} · ${escapeHtml(c.phone_number_input || c.phone_number)}</span>`).join('')}
           </div>
         ` : ''}
       </div>
@@ -877,12 +877,21 @@ function wireDashboard(){
     try{
       const ch = await api(`/api/v1/changes?since=${encodeURIComponent(since)}`);
       const el = document.getElementById('changesResults');
-      el.innerHTML = `<div class="section-note" style="margin-top:8px;">
+      let html = `<div class="section-note" style="margin-top:8px;">
         <b>${(ch.expenses||[]).length}</b> expense(s) · <b>${(ch.lists||[]).length}</b> collection(s) · <b>${(ch.contacts||[]).length}</b> contact(s) changed since <span class="mono">${escapeHtml(since)}</span> (as of <span class="mono">${new Date(ch.as_of).toLocaleString()}</span>)
       </div>`;
       if((ch.expenses||[]).length){
-        el.innerHTML += `<div style="margin-top:6px;font-size:12px;color:var(--muted);">Changed expense IDs: ${ch.expenses.map(e => `<span class="mono">${e.id.slice(0,8)}</span>`).join(', ')}</div>`;
+        html += `<div style="margin-top:6px;font-size:12px;"><b>Expenses:</b></div><table style="font-size:11px;"><thead><tr><th>Note</th><th>Amount</th><th>Updated</th></tr></thead><tbody>
+          ${ch.expenses.slice(0,10).map(e => `<tr><td>${escapeHtml(e.note || '—')}</td><td class="amt">${money(e.amount_paise||0)}</td><td class="muted mono">${e.updated_at ? new Date(e.updated_at).toLocaleDateString() : '—'}</td></tr>`).join('')}
+        </tbody></table>`;
       }
+      if((ch.lists||[]).length){
+        html += `<div style="margin-top:6px;font-size:12px;"><b>Collections:</b> ${ch.lists.map(l => escapeHtml(l.name)).join(', ')}</div>`;
+      }
+      if((ch.contacts||[]).length){
+        html += `<div style="margin-top:6px;font-size:12px;"><b>Contacts:</b> ${ch.contacts.map(c => escapeHtml(c.display_name)).join(', ')}</div>`;
+      }
+      el.innerHTML = html;
     }catch(e){ toast(e.message, 'err'); }
   };
 
