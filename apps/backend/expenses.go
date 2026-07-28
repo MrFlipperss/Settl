@@ -223,7 +223,7 @@ func (q *DBQueries) GetExpense(ctx context.Context, id string) (*Expense, error)
 }
 
 func (q *DBQueries) ListExpenses(ctx context.Context, groupID *string, from, to *time.Time, participantID string) ([]Expense, error) {
-	query := `SELECT DISTINCT e.id, e.list_id, e.payer_id, e.amount, e.category, e.note, e.split_type, e.created_at
+	query := `SELECT DISTINCT e.id, e.list_id, e.payer_id, e.amount, e.category, e.note, e.split_type, COALESCE(e.version, 1), e.created_at
 		FROM public.expenses e
 		LEFT JOIN public.expense_splits es ON es.expense_id = e.id
 		WHERE (e.payer_id = $1 OR es.participant_id = $1)`
@@ -259,7 +259,7 @@ func (q *DBQueries) ListExpenses(ctx context.Context, groupID *string, from, to 
 		var e Expense
 		var listID *string
 		var amountFloat float64
-		if err := rows.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan expense: %w", err)
 		}
 		e.Amount = int64(math.Round(amountFloat * 100))

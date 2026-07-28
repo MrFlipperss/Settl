@@ -11,7 +11,7 @@ type Profile struct {
 	ParticipantID string    `json:"participant_id"`
 	UserID        string    `json:"user_id"`
 	DisplayName   string    `json:"display_name"`
-	PhoneNumber   *string   `json:"phone_number"`
+	PhoneNumber   string    `json:"phone_number"`
 	UPIID         *string   `json:"upi_id"`
 	CreatedAt     time.Time `json:"created_at"`
 }
