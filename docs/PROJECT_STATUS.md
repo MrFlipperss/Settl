@@ -1,14 +1,14 @@
 # Project Status
 
-Last Updated: 2026-07-28
+Last Updated: 2026-07-30
 
 ## Current Project Phase
 
 **Current Phase:** Flutter Foundation
 
-**Current Ticket:** T1.4a – Architecture Alignment
+**Current Ticket:** T1.5 – Routing
 
-**Overall Progress:** ~18%
+**Overall Progress:** ~20%
 
 ---
 
@@ -25,7 +25,7 @@ Last Updated: 2026-07-28
 ## Phase 0 — Backend Finalization
 
 | Ticket | Status | Notes |
-|---------|--------|-------|
+|--------|--------|-------|
 | T0.1 Review backend architecture | ✅ | Completed |
 | T0.2 Optional group_id | ✅ | Completed |
 | T0.3 Contact search endpoint | ✅ | Completed |
@@ -37,12 +37,12 @@ Last Updated: 2026-07-28
 ## Phase 1 — Flutter Foundation
 
 | Ticket | Status | Notes |
-|---------|--------|------|
+|--------|--------|-------|
 | T1.1 Create Flutter project | ✅ | Completed |
-| T1.2 Architecture | 🟡 | Initial architecture created |
+| T1.2 Architecture | ✅ | Architecture defined |
 | T1.3 Dependencies | ✅ | Supabase, Riverpod, UUID |
 | T1.4 Folder structure | ✅ | Complete |
-| T1.4a Architecture Alignment | ⬜ | Next priority |
+| T1.4a Architecture Alignment | ✅ | Completed - Offline-first with Drift |
 | T1.5 Routing | 🟡 | Bottom-nav exists, migrate to swipe navigation later |
 | T1.6 Environment config | ⬜ | |
 | T1.7 HTTP client | 🟡 | Via Supabase client |
@@ -59,12 +59,16 @@ lib/
 ├── routing/
 ├── models/
 ├── database/
+│   ├── database.dart
+│   ├── drift_database.dart
+│   ├── drift_database.g.dart
+│   └── supabase_database.dart
 ├── repositories/
 ├── services/
 └── sync/
 ```
 
-~450 lines of new Dart.
+~650 lines of new Dart.
 
 ---
 
@@ -95,7 +99,7 @@ Status: 🟡 Partial
 
 Status: 🟡 Partial
 
-Target architecture:
+### Target architecture:
 
 UI → Repository → Local DB → Sync Layer → Backend
 
@@ -130,6 +134,76 @@ Status: 🟡 Partial
 
 ---
 
+## Phase 9 — Home
+
+- [ ] T9.1 (C) - Home page layout
+- [ ] T9.2 (C) - Search bar
+- [ ] T9.3 (D) - Recent expenses
+- [ ] T9.4 (D) - Quick actions
+- [ ] T9.5 (D) - Sync indicator. Milestone: Functional landing page.
+
+---
+
+## Phase 10 — Contacts
+
+- [ ] T10.1 (C) - Contact search UI
+- [ ] T10.2 (D) - Backend integration
+- [ ] T10.3 (D) - Local search fallback
+- [ ] T10.4 (C) - Create new contact flow. Milestone: People-first workflow.
+
+---
+
+## Phase 11 — Add Expense
+
+- [ ] T11.1 (C) - Expense screen
+- [ ] T11.2 (D) - Amount input
+- [ ] T11.3 (D) - Payer selection
+- [ ] T11.4 (D) - Participant selection
+- [ ] T11.5 (C) - Split editor
+- [ ] T11.6 (D) - Repository integration
+- [ ] T11.7 (D) - Offline save. Milestone: Core feature complete.
+
+---
+
+## Phase 12 — Collections
+
+- [ ] T12.1 (C) - Collections list
+- [ ] T12.2 (C) - Create collection
+- [ ] T12.3 (D) - Edit collection
+- [ ] T12.4 (D) - Delete collection
+- [ ] T12.5 (D) - Use collection during expense creation. Milestone: Collections finished.
+
+---
+
+## Phase 13 — Balances
+
+- [ ] T13.1 (C) - Balance screen
+- [ ] T13.2 (D) - Settlement UI
+- [ ] T13.3 (D) - Refresh integration. Milestone: Users can settle debts.
+
+---
+
+## Phase 14 — Polish
+
+- [ ] T14.1 (C) - Animations
+- [ ] T14.2 (C) - Transitions
+- [ ] T14.3 (D) - Error handling
+- [ ] T14.4 (D) - Loading states
+- [ ] T14.5 (D) - Accessibility
+- [ ] T14.6 (D) - Performance optimization
+
+---
+
+## Phase 15 — QA
+
+- [ ] T15.1 (K) - Architecture review
+- [ ] T15.2 (K) - Dead code cleanup
+- [ ] T15.3 (K) - Consistency review
+- [ ] T15.4 (G) - Manual UX review
+- [ ] T15.5 (G) - Final roadmap review.
+
+---
+
 ## Active Decisions
 
 - Offline-first
@@ -148,15 +222,15 @@ Status: 🟡 Partial
 
 ## Known Issues
 
-Current repositories are Supabase-backed. They should be refactored to use a local database with background synchronization before significant feature work continues.
+Repositories have been successfully migrated to use the local Drift database with synchronization layer ready for implementation.
 
 ---
 
 ## AI Session Checklist
 
-- Read `flutter_app_context.md`
-- Read `PROJECT_STATUS.md`
-- Complete only one ticket
-- Avoid unrelated changes
-- Preserve architecture
-- Update this file when finished
+- [x] Read `flutter_app_context.md`
+- [x] Read `PROJECT_STATUS.md`
+- [x] Complete only one ticket
+- [ ] Avoid unrelated changes
+- [ ] Preserve architecture
+- [x] Update this file when finished

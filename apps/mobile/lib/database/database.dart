@@ -1,7 +1,9 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:drift/drift.dart';
 
 abstract class Database {
-  SupabaseClient get client;
+  // Drift database instance
+  Object get instance;
 
   Future<void> initialize();
+  Future<void> close();
 }
