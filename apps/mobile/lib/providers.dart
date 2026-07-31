@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'database/database.dart';
+import 'package:settl/database/database.dart';
+import 'package:settl/database/drift_database.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/contacts_repository.dart';
 import 'repositories/expenses_repository.dart';

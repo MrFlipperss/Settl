@@ -1,39 +1,74 @@
-import '../database/database.dart';
-import '../models/expense.dart';
-import '../models/expense_split.dart';
+import 'package:drift/drift.dart';
+import 'package:settl/database/database.dart';
+import 'package:settl/models/expense.dart';
+import 'package:settl/models/expense_split.dart';
 
 class ExpensesRepository {
   final Database _db;
 
   ExpensesRepository(this._db);
 
-  Future<List<Expense>> getExpenses(String? listId) async {
-    var query = _db.client.from('expenses').select();
-    if (listId != null) query = query.eq('list_id', listId);
-    final response = await query;
-    return response.map((json) => Expense.fromJson(json)).toList();
+  // Helper to get the drift database instance
+  dynamic get _driftDb {
+    return (_db as dynamic).instance;
   }
 
-  Future<Expense> createExpense(Expense expense) async {
-    final response = await _db.client
-        .from('expenses')
-        .insert(expense.toJson())
-        .select()
-        .single();
-    return Expense.fromJson(response);
+  Future<Expense?> getExpenseById(String expenseId) async {
+    final result = await (_driftDb.expenses)
+        .where((tbl) => tbl.expenseId.equals(expenseId))
+        .get()
+        .first;
+
+    return result.isNotEmpty ? Expense.fromJson(result.first.toJson()) : null;
   }
 
-  Future<List<ExpenseSplit>> getSplits(String expenseId) async {
-    final response = await _db.client
-        .from('expense_splits')
-        .select()
-        .eq('expense_id', expenseId);
-    return response.map((json) => ExpenseSplit.fromJson(json)).toList();
+  Future<List<Expense>> getExpensesByUser(String userId) async {
+    final result = await (_driftDb.expenses)
+        .where((tbl) => tbl.payerId.equals(userId))
+        .get();
+
+    return result.map((row) => Expense.fromJson(row.toJson())).toList();
   }
 
-  Future<void> createSplits(List<ExpenseSplit> splits) async {
-    await _db.client
-        .from('expense_splits')
-        .insert(splits.map((s) => s.toJson()).toList());
+  Future<List<Expense>> getAllExpenses() async {
+    final result = await _driftDb.select(_driftDb.expenses).get();
+    return result.map((row) => Expense.fromJson(row.toJson())).toList();
+  }
+
+  Future<void> createExpense(Expense expense) async {
+    await _driftDb.into(_driftDb.expenses).insert(expense.toCompanion(true));
+  }
+
+  Future<void> updateExpense(Expense expense) async {
+    await _driftDb.update(_driftDb.expenses).replace(expense.toCompanion(true));
+  }
+
+  Future<void> deleteExpense(String expenseId) async {
+    await (_driftDb.expenses)
+        .where((tbl) => tbl.expenseId.equals(expenseId))
+        .delete();
+  }
+
+  // Expense Splits
+  Future<void> createExpenseSplit(ExpenseSplit split) async {
+    await _driftDb.into(_driftDb.expenseSplits).insert(split.toCompanion(true));
+  }
+
+  Future<List<ExpenseSplit>> getSplitsForExpense(String expenseId) async {
+    final result = await (_driftDb.expenseSplits)
+        .where((tbl) => tbl.expenseId.equals(expenseId))
+        .get();
+
+    return result.map((row) => ExpenseSplit.fromJson(row.toJson())).toList();
+  }
+
+  Future<void> updateExpenseSplit(ExpenseSplit split) async {
+    await _driftDb.update(_driftDb.expenseSplits).replace(split.toCompanion(true));
+  }
+
+  Future<void> deleteExpenseSplit(String splitId) async {
+    await (_driftDb.expenseSplits)
+        .where((tbl) => tbl.id.equals(splitId))
+        .delete();
   }
 }

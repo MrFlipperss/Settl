@@ -1,33 +1,24 @@
-import 'package:supabase_flutter/supabase_flutter.dart'
-    show AuthResponse, OtpType, SupabaseClient, User;
-import '../database/database.dart';
+import 'package:settl/database/database.dart';
+import 'package:settl/models/profile.dart';
 
 class AuthRepository {
   final Database _db;
 
   AuthRepository(this._db);
 
-  SupabaseClient get _client => _db.client;
-
-  User? get currentUser => _client.auth.currentUser;
-
-  bool get isAuthenticated => currentUser != null;
-
-  Future<void> signInWithOtp(String phone) async {
-    await _client.auth.signInWithOtp(phone: phone);
+  // For now, we'll keep Supabase for authentication since that's handled by Supabase Auth
+  // But we'll store/retrieve user data from our local database
+  Future<void> storeUserProfile(Profile profile) async {
+    // Store user profile in local database
+    await _db.into(_db.profiles).insert(profile.toCompanion(true));
   }
 
-  Future<AuthResponse> verifyOtp({
-    required String phone,
-    required String token,
-    OtpType type = OtpType.sms,
-  }) {
-    return _client.auth.verifyOTP(phone: phone, token: token, type: type);
-  }
+  Future<Profile?> getUserProfile(String userId) async {
+    final result = await (self._db.profiles)
+        .where((tbl) => tbl.userId.equals(userId))
+        .get()
+        .first;
 
-  Future<AuthResponse> signInAnonymously() {
-    return _client.auth.signInAnonymously();
+    return result.isNotEmpty ? Profile.fromJson(result.first.toJson()) : null;
   }
-
-  Future<void> signOut() => _client.auth.signOut();
 }

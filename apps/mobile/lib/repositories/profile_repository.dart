@@ -1,37 +1,51 @@
-import '../database/database.dart';
-import '../models/profile.dart';
+import 'package:drift/drift.dart';
+import 'package:settl/database/database.dart';
+import 'package:settl/models/profile.dart';
 
 class ProfileRepository {
   final Database _db;
 
   ProfileRepository(this._db);
 
-  Future<Profile?> getProfile(String participantId) async {
-    final response = await _db.client
-        .from('profiles')
-        .select()
-        .eq('participant_id', participantId)
-        .maybeSingle();
-    if (response == null) return null;
-    return Profile.fromJson(response);
+  // Helper to get the drift database instance
+  dynamic get _driftDb {
+    return (_db as dynamic).instance;
   }
 
-  Future<Profile> createProfile(Profile profile) async {
-    final response = await _db.client
-        .from('profiles')
-        .insert(profile.toJson())
-        .select()
-        .single();
-    return Profile.fromJson(response);
+  Future<Profile?> getProfileByUserId(String userId) async {
+    final result = await (_driftDb.profiles)
+        .where((tbl) => tbl.userId.equals(userId))
+        .get()
+        .first;
+
+    return result.isNotEmpty ? Profile.fromJson(result.first.toJson()) : null;
   }
 
-  Future<Profile> updateProfile(Profile profile) async {
-    final response = await _db.client
-        .from('profiles')
-        .update(profile.toJson())
-        .eq('participant_id', profile.participantId)
-        .select()
-        .single();
-    return Profile.fromJson(response);
+  Future<Profile?> getProfileByParticipantId(String participantId) async {
+    final result = await (_driftDb.profiles)
+        .where((tbl) => tbl.participantId.equals(participantId))
+        .get()
+        .first;
+
+    return result.isNotEmpty ? Profile.fromJson(result.first.toJson()) : null;
+  }
+
+  Future<List<Profile>> getAllProfiles() async {
+    final result = await _driftDb.select(_driftDb.profiles).get();
+    return result.map((row) => Profile.fromJson(row.toJson())).toList();
+  }
+
+  Future<void> createProfile(Profile profile) async {
+    await _driftDb.insert(_driftDb.profiles).insert(profile.toCompanion(true));
+  }
+
+  Future<void> updateProfile(Profile profile) async {
+    await _driftDb.update(_driftDb.profiles).replace(profile.toCompanion(true));
+  }
+
+  Future<void> deleteProfileByUserId(String userId) async {
+    await (_driftDb.profiles)
+        .where((tbl) => tbl.userId.equals(userId))
+        .delete();
   }
 }
