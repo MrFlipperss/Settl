@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'api/api_client.dart';
+import 'api/balances_api.dart';
+import 'api/collections_api.dart';
+import 'api/contacts_api.dart';
+import 'api/expenses_api.dart';
+import 'api/health_api.dart';
+import 'api/profile_api.dart';
 import '../config/config_provider.dart';
 import '../database/app_database.dart';
 import '../database/daos/contacts_dao.dart';
@@ -128,4 +135,49 @@ final authServiceProvider = Provider<AuthService>((ref) {
 /// sign-in, sign-out and token refresh.
 final authStateProvider = StreamProvider<AuthSession?>((ref) {
   return ref.watch(authRepositoryProvider).onAuthStateChanged;
+});
+
+/// Base [ApiClient] for authenticated `/api/v1` endpoints (T7). Injects the
+/// current Supabase access token as the `Authorization: Bearer` header via
+/// [authServiceProvider]; when no session exists requests go out without it.
+final apiClientProvider = Provider<ApiClient>((ref) {
+  return ApiClient(
+    client: ref.watch(httpClientProvider),
+    baseUrl: ref.watch(apiBaseUrlProvider),
+    tokenProvider: () => ref.read(authServiceProvider).currentSession?.accessToken,
+  );
+});
+
+/// Health check client (T7.6). `/health` lives at the origin root rather than
+/// under `/api/v1`, so it uses [apiRootUrlProvider] and is unauthenticated.
+final healthApiProvider = Provider<HealthApi>((ref) {
+  return HealthApi(ApiClient(
+    client: ref.watch(httpClientProvider),
+    baseUrl: ref.watch(apiRootUrlProvider),
+  ));
+});
+
+/// T7.1 — Profile API (create/idempotent-fetch of the backend profile).
+final profileApiProvider = Provider<ProfileApi>((ref) {
+  return ProfileApi(ref.watch(apiClientProvider));
+});
+
+/// T7.2 — Contacts API (create, search, claim).
+final contactsApiProvider = Provider<ContactsApi>((ref) {
+  return ContactsApi(ref.watch(apiClientProvider));
+});
+
+/// T7.3 — Collections (groups) API (create, list, get, add member).
+final collectionsApiProvider = Provider<CollectionsApi>((ref) {
+  return CollectionsApi(ref.watch(apiClientProvider));
+});
+
+/// T7.4 — Expenses API (CRUD + receipts).
+final expensesApiProvider = Provider<ExpensesApi>((ref) {
+  return ExpensesApi(ref.watch(apiClientProvider));
+});
+
+/// T7.5 — Balances API.
+final balancesApiProvider = Provider<BalancesApi>((ref) {
+  return BalancesApi(ref.watch(apiClientProvider));
 });
