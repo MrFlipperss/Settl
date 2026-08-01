@@ -41,19 +41,19 @@
 ---
 ## Phase 3 — Local Database
 
-- [ ] T3.1 (C) - Choose and configure Drift (or final DB).
+- [x] T3.1 (C) - Choose and configure Drift (or final DB).
 
-- [ ] T3.2 (D) - Database initialization.
+- [x] T3.2 (D) - Database initialization.
 
-- [ ] T3.3 (D) - Expense table.
+- [x] T3.3 (D) - Expense table.
     
-- [ ] T3.4 (D) - Collection table.
+- [x] T3.4 (D) - Collection table.
     
-- [ ] T3.5 (D) - Contact table.
+- [x] T3.5 (D) - Contact table.
     
-- [ ] T3.6 (D) - Pending Sync table.
+- [x] T3.6 (D) - Pending Sync table.
     
-- [ ] T3.7 (D) - DAO layer. Milestone: Fully functional local database.
+- [x] T3.7 (D) - DAO layer. Milestone: Fully functional local database.
 
 ---
 ## Phase 4 — Models

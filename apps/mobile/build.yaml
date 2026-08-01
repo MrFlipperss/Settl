@@ -1,0 +1,9 @@
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          # Store DateTimes as ISO-8601 text so UTC instants roundtrip
+          # unchanged (the default epoch-int mode reads back in the device's
+          # local timezone, which corrupts createdAt/updatedAt semantics).
+          store_date_time_values_as_text: true

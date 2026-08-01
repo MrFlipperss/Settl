@@ -6,9 +6,9 @@ Last Updated: 2026-08-01
 
 **Current Phase:** Flutter Foundation
 
-**Current Ticket:** T3.1 – Choose and configure Drift (Phase 2 complete)
+**Current Ticket:** T4.1 – Expense model (Phase 3 complete)
 
-**Overall Progress:** ~60%
+**Overall Progress:** ~65%
 
 ---
 
@@ -64,8 +64,14 @@ lib/
 ├── models/
 ├── database/
 │   ├── database.dart
-│   ├── drift_database.dart
-│   ├── drift_database.g.dart
+│   ├── app_database.dart
+│   ├── app_database.g.dart
+│   └── daos/
+│       ├── expenses_dao.dart
+│       ├── contacts_dao.dart
+│       ├── lists_dao.dart
+│       ├── profiles_dao.dart
+│       └── pending_sync_dao.dart
 ├── repositories/
 ├── services/
 │   ├── http_client_service.dart
@@ -91,7 +97,14 @@ lib/
 
 ## Phase 3 — Local Database
 
-Not started.
+- Drift: ✅ Configured (drift ^2.28.2, drift_dev ^2.28.0, sqlite3, sqlite3_flutter_libs)
+- Schema: ✅ 9 tables (Participants, Profiles, Contacts, Lists, ListMembers, Expenses, ExpenseSplits, ReceiptDetails, PendingSyncOperations)
+- Database Initialization: ✅ AppDatabase with lazy open, migrations, foreign keys, Riverpod provider
+- DateTime Storage: ✅ ISO-8601 text mode (UTC-safe roundtrips)
+- DAO Layer: ✅ ExpensesDao, ContactsDao, ListsDao, ProfilesDao, PendingSyncDao
+- Generated Code: ✅ app_database.g.dart + DAO mixins committed (build_runner)
+- Tests: ✅ 19 DAO CRUD tests (NativeDatabase.memory), all passing
+- Broken drift_database.dart: ✅ Removed (replaced by app_database.dart)
 
 ---
 
@@ -228,9 +241,11 @@ Status: 🟡 Partial
 
 ## Known Issues
 
+Phase 3 (Local Database) is complete: Drift schema (9 tables), DAO layer, providers, and 19 passing DAO tests.
 Phase 2 (Theme & Navigation) is complete: Material 3 themes, system/light/dark switching, responsive shell.
 Phase 1 is complete: routing (T1.5) verified with widget tests; secure token storage (T1.8) implemented with flutter_secure_storage.
-Known pre-existing compile errors remain in lib/database/drift_database.dart (untracked, missing generated code) and lib/sync/sync_service.dart - scheduled for Phase 3.
+Known pre-existing compile errors remain in lib/sync/sync_service.dart (imports supabase_flutter, not a dependency) and lib/repositories/auth_repository.dart (uses `_db.into` on abstract Database) - scheduled for Phases 7-8.
+The old repositories (expenses/contacts/lists/profile/auth) still use the deprecated dynamic `_db` accessor and `toCompanion`/`toJson` patterns - will be rewritten on top of the DAO layer in Phase 5.
 
 ---
 

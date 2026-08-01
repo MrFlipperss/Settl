@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/config_provider.dart';
+import '../database/app_database.dart';
+import '../database/daos/contacts_dao.dart';
+import '../database/daos/expenses_dao.dart';
+import '../database/daos/lists_dao.dart';
+import '../database/daos/pending_sync_dao.dart';
+import '../database/daos/profiles_dao.dart';
 import '../services/http_client_service.dart';
 import '../services/secure_storage_service.dart';
 
@@ -27,4 +33,32 @@ final httpClientServiceProvider = Provider<HttpClientService>((ref) {
 /// Provider for the secure token storage service
 final secureStorageServiceProvider = Provider<SecureStorageService>((ref) {
   return SecureStorageService();
+});
+
+/// Provider for the local Drift database (opened lazily on first access).
+final appDatabaseProvider = Provider<AppDatabase>((ref) {
+  final db = AppDatabase.open();
+  ref.onDispose(db.close);
+  return db;
+});
+
+/// Typed DAO providers backed by [appDatabaseProvider].
+final expensesDaoProvider = Provider<ExpensesDao>((ref) {
+  return ExpensesDao(ref.watch(appDatabaseProvider));
+});
+
+final contactsDaoProvider = Provider<ContactsDao>((ref) {
+  return ContactsDao(ref.watch(appDatabaseProvider));
+});
+
+final listsDaoProvider = Provider<ListsDao>((ref) {
+  return ListsDao(ref.watch(appDatabaseProvider));
+});
+
+final profilesDaoProvider = Provider<ProfilesDao>((ref) {
+  return ProfilesDao(ref.watch(appDatabaseProvider));
+});
+
+final pendingSyncDaoProvider = Provider<PendingSyncDao>((ref) {
+  return PendingSyncDao(ref.watch(appDatabaseProvider));
 });
