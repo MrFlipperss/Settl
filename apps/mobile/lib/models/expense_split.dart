@@ -1,3 +1,5 @@
+const _unset = Object();
+
 class ExpenseSplit {
   final String id;
   final String expenseId;
@@ -30,4 +32,41 @@ class ExpenseSplit {
         'share_amount': shareAmount,
         'raw_input': rawInput,
       };
+
+  ExpenseSplit copyWith({
+    String? id,
+    String? expenseId,
+    String? participantId,
+    double? shareAmount,
+    Object? rawInput = _unset,
+  }) =>
+      ExpenseSplit(
+        id: id ?? this.id,
+        expenseId: expenseId ?? this.expenseId,
+        participantId: participantId ?? this.participantId,
+        shareAmount: shareAmount ?? this.shareAmount,
+        rawInput: identical(rawInput, _unset)
+            ? this.rawInput
+            : rawInput as double?,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExpenseSplit &&
+          other.id == id &&
+          other.expenseId == expenseId &&
+          other.participantId == participantId &&
+          other.shareAmount == shareAmount &&
+          other.rawInput == rawInput;
+
+  @override
+  int get hashCode =>
+      Object.hash(id, expenseId, participantId, shareAmount, rawInput);
+
+  @override
+  String toString() =>
+      'ExpenseSplit(id: $id, expenseId: $expenseId, '
+      'participantId: $participantId, shareAmount: $shareAmount, '
+      'rawInput: $rawInput)';
 }

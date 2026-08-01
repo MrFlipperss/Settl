@@ -58,17 +58,17 @@
 ---
 ## Phase 4 — Models
 
-- [ ] T4.1 (D) - Expense model.
-    
-- [ ] T4.2 (D) - Contact model.
-    
-- [ ] T4.3 (D) - Collection model.
-    
-- [ ] T4.4 (D) - Balance model.
-    
-- [ ] T4.5 (D) - Profile model.
-    
-- [ ] T4.6 (D) - Serialization. Milestone: Shared domain models.
+- [x] T4.1 (D) - Expense model.
+
+- [x] T4.2 (D) - Contact model.
+
+- [x] T4.3 (D) - Collection model.
+
+- [x] T4.4 (D) - Balance model.
+
+- [x] T4.5 (D) - Profile model.
+
+- [x] T4.6 (D) - Serialization. Milestone: Shared domain models.
 
 
 ---

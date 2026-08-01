@@ -6,9 +6,9 @@ Last Updated: 2026-08-01
 
 **Current Phase:** Flutter Foundation
 
-**Current Ticket:** T4.1 – Expense model (Phase 3 complete)
+**Current Ticket:** T5.1 – Repository interfaces (Phase 4 complete)
 
-**Overall Progress:** ~65%
+**Overall Progress:** ~70%
 
 ---
 
@@ -110,7 +110,14 @@ lib/
 
 ## Phase 4 — Models
 
-Status: 🟡 Partial
+- Expense Model: ✅ Present with copyWith/equality + snake_case JSON
+- Contact Model: ✅ Present with copyWith/equality + snake_case JSON
+- Collection Model: ✅ ListModel + ListMember with copyWith/equality
+- Balance Model: ✅ New - mirrors pairwise_balances view (from_participant, to_participant, amount_owed)
+- Profile Model: ✅ Profile + Participant with copyWith/equality
+- Serialization: ✅ All 10 models round-trip via fromJson/toJson, tested
+- copyWith: ✅ Sentinel-based null-clearing on all nullable fields
+- Tests: ✅ 28 model serialization/equality tests, all passing
 
 ---
 
@@ -241,6 +248,7 @@ Status: 🟡 Partial
 
 ## Known Issues
 
+Phase 4 (Models) is complete: Balance model added, all 10 domain models have copyWith (sentinel-based null clearing), value equality, and snake_case JSON round-trip serialization, verified by 28 model tests.
 Phase 3 (Local Database) is complete: Drift schema (9 tables), DAO layer, providers, and 19 passing DAO tests.
 Phase 2 (Theme & Navigation) is complete: Material 3 themes, system/light/dark switching, responsive shell.
 Phase 1 is complete: routing (T1.5) verified with widget tests; secure token storage (T1.8) implemented with flutter_secure_storage.

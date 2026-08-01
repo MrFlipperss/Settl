@@ -1,6 +1,8 @@
 /// Type of mutation recorded in the offline-first sync queue.
 enum SyncOperation { insert, update, delete }
 
+const _unset = Object();
+
 /// A single local mutation awaiting (or confirmed) sync to the backend.
 ///
 /// [payload] holds the entity as a JSON string, keyed by the entity's
@@ -46,4 +48,47 @@ class PendingSyncOperation {
         'created_at': createdAt.toIso8601String(),
         'synced_at': syncedAt?.toIso8601String(),
       };
+
+  PendingSyncOperation copyWith({
+    String? operationId,
+    String? entityType,
+    String? entityId,
+    SyncOperation? operation,
+    String? payload,
+    DateTime? createdAt,
+    Object? syncedAt = _unset,
+  }) =>
+      PendingSyncOperation(
+        operationId: operationId ?? this.operationId,
+        entityType: entityType ?? this.entityType,
+        entityId: entityId ?? this.entityId,
+        operation: operation ?? this.operation,
+        payload: payload ?? this.payload,
+        createdAt: createdAt ?? this.createdAt,
+        syncedAt: identical(syncedAt, _unset)
+            ? this.syncedAt
+            : syncedAt as DateTime?,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PendingSyncOperation &&
+          other.operationId == operationId &&
+          other.entityType == entityType &&
+          other.entityId == entityId &&
+          other.operation == operation &&
+          other.payload == payload &&
+          other.createdAt == createdAt &&
+          other.syncedAt == syncedAt;
+
+  @override
+  int get hashCode => Object.hash(operationId, entityType, entityId,
+      operation, payload, createdAt, syncedAt);
+
+  @override
+  String toString() =>
+      'PendingSyncOperation(operationId: $operationId, '
+      'entityType: $entityType, entityId: $entityId, '
+      'operation: ${operation.name})';
 }
