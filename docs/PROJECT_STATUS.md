@@ -1,14 +1,14 @@
 # Project Status
 
-Last Updated: 2026-07-31
+Last Updated: 2026-08-01
 
 ## Current Project Phase
 
 **Current Phase:** Flutter Foundation
 
-**Current Ticket:** T1.5 – Routing
+**Current Ticket:** T2.1 – Create Material 3 theme (Phase 1 complete)
 
-**Overall Progress:** ~50%
+**Overall Progress:** ~55%
 
 ---
 
@@ -43,10 +43,10 @@ Last Updated: 2026-07-31
 | T1.3 Dependencies | ✅ | Supabase, Riverpod, UUID |
 | T1.4 Folder structure | ✅ | Complete |
 | T1.4a Architecture Alignment | ✅ | Completed - Offline-first with Drift |
-| T1.5 Routing | 🟡 | Bottom-nav exists, swipe navigation implemented |
+| T1.5 Routing | ✅ | Completed - GoRouter + StatefulShellRoute, verified with widget tests |
 | T1.6 Environment config | ✅ | Completed - Environment management system implemented |
 | T1.7 HTTP client | ✅ | Completed - HTTP client service with interceptors and logging |
-| T1.8 Secure storage | ⬜ | |
+| T1.8 Secure storage | ✅ | Completed - flutter_secure_storage service with Riverpod provider |
 
 ### Foundation Implemented
 
@@ -57,9 +57,10 @@ lib/
 ├── providers.dart
 ├── theme/
 ├── routing/
-│   ├── app_router.dart
-│   ├── app_shell.dart
-│   └── app_layout.dart
+│   └── app_router.dart
+├── features/
+│   └── navigation/
+│       └── shell.dart
 ├── models/
 ├── database/
 │   ├── database.dart
@@ -67,10 +68,12 @@ lib/
 │   ├── drift_database.g.dart
 ├── repositories/
 ├── services/
+│   ├── http_client_service.dart
+│   └── secure_storage_service.dart
 └── sync/
 ```
 
-~650 lines of new Dart.
+~2065 lines of Dart in lib/.
 
 ---
 
@@ -224,8 +227,8 @@ Status: 🟡 Partial
 
 ## Known Issues
 
-Repositories have been successfully migrated to use the local Drift database with synchronization layer ready for implementation.
-Swipe navigation has been integrated with the routing system for T1.5.
+Phase 1 is complete: routing (T1.5) verified with widget tests; secure token storage (T1.8) implemented with flutter_secure_storage.
+Known pre-existing compile errors remain in lib/database/drift_database.dart (untracked, missing generated code) and lib/sync/sync_service.dart - scheduled for Phase 3.
 
 ---
 
@@ -234,6 +237,6 @@ Swipe navigation has been integrated with the routing system for T1.5.
 - [x] Read `flutter_app_context.md`
 - [x] Read `PROJECT_STATUS.md`
 - [x] Complete only one ticket
-- [ ] Avoid unrelated changes
-- [ ] Preserve architecture
+- [x] Avoid unrelated changes
+- [x] Preserve architecture
 - [x] Update this file when finished

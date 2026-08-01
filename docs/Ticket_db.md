@@ -1,20 +1,20 @@
 ## Phase 1 — Flutter Foundation
 
-- [ ] T1.1 (D) - Create Flutter project.
+- [x] T1.1 (D) - Create Flutter project.
 
-- [ ] T1.2 (C) - Configure project architecture.
+- [x] T1.2 (C) - Configure project architecture.
 
-- [ ] T1.3 (D) - Configure package dependencies.
+- [x] T1.3 (D) - Configure package dependencies.
 
-- [ ] T1.4 (C) - Create folder structure.
+- [x] T1.4 (C) - Create folder structure.
 
-- [ ] T1.5 (C) - Configure routing.
+- [x] T1.5 (C) - Configure routing.
 
-- [ ] T1.6 (D) - Environment/config management.
+- [x] T1.6 (D) - Environment/config management.
 
-- [ ] T1.7 (D) - HTTP client.
+- [x] T1.7 (D) - HTTP client.
 
-- [ ] T1.8 (D) - Secure token storage.
+- [x] T1.8 (D) - Secure token storage.
 
 **Milestone:** Empty app with clean architecture.
 
