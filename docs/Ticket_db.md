@@ -104,18 +104,18 @@
 ---
 ## Phase 7 — API Layer
 
-- [ ] T7.1 (D) - Profile API.
-    
-- [ ] T7.2 (D) - Contacts API.
-    
-- [ ] T7.3 (D) - Collections API.
-    
-- [ ] T7.4 (D) - Expenses API.
-    
-- [ ] T7.5 (D) - Balances API.
-    
-- [ ] T7.6 (D) - Health endpoint. Milestone: Complete backend communication.
-    
+- [x] T7.1 (D) - Profile API. `ProfileApi.createProfile` (`POST /api/v1/profile`, idempotent 200/201 — not behind AuthMiddleware but requires a Bearer token) → wire DTO `ApiProfile` (snake_case, `participant_id`, nullable `upi_id`/`updated_at`/`deleted_at`).
+
+- [x] T7.2 (D) - Contacts API. `ContactsApi.createContact` (`POST /v1/contacts`, 201), `searchContacts` (`GET /v1/contacts/search?q=`), `claimContacts` (`POST /v1/contacts/claim` → `{"claimed": int}`) → `ApiContact` / `ApiContactSearchResult`.
+
+- [x] T7.3 (D) - Collections API. `CollectionsApi.createCollection` / `listCollections` (`POST|GET /v1/groups/`, trailing slash), `getCollection` (`GET /v1/groups/{id}`), `addMember` (`POST /v1/groups/{id}/members`, 201 empty body) → `ApiCollection` (`account_number`, `member_count`).
+
+- [x] T7.4 (D) - Expenses API. `ExpensesApi.createExpense` / `listExpenses` / `getExpense` / `updateExpense` / `deleteExpense` (204) + `createReceipt` / `getReceipt` (`/v1/expenses/{id}/receipt`). Rupee doubles in → paise ints out (`amount_paise`); `groupID`/RFC3339 `from`/`to` filters; split types `equal`/`exact`/`percentage`/`shares`; `idempotency_key`; server-side `timestamp` key.
+
+- [x] T7.5 (D) - Balances API. `BalancesApi.getBalances` (`GET /v1/balances`, optional `personID`) → `ApiBalancesResponse` (`total_owed_paise`, `total_owing_paise`, `net_paise`, `breakdown`).
+
+- [x] T7.6 (D) - Health endpoint. `HealthApi.checkHealth` (`GET /health` at origin root — unauthenticated, backing client built from `apiRootUrlProvider` which strips the trailing `/api`). Milestone: Complete backend communication.
+
 ---
 ## Phase 8 — Synchronization
 

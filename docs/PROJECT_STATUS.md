@@ -180,7 +180,22 @@ lib/
 
 ## Phase 7 — API Layer
 
-Status: ⬜ Not started
+Status: ✅ Complete — all six tickets (T7.1–T7.6) shipped with 34 passing `MockClient` tests. Wire DTOs (`lib/api/models/`) mirror the Go backend JSON exactly (snake_case, paise ints in responses, rupee doubles in requests); the pure-Dart `ApiClient` injects the Supabase access token via `tokenProvider`; domain clients are Riverpod-wired (`apiClientProvider` + per-resource providers) for the Phase 8 sync layer.
+
+```
+lib/api/
+├── api_client.dart          # get/post/put/delete, Bearer token, {"error"} → ApiException
+├── api_exception.dart
+├── health_api.dart          # GET /health (root URL, unauthenticated)
+├── profile_api.dart         # POST v1/profile (idempotent 200/201)
+├── contacts_api.dart        # create / search?q= / claim
+├── collections_api.dart     # groups CRUD + addMember
+├── expenses_api.dart        # expenses CRUD + receipt upsert/fetch
+├── balances_api.dart        # GET v1/balances (personID)
+└── models/                  # 9 wire DTO files (api_health, api_profile, api_contact,
+                             # api_contact_search_result, api_collection, api_expense,
+                             # api_balance, api_receipt, api_requests)
+```
 
 ---
 
