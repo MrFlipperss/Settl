@@ -1,10 +1,10 @@
 import 'package:uuid/uuid.dart';
 import '../models/expense.dart';
 import '../models/expense_split.dart';
-import '../repositories/expenses_repository.dart';
+import '../repositories/interfaces/expense_repository.dart';
 
 class ExpenseService {
-  final ExpensesRepository _repo;
+  final ExpenseRepository _repo;
   final _uuid = const Uuid();
 
   ExpenseService(this._repo);
@@ -28,7 +28,8 @@ class ExpenseService {
       idempotencyKey: _uuid.v4(),
       createdAt: DateTime.now(),
     );
-    return _repo.createExpense(expense);
+    await _repo.createExpense(expense);
+    return expense;
   }
 
   List<ExpenseSplit> calculateEqualSplits({
@@ -64,6 +65,7 @@ class ExpenseService {
   }
 
   Future<List<Expense>> getExpenses({String? listId}) {
-    return _repo.getExpenses(listId);
+    if (listId != null) return _repo.getExpensesByList(listId);
+    return _repo.getAllExpenses();
   }
 }

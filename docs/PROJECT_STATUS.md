@@ -4,11 +4,11 @@ Last Updated: 2026-08-01
 
 ## Current Project Phase
 
-**Current Phase:** Flutter Foundation
+**Current Phase:** Authentication
 
-**Current Ticket:** T5.1 – Repository interfaces (Phase 4 complete)
+**Current Ticket:** T6.1 – Supabase login (Phase 5 complete)
 
-**Overall Progress:** ~70%
+**Overall Progress:** ~78%
 
 ---
 
@@ -123,7 +123,18 @@ lib/
 
 ## Phase 5 — Repositories
 
-Status: 🟡 Partial
+Status: ✅ Complete
+
+- Repository Interfaces: ✅ ExpenseRepository, ContactRepository, CollectionRepository, BalanceRepository, ProfileRepository in `lib/repositories/interfaces/`
+- ExpenseRepository: ✅ `ExpenseRepositoryImpl` (DAO-backed, incl. splits + list-scoped reads)
+- ContactRepository: ✅ `ContactRepositoryImpl` (DAO-backed)
+- CollectionRepository: ✅ `CollectionRepositoryImpl` (DAO-backed, incl. membership)
+- BalanceRepository: ✅ `BalanceRepositoryImpl` — computes pairwise net balances from local expense splits, mirroring the backend `pairwise_balances` view
+- ProfileRepository: ✅ `ProfileRepositoryImpl` (DAO-backed)
+- Providers: ✅ 5 repository providers wired to DAO providers in `providers.dart`
+- Milestone: ✅ UI never talks directly to HTTP (repositories are the only data seam)
+- Tests: ✅ 18 repository tests (CRUD + balance computation), all passing
+- Cleanup: ✅ Removed deprecated dynamic-`_db` repositories + broken orphaned auth/API scaffolding (auth_repository, profile_api_repository, auth_service, api_service) — auth/API rebuilt properly in Phases 6–7
 
 ### Target architecture:
 
@@ -248,12 +259,13 @@ Status: 🟡 Partial
 
 ## Known Issues
 
+Phase 5 (Repositories) is complete: 5 repository interfaces + DAO-backed implementations, 18 passing repository tests, deprecated dynamic-`_db` repos removed.
 Phase 4 (Models) is complete: Balance model added, all 10 domain models have copyWith (sentinel-based null clearing), value equality, and snake_case JSON round-trip serialization, verified by 28 model tests.
 Phase 3 (Local Database) is complete: Drift schema (9 tables), DAO layer, providers, and 19 passing DAO tests.
 Phase 2 (Theme & Navigation) is complete: Material 3 themes, system/light/dark switching, responsive shell.
 Phase 1 is complete: routing (T1.5) verified with widget tests; secure token storage (T1.8) implemented with flutter_secure_storage.
-Known pre-existing compile errors remain in lib/sync/sync_service.dart (imports supabase_flutter, not a dependency) and lib/repositories/auth_repository.dart (uses `_db.into` on abstract Database) - scheduled for Phases 7-8.
-The old repositories (expenses/contacts/lists/profile/auth) still use the deprecated dynamic `_db` accessor and `toCompanion`/`toJson` patterns - will be rewritten on top of the DAO layer in Phase 5.
+Known pre-existing compile errors remain only in lib/sync/sync_service.dart (imports supabase_flutter, not a dependency; uses `client` getter on abstract Database) - scheduled for Phase 8 (Synchronization).
+The old orphaned auth/API scaffolding (auth_service, api_service, auth_repository, profile_api_repository) was removed in Phase 5 - authentication is rebuilt in Phase 6 with Supabase, and the API layer in Phase 7.
 
 ---
 

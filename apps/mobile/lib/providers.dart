@@ -7,6 +7,16 @@ import '../database/daos/expenses_dao.dart';
 import '../database/daos/lists_dao.dart';
 import '../database/daos/pending_sync_dao.dart';
 import '../database/daos/profiles_dao.dart';
+import '../repositories/balance_repository_impl.dart';
+import '../repositories/collection_repository_impl.dart';
+import '../repositories/contact_repository_impl.dart';
+import '../repositories/expense_repository_impl.dart';
+import '../repositories/interfaces/balance_repository.dart';
+import '../repositories/interfaces/collection_repository.dart';
+import '../repositories/interfaces/contact_repository.dart';
+import '../repositories/interfaces/expense_repository.dart';
+import '../repositories/interfaces/profile_repository.dart';
+import '../repositories/profile_repository_impl.dart';
 import '../services/http_client_service.dart';
 import '../services/secure_storage_service.dart';
 
@@ -61,4 +71,27 @@ final profilesDaoProvider = Provider<ProfilesDao>((ref) {
 
 final pendingSyncDaoProvider = Provider<PendingSyncDao>((ref) {
   return PendingSyncDao(ref.watch(appDatabaseProvider));
+});
+
+/// Repository providers — the UI-facing data layer. Each delegates to its
+/// DAO provider; remote (HTTP) implementations will be swapped in later
+/// phases behind the same interfaces.
+final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
+  return ExpenseRepositoryImpl(ref.watch(expensesDaoProvider));
+});
+
+final contactRepositoryProvider = Provider<ContactRepository>((ref) {
+  return ContactRepositoryImpl(ref.watch(contactsDaoProvider));
+});
+
+final collectionRepositoryProvider = Provider<CollectionRepository>((ref) {
+  return CollectionRepositoryImpl(ref.watch(listsDaoProvider));
+});
+
+final balanceRepositoryProvider = Provider<BalanceRepository>((ref) {
+  return BalanceRepositoryImpl(ref.watch(expensesDaoProvider));
+});
+
+final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
+  return ProfileRepositoryImpl(ref.watch(profilesDaoProvider));
 });

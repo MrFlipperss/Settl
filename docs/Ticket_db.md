@@ -74,17 +74,17 @@
 ---
 ## Phase 5 — Repositories
 
-- [ ] T5.1 (C) - Repository interfaces.
+- [x] T5.1 (C) - Repository interfaces.
     
-- [ ] T5.2 (D) - ExpenseRepository.
+- [x] T5.2 (D) - ExpenseRepository.
     
-- [ ] T5.3 (D) - ContactRepository.
+- [x] T5.3 (D) - ContactRepository.
     
-- [ ] T5.4 (D) - CollectionRepository.
+- [x] T5.4 (D) - CollectionRepository.
     
-- [ ] T5.5 (D) - BalanceRepository.
+- [x] T5.5 (D) - BalanceRepository.
     
-- [ ] T5.6 (D) - ProfileRepository. Milestone: UI never talks directly to HTTP.
+- [x] T5.6 (D) - ProfileRepository. Milestone: UI never talks directly to HTTP.
 
 ---
 ## Phase 6 — Authentication

@@ -27,6 +27,14 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     return rows.map(_expenseFromRow).toList();
   }
 
+  Future<List<Expense>> getExpensesByList(String listId) async {
+    final rows = await (select(expenses)
+          ..where((tbl) => tbl.listId.equals(listId))
+          ..orderBy([(tbl) => OrderingTerm.desc(tbl.createdAt)]))
+        .get();
+    return rows.map(_expenseFromRow).toList();
+  }
+
   Future<List<Expense>> getAllExpenses() async {
     final rows = await (select(expenses)
           ..orderBy([(tbl) => OrderingTerm.desc(tbl.createdAt)]))
