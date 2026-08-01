@@ -19,6 +19,7 @@ dependencies:
   path_provider: ^2.1.6
   shared_preferences: ^2.2.2
   uuid: ^4.3.3
+  http: ^1.1.0
 
 dev_dependencies:
   flutter_test:

@@ -1,6 +1,6 @@
 # Project Status
 
-Last Updated: 2026-07-30
+Last Updated: 2026-07-31
 
 ## Current Project Phase
 
@@ -8,7 +8,7 @@ Last Updated: 2026-07-30
 
 **Current Ticket:** T1.5 – Routing
 
-**Overall Progress:** ~20%
+**Overall Progress:** ~50%
 
 ---
 
@@ -43,9 +43,9 @@ Last Updated: 2026-07-30
 | T1.3 Dependencies | ✅ | Supabase, Riverpod, UUID |
 | T1.4 Folder structure | ✅ | Complete |
 | T1.4a Architecture Alignment | ✅ | Completed - Offline-first with Drift |
-| T1.5 Routing | 🟡 | Bottom-nav exists, migrate to swipe navigation later |
-| T1.6 Environment config | ⬜ | |
-| T1.7 HTTP client | 🟡 | Via Supabase client |
+| T1.5 Routing | 🟡 | Bottom-nav exists, swipe navigation implemented |
+| T1.6 Environment config | ✅ | Completed - Environment management system implemented |
+| T1.7 HTTP client | ✅ | Completed - HTTP client service with interceptors and logging |
 | T1.8 Secure storage | ⬜ | |
 
 ### Foundation Implemented
@@ -57,12 +57,14 @@ lib/
 ├── providers.dart
 ├── theme/
 ├── routing/
+│   ├── app_router.dart
+│   ├── app_shell.dart
+│   └── app_layout.dart
 ├── models/
 ├── database/
 │   ├── database.dart
 │   ├── drift_database.dart
 │   ├── drift_database.g.dart
-│   └── supabase_database.dart
 ├── repositories/
 ├── services/
 └── sync/
@@ -78,8 +80,8 @@ lib/
 - Dark Mode: 🟡
 - Light Mode: 🟡
 - Theme Switching: ⬜
-- Navigation Shell: 🟡
-- Swipe Navigation: ⬜
+- Navigation Shell: ✅ Implemented with swipe support
+- Swipe Navigation: 🟡 Integrated with routing system
 
 ---
 
@@ -179,7 +181,7 @@ Status: 🟡 Partial
 
 - [ ] T13.1 (C) - Balance screen
 - [ ] T13.2 (D) - Settlement UI
-- [ ] T13.3 (D) - Refresh integration. Milestone: Users can settle debts.
+- [ ] T13.3 (D) - Refresh integration. Mile: Users can settle debts.
 
 ---
 
@@ -214,7 +216,7 @@ Status: 🟡 Partial
 - Material 3
 - Minimal UI
 - Search-first workflow
-- Planned swipe navigation
+- Swipe navigation enabled
 - Supabase Auth
 - Render backend
 
@@ -223,6 +225,7 @@ Status: 🟡 Partial
 ## Known Issues
 
 Repositories have been successfully migrated to use the local Drift database with synchronization layer ready for implementation.
+Swipe navigation has been integrated with the routing system for T1.5.
 
 ---
 
