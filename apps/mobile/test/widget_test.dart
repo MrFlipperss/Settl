@@ -47,4 +47,47 @@ void main() {
 
     expect(find.byType(GroupsScreen), findsOneWidget);
   });
+
+  testWidgets('Theme mode switching updates the app theme', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: SettlApp()));
+    await tester.pumpAndSettle();
+
+    MaterialApp materialApp() =>
+        tester.widget<MaterialApp>(find.byType(MaterialApp));
+
+    // Defaults to following the system theme.
+    expect(materialApp().themeMode, ThemeMode.system);
+
+    // Open the Profile tab, where the appearance selector lives.
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dark'));
+    await tester.pumpAndSettle();
+
+    expect(materialApp().themeMode, ThemeMode.dark);
+
+    await tester.tap(find.text('Light'));
+    await tester.pumpAndSettle();
+
+    expect(materialApp().themeMode, ThemeMode.light);
+  });
+
+  testWidgets('Wide layouts use a navigation rail instead of the bottom bar',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const ProviderScope(child: SettlApp()));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NavigationRail), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
+
+    // Tab switching still works through the rail.
+    await tester.tap(find.text('Groups'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(GroupsScreen), findsOneWidget);
+  });
 }

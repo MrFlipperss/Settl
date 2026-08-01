@@ -6,9 +6,9 @@ Last Updated: 2026-08-01
 
 **Current Phase:** Flutter Foundation
 
-**Current Ticket:** T2.1 – Create Material 3 theme (Phase 1 complete)
+**Current Ticket:** T3.1 – Choose and configure Drift (Phase 2 complete)
 
-**Overall Progress:** ~55%
+**Overall Progress:** ~60%
 
 ---
 
@@ -79,12 +79,13 @@ lib/
 
 ## Phase 2 — Theme & Navigation
 
-- Theme: 🟡
-- Dark Mode: 🟡
-- Light Mode: 🟡
-- Theme Switching: ⬜
+- Theme: ✅ Material 3 from brand seed
+- Dark Mode: ✅
+- Light Mode: ✅
+- Theme Switching: ✅ System/Light/Dark selector on Profile tab
 - Navigation Shell: ✅ Implemented with swipe support
-- Swipe Navigation: 🟡 Integrated with routing system
+- Swipe Navigation: ✅ Integrated with routing system
+- Responsive Layout: ✅ NavigationRail ≥840dp, bottom bar below
 
 ---
 
@@ -227,6 +228,7 @@ Status: 🟡 Partial
 
 ## Known Issues
 
+Phase 2 (Theme & Navigation) is complete: Material 3 themes, system/light/dark switching, responsive shell.
 Phase 1 is complete: routing (T1.5) verified with widget tests; secure token storage (T1.8) implemented with flutter_secure_storage.
 Known pre-existing compile errors remain in lib/database/drift_database.dart (untracked, missing generated code) and lib/sync/sync_service.dart - scheduled for Phase 3.
 

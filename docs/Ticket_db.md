@@ -22,19 +22,19 @@
 
 ## Phase 2 — Theme & Navigation
 
-- [ ] T2.1 (C) - Create Material 3 theme.
+- [x] T2.1 (C) - Create Material 3 theme.
 
-- [ ] T2.2 (C) - Dark mode.
+- [x] T2.2 (C) - Dark mode.
 
-- [ ] T2.3 (C) - Light mode.
+- [x] T2.3 (C) - Light mode.
 
-- [ ] T2.4 (C) - Theme switching.
+- [x] T2.4 (C) - Theme switching.
 
-- [ ] T2.5 (C) - Navigation shell.
+- [x] T2.5 (C) - Navigation shell.
 
-- [ ] T2.6 (C) - Horizontal swipe navigation.
+- [x] T2.6 (C) - Horizontal swipe navigation.
 
-- [ ] T2.7 (C) - Responsive layout.
+- [x] T2.7 (C) - Responsive layout.
 
 **Milestone:** App skeleton.
 

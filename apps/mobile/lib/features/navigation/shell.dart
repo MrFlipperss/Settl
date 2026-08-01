@@ -7,6 +7,10 @@ import '../budget/budget_screen.dart';
 import '../profile/profile_screen.dart';
 import '../../providers.dart';
 
+/// Minimum width (logical pixels) at which the shell switches from a bottom
+/// navigation bar to a side navigation rail (tablets, desktop, web).
+const double _railBreakpoint = 840;
+
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({
     super.key,
@@ -38,6 +42,62 @@ class _AppShellState extends ConsumerState<AppShell> {
     SpotlightScreen(),
     BudgetScreen(),
     ProfileScreen(),
+  ];
+
+  static const List<NavigationDestination> _barDestinations = [
+    NavigationDestination(
+      icon: Icon(Icons.home_outlined),
+      selectedIcon: Icon(Icons.home),
+      label: 'Home',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.groups_outlined),
+      selectedIcon: Icon(Icons.groups),
+      label: 'Groups',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.search),
+      selectedIcon: Icon(Icons.search),
+      label: 'Spotlight',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.account_balance_wallet_outlined),
+      selectedIcon: Icon(Icons.account_balance_wallet),
+      label: 'Budget',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.person_outline),
+      selectedIcon: Icon(Icons.person),
+      label: 'Profile',
+    ),
+  ];
+
+  static const List<NavigationRailDestination> _railDestinations = [
+    NavigationRailDestination(
+      icon: Icon(Icons.home_outlined),
+      selectedIcon: Icon(Icons.home),
+      label: Text('Home'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.groups_outlined),
+      selectedIcon: Icon(Icons.groups),
+      label: Text('Groups'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.search),
+      selectedIcon: Icon(Icons.search),
+      label: Text('Spotlight'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.account_balance_wallet_outlined),
+      selectedIcon: Icon(Icons.account_balance_wallet),
+      label: Text('Budget'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.person_outline),
+      selectedIcon: Icon(Icons.person),
+      label: Text('Profile'),
+    ),
   ];
 
   @override
@@ -107,43 +167,39 @@ class _AppShellState extends ConsumerState<AppShell> {
       effectivePages = _screens;
     }
 
+    // Swipe navigation is shared by both layouts; only the navigation
+    // chrome adapts to the available width.
+    final pages = PageView(
+      controller: _pageController,
+      onPageChanged: _onPageChanged,
+      children: effectivePages,
+    );
+
+    final useRail = MediaQuery.sizeOf(context).width >= _railBreakpoint;
+
     return Scaffold(
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: _onPageChanged,
-        children: effectivePages,
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: widget.currentIndex,
-        onDestinationSelected: widget.onIndexChanged,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.groups_outlined),
-            selectedIcon: Icon(Icons.groups),
-            label: 'Groups',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.search),
-            selectedIcon: Icon(Icons.search),
-            label: 'Spotlight',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            selectedIcon: Icon(Icons.account_balance_wallet),
-            label: 'Budget',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
-      ),
+      body: useRail
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                NavigationRail(
+                  selectedIndex: widget.currentIndex,
+                  onDestinationSelected: widget.onIndexChanged,
+                  labelType: NavigationRailLabelType.all,
+                  destinations: _railDestinations,
+                ),
+                const VerticalDivider(width: 1, thickness: 1),
+                Expanded(child: pages),
+              ],
+            )
+          : pages,
+      bottomNavigationBar: useRail
+          ? null
+          : NavigationBar(
+              selectedIndex: widget.currentIndex,
+              onDestinationSelected: widget.onIndexChanged,
+              destinations: _barDestinations,
+            ),
     );
   }
 }

@@ -1,7 +1,13 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/config_provider.dart';
 import '../services/http_client_service.dart';
 import '../services/secure_storage_service.dart';
+
+/// Provider for the app's theme mode (light / dark / system).
+/// Defaults to following the system setting; can be overridden from the
+/// Profile settings screen.
+final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 
 /// Provider for tracking the current selected index in the bottom navigation bar.
 /// This is now enhanced to work with our configuration system
