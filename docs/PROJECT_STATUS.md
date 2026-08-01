@@ -4,11 +4,11 @@ Last Updated: 2026-08-01
 
 ## Current Project Phase
 
-**Current Phase:** API Layer
+**Current Phase:** Synchronization
 
-**Current Ticket:** T7.1 – Profile API (Phase 6 complete)
+**Current Ticket:** Phase 8 complete — T9.1 Home page layout (next)
 
-**Overall Progress:** ~82%
+**Overall Progress:** ~86%
 
 ---
 
@@ -201,13 +201,26 @@ lib/api/
 
 ## Phase 8 — Synchronization
 
-- Sync Architecture: 🟡
-- Pending Queue: ⬜
-- Sync Worker: ⬜
-- Retry Strategy: ⬜
-- Startup Sync: ⬜
-- Connectivity Listener: ⬜
-- Conflict Handling: ⬜
+Status: ✅ Complete — all seven tickets (T8.1–T8.7) shipped with 21 passing sync tests + 4 widget tests. Offline-first is now working end to end: mutations are queued locally (`PendingSyncOperations`), replayed FIFO by the worker against the T7 API clients with exponential backoff, conflicts resolved server-wins by default, and remote state pulled into the local DAOs on startup / reconnect. `SettlApp` bootstraps the sync layer post-first-frame (reconcile profile + claim contacts, then start the service); bootstrap degrades to a no-op where the auth stack is unavailable (widget tests).
+
+```
+lib/sync/
+├── sync_service.dart        # facade: status/online streams, start/stop/requestSync, retry timer
+├── sync_queue.dart          # enqueue mutations (id baked into payload for idempotent replay)
+├── sync_worker.dart         # FIFO drain + refresh (expenses w/ splits, collections)
+├── retry_policy.dart        # maxAttempts 5, baseDelay 2s, maxDelay 2min, transient 408/429/5xx
+├── connectivity_service.dart# ConnectivityGateway over connectivity_plus v7
+└── conflict_resolver.dart   # 409 → server-wins (drop) or keep-local (getFailed)
+```
+
+- Sync Architecture (T8.1): ✅ `SyncService` facade
+- Pending Queue (T8.2): ✅ `SyncQueue` + `getPendingRetryable`/`getFailed`
+- Sync Worker (T8.3): ✅ FIFO drain + pull refresh
+- Retry Strategy (T8.4): ✅ `RetryPolicy` exponential backoff
+- Startup Sync (T8.5): ✅ post-frame bootstrap in `app.dart` (best-effort)
+- Connectivity Listener (T8.6): ✅ `ConnectivityGatewayImpl` (connectivity_plus v7 list API)
+- Conflict Handling (T8.7): ✅ `ConflictResolver` server-wins default. Milestone: Offline-first working.
+- Tests: ✅ 21 sync tests (`test/sync_test.dart`, MockClient + FakeConnectivityGateway) + 4 widget tests; full suite 143 passing; `dart analyze lib` clean for new code (13 pre-existing warnings remain in `config/environment.dart` + `services/http_client_service.dart`)
 
 ---
 
@@ -305,7 +318,8 @@ Phase 4 (Models) is complete: Balance model added, all 10 domain models have cop
 Phase 3 (Local Database) is complete: Drift schema (9 tables), DAO layer, providers, and 19 passing DAO tests.
 Phase 2 (Theme & Navigation) is complete: Material 3 themes, system/light/dark switching, responsive shell.
 Phase 1 is complete: routing (T1.5) verified with widget tests; secure token storage (T1.8) implemented with flutter_secure_storage.
-Known pre-existing compile error remains only in lib/sync/sync_service.dart (uses `client` getter on abstract Database) - scheduled for Phase 8 (Synchronization). The prior `uri_does_not_exist` on its supabase_flutter import cleared once supabase_flutter became a dependency in Phase 6.
+Phase 7 (API Layer) is complete: `ApiClient` + 6 domain API clients with 34 passing MockClient tests; the sync layer (Phase 8) now consumes them.
+Phase 8 (Synchronization) is complete: the pre-existing compile error in `lib/sync/sync_service.dart` (uses `client` getter on abstract Database) is fixed — the file was rewritten as the `SyncService` facade; 21 new sync tests + 4 widget tests, 143 total passing.
 The old orphaned auth/API scaffolding (auth_service, api_service, auth_repository, profile_api_repository) was removed in Phase 5 - authentication was rebuilt in Phase 6 with Supabase; the API layer follows in Phase 7.
 
 ---

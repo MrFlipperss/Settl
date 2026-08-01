@@ -1,9 +1,10 @@
 /// Request DTOs for the Settl backend API.
 ///
-/// These are write-only wire bodies: nullable fields are omitted from the JSON
-/// when null so the backend's defaulting applies. Money in requests is rupee
-/// doubles (the backend converts to paise), mirroring `models.go` request
-/// structs.
+/// These are wire bodies: nullable fields are omitted from the JSON when null
+/// so the backend's defaulting applies. Money in requests is rupee doubles
+/// (the backend converts to paise), mirroring `models.go` request structs.
+/// Every DTO that can be enqueued for offline replay also implements
+/// `fromJson` so the queue payload round-trips unchanged (Phase 8).
 library;
 
 /// Body for `POST /v1/profile` (T7.1).
@@ -17,6 +18,13 @@ class ApiCreateProfileRequest {
   final String displayName;
   final String phoneNumber;
   final String? upiId;
+
+  factory ApiCreateProfileRequest.fromJson(Map<String, dynamic> json) =>
+      ApiCreateProfileRequest(
+        displayName: json['display_name'] as String,
+        phoneNumber: json['phone_number'] as String,
+        upiId: json['upi_id'] as String?,
+      );
 
   Map<String, dynamic> toJson() => {
         'display_name': displayName,
@@ -53,6 +61,13 @@ class ApiCreateContactRequest {
   final String? id;
   final String displayName;
   final String phoneNumber;
+
+  factory ApiCreateContactRequest.fromJson(Map<String, dynamic> json) =>
+      ApiCreateContactRequest(
+        id: json['id'] as String?,
+        displayName: json['display_name'] as String,
+        phoneNumber: json['phone_number'] as String,
+      );
 
   Map<String, dynamic> toJson() => {
         if (id != null) 'id': id,
@@ -111,6 +126,13 @@ class ApiCreateCollectionRequest {
 
   /// ISO 4217 code; defaults to `"INR"` server-side.
   final String? currency;
+
+  factory ApiCreateCollectionRequest.fromJson(Map<String, dynamic> json) =>
+      ApiCreateCollectionRequest(
+        id: json['id'] as String?,
+        name: json['name'] as String,
+        currency: json['currency'] as String?,
+      );
 
   Map<String, dynamic> toJson() => {
         if (id != null) 'id': id,
@@ -198,6 +220,22 @@ class ApiCreateExpenseRequest {
   /// Per-participant split instructions; resolved server-side.
   final List<ApiCreateSplitItem> splits;
 
+  factory ApiCreateExpenseRequest.fromJson(Map<String, dynamic> json) =>
+      ApiCreateExpenseRequest(
+        id: json['id'] as String?,
+        groupId: json['group_id'] as String?,
+        payerId: json['payer_id'] as String,
+        amount: (json['amount'] as num).toDouble(),
+        splitType: json['split_type'] as String,
+        category: json['category'] as String?,
+        note: json['note'] as String?,
+        idempotencyKey: json['idempotency_key'] as String?,
+        timestamp: json['timestamp'] as String?,
+        splits: (json['splits'] as List? ?? const [])
+            .map((e) => ApiCreateSplitItem.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+
   Map<String, dynamic> toJson() => {
         if (id != null) 'id': id,
         if (groupId != null) 'group_id': groupId,
@@ -266,6 +304,14 @@ class ApiCreateSplitItem {
 
   /// Integer shares for `split_type: "shares"`.
   final int? shareCount;
+
+  factory ApiCreateSplitItem.fromJson(Map<String, dynamic> json) =>
+      ApiCreateSplitItem(
+        userId: json['user_id'] as String,
+        exactAmount: (json['exact_amount'] as num?)?.toDouble(),
+        percentage: (json['percentage'] as num?)?.toDouble(),
+        shareCount: json['share_count'] as int?,
+      );
 
   Map<String, dynamic> toJson() => {
         'user_id': userId,

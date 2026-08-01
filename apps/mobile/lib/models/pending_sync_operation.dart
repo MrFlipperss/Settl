@@ -16,6 +16,12 @@ class PendingSyncOperation {
   final DateTime createdAt;
   final DateTime? syncedAt;
 
+  /// Number of failed replay attempts (drives the retry backoff, T8.4).
+  final int attemptCount;
+
+  /// Message of the most recent replay failure (T8.4).
+  final String? lastError;
+
   const PendingSyncOperation({
     required this.operationId,
     required this.entityType,
@@ -24,6 +30,8 @@ class PendingSyncOperation {
     required this.payload,
     required this.createdAt,
     this.syncedAt,
+    this.attemptCount = 0,
+    this.lastError,
   });
 
   factory PendingSyncOperation.fromJson(Map<String, dynamic> json) =>
@@ -37,6 +45,8 @@ class PendingSyncOperation {
         syncedAt: json['synced_at'] != null
             ? DateTime.parse(json['synced_at'] as String)
             : null,
+        attemptCount: json['attempt_count'] as int? ?? 0,
+        lastError: json['last_error'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -47,6 +57,8 @@ class PendingSyncOperation {
         'payload': payload,
         'created_at': createdAt.toIso8601String(),
         'synced_at': syncedAt?.toIso8601String(),
+        'attempt_count': attemptCount,
+        'last_error': lastError,
       };
 
   PendingSyncOperation copyWith({
@@ -57,6 +69,8 @@ class PendingSyncOperation {
     String? payload,
     DateTime? createdAt,
     Object? syncedAt = _unset,
+    int? attemptCount,
+    Object? lastError = _unset,
   }) =>
       PendingSyncOperation(
         operationId: operationId ?? this.operationId,
@@ -68,6 +82,10 @@ class PendingSyncOperation {
         syncedAt: identical(syncedAt, _unset)
             ? this.syncedAt
             : syncedAt as DateTime?,
+        attemptCount: attemptCount ?? this.attemptCount,
+        lastError: identical(lastError, _unset)
+            ? this.lastError
+            : lastError as String?,
       );
 
   @override
@@ -80,15 +98,17 @@ class PendingSyncOperation {
           other.operation == operation &&
           other.payload == payload &&
           other.createdAt == createdAt &&
-          other.syncedAt == syncedAt;
+          other.syncedAt == syncedAt &&
+          other.attemptCount == attemptCount &&
+          other.lastError == lastError;
 
   @override
   int get hashCode => Object.hash(operationId, entityType, entityId,
-      operation, payload, createdAt, syncedAt);
+      operation, payload, createdAt, syncedAt, attemptCount, lastError);
 
   @override
   String toString() =>
       'PendingSyncOperation(operationId: $operationId, '
       'entityType: $entityType, entityId: $entityId, '
-      'operation: ${operation.name})';
+      'operation: ${operation.name}, attemptCount: $attemptCount)';
 }

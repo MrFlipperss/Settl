@@ -1,48 +1,97 @@
 import 'dart:async';
-import 'package:supabase_flutter/supabase_flutter.dart'
-    show PostgresChangeEvent, RealtimeChannel;
-import '../database/database.dart';
 
+import 'connectivity_service.dart';
+import 'retry_policy.dart';
+import 'sync_worker.dart';
+
+/// App-facing sync facade (T8.1).
+///
+/// Owns the [SyncWorker] and [ConnectivityGateway] lifecycle, exposes sync
+/// status and connectivity as broadcast streams, and triggers a queue drain +
+/// pull when the device comes online, on [requestSync], or — after a failure —
+/// on the retry backoff schedule.
 enum SyncStatus { idle, syncing, error }
 
 class SyncService {
-  final Database _db;
-  SyncStatus _status = SyncStatus.idle;
-  RealtimeChannel? _channel;
+  SyncService({
+    required SyncWorker worker,
+    required ConnectivityGateway connectivity,
+    required RetryPolicy retryPolicy,
+  })  : _worker = worker,
+        _connectivity = connectivity,
+        _retryPolicy = retryPolicy;
 
-  SyncService(this._db);
+  final SyncWorker _worker;
+  final ConnectivityGateway _connectivity;
+  final RetryPolicy _retryPolicy;
+
+  SyncStatus _status = SyncStatus.idle;
+  bool _online = false;
+  bool _draining = false;
+  Timer? _retryTimer;
+  StreamSubscription<bool>? _connectivitySub;
+
+  final StreamController<SyncStatus> _statusController =
+      StreamController<SyncStatus>.broadcast();
+  final StreamController<bool> _onlineController =
+      StreamController<bool>.broadcast();
 
   SyncStatus get status => _status;
+  bool get isOnline => _online;
+  Stream<SyncStatus> get statusStream => _statusController.stream;
+  Stream<bool> get onlineStream => _onlineController.stream;
 
-  Stream<SyncStatus> get statusStream => _statusStream.stream;
-  final _statusStream = StreamController<SyncStatus>.broadcast();
-
-  void _setStatus(SyncStatus s) {
-    _status = s;
-    _statusStream.add(s);
+  void _setStatus(SyncStatus status) {
+    _status = status;
+    _statusController.add(status);
   }
 
-  Future<void> startRealtimeSync() async {
-    _channel = _db.client.channel('schema-changes');
-    _channel!.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      callback: (_) => _sync(),
-    );
-    _channel!.subscribe();
+  /// Starts the service: seeds connectivity state, subscribes to changes
+  /// (draining whenever the device comes online), and runs an initial sync.
+  Future<void> start() async {
+    await _connectivitySub?.cancel();
+    _connectivitySub = _connectivity.onlineStream.listen((online) async {
+      _online = online;
+      _onlineController.add(online);
+      if (online) unawaited(requestSync());
+    });
+    _online = await _connectivity.isOnline();
+    _onlineController.add(_online);
+    if (_online) await requestSync();
   }
 
-  Future<void> _sync() async {
+  /// Drains the queue then pulls remote state. No-op while a sync is already
+  /// running; re-attempts (with backoff) when the drain or pull fails.
+  Future<void> requestSync() async {
+    if (_draining) return;
+    _draining = true;
     _setStatus(SyncStatus.syncing);
     try {
+      await _worker.drainQueue();
+      await _worker.refresh();
       _setStatus(SyncStatus.idle);
     } catch (_) {
       _setStatus(SyncStatus.error);
+      _scheduleRetry();
+    } finally {
+      _draining = false;
     }
   }
 
-  Future<void> stopSync() async {
-    await _channel?.unsubscribe();
-    await _statusStream.close();
+  /// Schedules a single retry using the backoff policy, only while online.
+  void _scheduleRetry() {
+    _retryTimer?.cancel();
+    if (!_online) return;
+    _retryTimer = Timer(_retryPolicy.delayForAttempt(1), () {
+      unawaited(requestSync());
+    });
+  }
+
+  /// Tears down subscriptions and timers (wired via `ref.onDispose`).
+  Future<void> stop() async {
+    _retryTimer?.cancel();
+    await _connectivitySub?.cancel();
+    await _statusController.close();
+    await _onlineController.close();
   }
 }

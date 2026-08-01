@@ -119,19 +119,19 @@
 ---
 ## Phase 8 — Synchronization
 
-- [ ] T8.1 (C) - Sync architecture.
-    
-- [ ] T8.2 (D) - Pending operation queue.
-    
-- [ ] T8.3 (D) - Background sync worker.
-    
-- [ ] T8.4 (D) - Retry strategy.
-    
-- [ ] T8.5 (D) - Startup sync.
-    
-- [ ] T8.6 (D) - Connectivity listener.
-    
-- [ ] T8.7 (D) - Conflict handling. Milestone: Offline-first working.
+- [x] T8.1 (C) - Sync architecture. `SyncService` facade (`lib/sync/sync_service.dart`): `SyncStatus` idle/syncing/error, broadcast `statusStream`/`onlineStream`, `start`/`stop`/`requestSync`, single backoff retry timer; drains the queue then pulls remote state whenever the device comes online or `requestSync` is called.
+
+- [x] T8.2 (D) - Pending operation queue. `SyncQueue` (`lib/sync/sync_queue.dart`) + `PendingSyncDao.getPendingRetryable(maxAttempts)`/`getFailed(maxAttempts)`. `enqueueExpense`/`enqueueContact`/`enqueueCollection`/`enqueueProfile` serialize the request DTO to a snake_case wire payload, baking a generated id into it so `entityId` and the replayed request id match (idempotent retries).
+
+- [x] T8.3 (D) - Background sync worker. `SyncWorker` (`lib/sync/sync_worker.dart`): FIFO `drainQueue()` replays via the T7 API clients (`markSynced` on success); `refresh()` pulls expenses (with splits) and collections into the DAOs; unsupported ops (contact update/delete, profile delete, collection update/delete) fail permanently via `getFailed` instead of blocking the queue.
+
+- [x] T8.4 (D) - Retry strategy. `RetryPolicy` (`lib/sync/retry_policy.dart`): maxAttempts=5, baseDelay=2s, maxDelay=2min, exponential backoff; transient = network errors + 408/429/5xx; permanent 4xx stops retrying and surfaces via `getFailed`.
+
+- [x] T8.5 (D) - Startup sync. `SettlApp` → `ConsumerStatefulWidget`: post-frame `_startSync()` reconciles the remote profile (`POST /v1/profile`) + claims contacts matching the phone number, then starts the sync service; `ref.listenManual(authStateProvider, ...)` re-reconciles on session restore/sign-in. Bootstrap is best-effort — it no-ops (doesn't crash) where the auth stack is unavailable (widget tests).
+
+- [x] T8.6 (D) - Connectivity listener. `ConnectivityGateway` + `ConnectivityGatewayImpl` (`lib/sync/connectivity_service.dart`) over `connectivity_plus` v7 list API (`any(r != none)`); `SyncService` subscribes on `start()` and drains whenever the device comes online.
+
+- [x] T8.7 (D) - Conflict handling. `ConflictResolver` (`lib/sync/conflict_resolver.dart`): 409s emit a `ConflictResolutionEvent` and resolve server-wins (drop mutation, next refresh re-pulls) or keep-local (op moves to `getFailed` for manual review). Milestone: Offline-first working. Verified: 21 new sync tests + 4 widget tests (bootstrap degradation), 143 total passing; `dart analyze lib` clean for new code.
     
 ---
 ## Phase 9 — Home

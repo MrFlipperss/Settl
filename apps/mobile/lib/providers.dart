@@ -31,6 +31,12 @@ import '../repositories/profile_repository_impl.dart';
 import '../services/auth_service.dart';
 import '../services/http_client_service.dart';
 import '../services/secure_storage_service.dart';
+import '../sync/conflict_resolver.dart';
+import '../sync/connectivity_service.dart';
+import '../sync/retry_policy.dart';
+import '../sync/sync_queue.dart';
+import '../sync/sync_service.dart';
+import '../sync/sync_worker.dart';
 
 /// Provider for the app's theme mode (light / dark / system).
 /// Defaults to following the system setting; can be overridden from the
@@ -180,4 +186,58 @@ final expensesApiProvider = Provider<ExpensesApi>((ref) {
 /// T7.5 — Balances API.
 final balancesApiProvider = Provider<BalancesApi>((ref) {
   return BalancesApi(ref.watch(apiClientProvider));
+});
+
+// ---------------------------------------------------------------------------
+// Sync layer (Phase 8)
+// ---------------------------------------------------------------------------
+
+/// Retry policy for the offline-first queue (T8.4).
+final retryPolicyProvider = Provider<RetryPolicy>((ref) => const RetryPolicy());
+
+/// Resolver for 409 version conflicts (T8.7). Server-wins by default.
+final conflictResolverProvider = Provider<ConflictResolver>((ref) {
+  final resolver = ConflictResolver();
+  ref.onDispose(resolver.dispose);
+  return resolver;
+});
+
+/// Device connectivity gateway (T8.6).
+final connectivityGatewayProvider = Provider<ConnectivityGateway>((ref) {
+  return ConnectivityGatewayImpl();
+});
+
+/// Mutation queue facade (T8.2) — offline-first writes go through this.
+final syncQueueProvider = Provider<SyncQueue>((ref) {
+  return SyncQueue(ref.watch(pendingSyncDaoProvider));
+});
+
+/// Replays queued mutations and pulls remote state (T8.3).
+final syncWorkerProvider = Provider<SyncWorker>((ref) {
+  return SyncWorker(
+    dao: ref.watch(pendingSyncDaoProvider),
+    expensesApi: ref.watch(expensesApiProvider),
+    contactsApi: ref.watch(contactsApiProvider),
+    collectionsApi: ref.watch(collectionsApiProvider),
+    profileApi: ref.watch(profileApiProvider),
+    expensesLocal: ref.watch(expensesDaoProvider),
+    listsLocal: ref.watch(listsDaoProvider),
+    retryPolicy: ref.watch(retryPolicyProvider),
+    conflictResolver: ref.watch(conflictResolverProvider),
+  );
+});
+
+/// App-facing sync facade (T8.1) — started at app launch (T8.5).
+///
+/// Plain (non-autoDispose) [Provider]: kept alive for the app's lifetime even
+/// though the bootstrap only `ref.read`s it, so the sync loop survives past
+/// the initial `start()` call. `onDispose` runs at container teardown.
+final syncServiceProvider = Provider<SyncService>((ref) {
+  final service = SyncService(
+    worker: ref.watch(syncWorkerProvider),
+    connectivity: ref.watch(connectivityGatewayProvider),
+    retryPolicy: ref.watch(retryPolicyProvider),
+  );
+  ref.onDispose(() => service.stop());
+  return service;
 });

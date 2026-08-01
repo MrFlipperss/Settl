@@ -136,6 +136,12 @@ class PendingSyncOperations extends Table {
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get syncedAt => dateTime().nullable()();
 
+  /// Number of failed replay attempts (drives the retry backoff, T8.4).
+  IntColumn get attemptCount => integer().withDefault(const Constant(0))();
+
+  /// Message of the most recent replay failure (diagnostics / UI, T8.4).
+  TextColumn get lastError => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {operationId};
 }
@@ -161,11 +167,19 @@ class AppDatabase extends _$AppDatabase implements Database {
   AppDatabase.open() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.addColumn(
+                pendingSyncOperations, pendingSyncOperations.attemptCount);
+            await m.addColumn(
+                pendingSyncOperations, pendingSyncOperations.lastError);
+          }
+        },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
         },

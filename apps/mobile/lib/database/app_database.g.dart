@@ -2830,6 +2830,20 @@ class $PendingSyncOperationsTable extends PendingSyncOperations
   late final GeneratedColumn<DateTime> syncedAt = GeneratedColumn<DateTime>(
       'synced_at', aliasedName, true,
       type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _attemptCountMeta =
+      const VerificationMeta('attemptCount');
+  @override
+  late final GeneratedColumn<int> attemptCount = GeneratedColumn<int>(
+      'attempt_count', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _lastErrorMeta =
+      const VerificationMeta('lastError');
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+      'last_error', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         operationId,
@@ -2838,7 +2852,9 @@ class $PendingSyncOperationsTable extends PendingSyncOperations
         operation,
         payload,
         createdAt,
-        syncedAt
+        syncedAt,
+        attemptCount,
+        lastError
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2895,6 +2911,16 @@ class $PendingSyncOperationsTable extends PendingSyncOperations
       context.handle(_syncedAtMeta,
           syncedAt.isAcceptableOrUnknown(data['synced_at']!, _syncedAtMeta));
     }
+    if (data.containsKey('attempt_count')) {
+      context.handle(
+          _attemptCountMeta,
+          attemptCount.isAcceptableOrUnknown(
+              data['attempt_count']!, _attemptCountMeta));
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(_lastErrorMeta,
+          lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta));
+    }
     return context;
   }
 
@@ -2919,6 +2945,10 @@ class $PendingSyncOperationsTable extends PendingSyncOperations
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       syncedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}synced_at']),
+      attemptCount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}attempt_count'])!,
+      lastError: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}last_error']),
     );
   }
 
@@ -2937,6 +2967,12 @@ class PendingSyncOperationRow extends DataClass
   final String payload;
   final DateTime createdAt;
   final DateTime? syncedAt;
+
+  /// Number of failed replay attempts (drives the retry backoff, T8.4).
+  final int attemptCount;
+
+  /// Message of the most recent replay failure (diagnostics / UI, T8.4).
+  final String? lastError;
   const PendingSyncOperationRow(
       {required this.operationId,
       required this.entityType,
@@ -2944,7 +2980,9 @@ class PendingSyncOperationRow extends DataClass
       required this.operation,
       required this.payload,
       required this.createdAt,
-      this.syncedAt});
+      this.syncedAt,
+      required this.attemptCount,
+      this.lastError});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2956,6 +2994,10 @@ class PendingSyncOperationRow extends DataClass
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || syncedAt != null) {
       map['synced_at'] = Variable<DateTime>(syncedAt);
+    }
+    map['attempt_count'] = Variable<int>(attemptCount);
+    if (!nullToAbsent || lastError != null) {
+      map['last_error'] = Variable<String>(lastError);
     }
     return map;
   }
@@ -2971,6 +3013,10 @@ class PendingSyncOperationRow extends DataClass
       syncedAt: syncedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(syncedAt),
+      attemptCount: Value(attemptCount),
+      lastError: lastError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastError),
     );
   }
 
@@ -2985,6 +3031,8 @@ class PendingSyncOperationRow extends DataClass
       payload: serializer.fromJson<String>(json['payload']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
+      attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      lastError: serializer.fromJson<String?>(json['lastError']),
     );
   }
   @override
@@ -2998,6 +3046,8 @@ class PendingSyncOperationRow extends DataClass
       'payload': serializer.toJson<String>(payload),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'syncedAt': serializer.toJson<DateTime?>(syncedAt),
+      'attemptCount': serializer.toJson<int>(attemptCount),
+      'lastError': serializer.toJson<String?>(lastError),
     };
   }
 
@@ -3008,7 +3058,9 @@ class PendingSyncOperationRow extends DataClass
           String? operation,
           String? payload,
           DateTime? createdAt,
-          Value<DateTime?> syncedAt = const Value.absent()}) =>
+          Value<DateTime?> syncedAt = const Value.absent(),
+          int? attemptCount,
+          Value<String?> lastError = const Value.absent()}) =>
       PendingSyncOperationRow(
         operationId: operationId ?? this.operationId,
         entityType: entityType ?? this.entityType,
@@ -3017,6 +3069,8 @@ class PendingSyncOperationRow extends DataClass
         payload: payload ?? this.payload,
         createdAt: createdAt ?? this.createdAt,
         syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
+        attemptCount: attemptCount ?? this.attemptCount,
+        lastError: lastError.present ? lastError.value : this.lastError,
       );
   PendingSyncOperationRow copyWithCompanion(
       PendingSyncOperationsCompanion data) {
@@ -3030,6 +3084,10 @@ class PendingSyncOperationRow extends DataClass
       payload: data.payload.present ? data.payload.value : this.payload,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       syncedAt: data.syncedAt.present ? data.syncedAt.value : this.syncedAt,
+      attemptCount: data.attemptCount.present
+          ? data.attemptCount.value
+          : this.attemptCount,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
     );
   }
 
@@ -3042,14 +3100,16 @@ class PendingSyncOperationRow extends DataClass
           ..write('operation: $operation, ')
           ..write('payload: $payload, ')
           ..write('createdAt: $createdAt, ')
-          ..write('syncedAt: $syncedAt')
+          ..write('syncedAt: $syncedAt, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('lastError: $lastError')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(operationId, entityType, entityId, operation,
-      payload, createdAt, syncedAt);
+      payload, createdAt, syncedAt, attemptCount, lastError);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3060,7 +3120,9 @@ class PendingSyncOperationRow extends DataClass
           other.operation == this.operation &&
           other.payload == this.payload &&
           other.createdAt == this.createdAt &&
-          other.syncedAt == this.syncedAt);
+          other.syncedAt == this.syncedAt &&
+          other.attemptCount == this.attemptCount &&
+          other.lastError == this.lastError);
 }
 
 class PendingSyncOperationsCompanion
@@ -3072,6 +3134,8 @@ class PendingSyncOperationsCompanion
   final Value<String> payload;
   final Value<DateTime> createdAt;
   final Value<DateTime?> syncedAt;
+  final Value<int> attemptCount;
+  final Value<String?> lastError;
   final Value<int> rowid;
   const PendingSyncOperationsCompanion({
     this.operationId = const Value.absent(),
@@ -3081,6 +3145,8 @@ class PendingSyncOperationsCompanion
     this.payload = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.lastError = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PendingSyncOperationsCompanion.insert({
@@ -3091,6 +3157,8 @@ class PendingSyncOperationsCompanion
     required String payload,
     required DateTime createdAt,
     this.syncedAt = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.lastError = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : operationId = Value(operationId),
         entityType = Value(entityType),
@@ -3106,6 +3174,8 @@ class PendingSyncOperationsCompanion
     Expression<String>? payload,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? syncedAt,
+    Expression<int>? attemptCount,
+    Expression<String>? lastError,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3116,6 +3186,8 @@ class PendingSyncOperationsCompanion
       if (payload != null) 'payload': payload,
       if (createdAt != null) 'created_at': createdAt,
       if (syncedAt != null) 'synced_at': syncedAt,
+      if (attemptCount != null) 'attempt_count': attemptCount,
+      if (lastError != null) 'last_error': lastError,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3128,6 +3200,8 @@ class PendingSyncOperationsCompanion
       Value<String>? payload,
       Value<DateTime>? createdAt,
       Value<DateTime?>? syncedAt,
+      Value<int>? attemptCount,
+      Value<String?>? lastError,
       Value<int>? rowid}) {
     return PendingSyncOperationsCompanion(
       operationId: operationId ?? this.operationId,
@@ -3137,6 +3211,8 @@ class PendingSyncOperationsCompanion
       payload: payload ?? this.payload,
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
+      attemptCount: attemptCount ?? this.attemptCount,
+      lastError: lastError ?? this.lastError,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3165,6 +3241,12 @@ class PendingSyncOperationsCompanion
     if (syncedAt.present) {
       map['synced_at'] = Variable<DateTime>(syncedAt.value);
     }
+    if (attemptCount.present) {
+      map['attempt_count'] = Variable<int>(attemptCount.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3181,6 +3263,8 @@ class PendingSyncOperationsCompanion
           ..write('payload: $payload, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('lastError: $lastError, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4650,6 +4734,8 @@ typedef $$PendingSyncOperationsTableCreateCompanionBuilder
   required String payload,
   required DateTime createdAt,
   Value<DateTime?> syncedAt,
+  Value<int> attemptCount,
+  Value<String?> lastError,
   Value<int> rowid,
 });
 typedef $$PendingSyncOperationsTableUpdateCompanionBuilder
@@ -4661,6 +4747,8 @@ typedef $$PendingSyncOperationsTableUpdateCompanionBuilder
   Value<String> payload,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
+  Value<int> attemptCount,
+  Value<String?> lastError,
   Value<int> rowid,
 });
 
@@ -4693,6 +4781,12 @@ class $$PendingSyncOperationsTableFilterComposer
 
   ColumnFilters<DateTime> get syncedAt => $composableBuilder(
       column: $table.syncedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get attemptCount => $composableBuilder(
+      column: $table.attemptCount, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get lastError => $composableBuilder(
+      column: $table.lastError, builder: (column) => ColumnFilters(column));
 }
 
 class $$PendingSyncOperationsTableOrderingComposer
@@ -4724,6 +4818,13 @@ class $$PendingSyncOperationsTableOrderingComposer
 
   ColumnOrderings<DateTime> get syncedAt => $composableBuilder(
       column: $table.syncedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get attemptCount => $composableBuilder(
+      column: $table.attemptCount,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get lastError => $composableBuilder(
+      column: $table.lastError, builder: (column) => ColumnOrderings(column));
 }
 
 class $$PendingSyncOperationsTableAnnotationComposer
@@ -4755,6 +4856,12 @@ class $$PendingSyncOperationsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get syncedAt =>
       $composableBuilder(column: $table.syncedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get attemptCount => $composableBuilder(
+      column: $table.attemptCount, builder: (column) => column);
+
+  GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
 }
 
 class $$PendingSyncOperationsTableTableManager extends RootTableManager<
@@ -4795,6 +4902,8 @@ class $$PendingSyncOperationsTableTableManager extends RootTableManager<
             Value<String> payload = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
+            Value<int> attemptCount = const Value.absent(),
+            Value<String?> lastError = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               PendingSyncOperationsCompanion(
@@ -4805,6 +4914,8 @@ class $$PendingSyncOperationsTableTableManager extends RootTableManager<
             payload: payload,
             createdAt: createdAt,
             syncedAt: syncedAt,
+            attemptCount: attemptCount,
+            lastError: lastError,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -4815,6 +4926,8 @@ class $$PendingSyncOperationsTableTableManager extends RootTableManager<
             required String payload,
             required DateTime createdAt,
             Value<DateTime?> syncedAt = const Value.absent(),
+            Value<int> attemptCount = const Value.absent(),
+            Value<String?> lastError = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               PendingSyncOperationsCompanion.insert(
@@ -4825,6 +4938,8 @@ class $$PendingSyncOperationsTableTableManager extends RootTableManager<
             payload: payload,
             createdAt: createdAt,
             syncedAt: syncedAt,
+            attemptCount: attemptCount,
+            lastError: lastError,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

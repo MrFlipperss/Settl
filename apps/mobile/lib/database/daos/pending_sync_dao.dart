@@ -33,6 +33,21 @@ class PendingSyncDao extends DatabaseAccessor<AppDatabase>
     return rows.map(_fromRow).toList();
   }
 
+  /// Operations still eligible for replay: never confirmed synced AND with
+  /// attempts remaining (`attemptCount < maxAttempts`), oldest first (T8.3).
+  ///
+  /// Permanently failed operations (see [getFailed]) are excluded so they
+  /// cannot block the FIFO drain.
+  Future<List<PendingSyncOperation>> getPendingRetryable(int maxAttempts) async {
+    final rows = await (select(pendingSyncOperations)
+          ..where((tbl) =>
+              tbl.syncedAt.isNull() &
+              tbl.attemptCount.isSmallerThanValue(maxAttempts))
+          ..orderBy([(tbl) => OrderingTerm.asc(tbl.createdAt)]))
+        .get();
+    return rows.map(_fromRow).toList();
+  }
+
   /// All operations, newest first (for diagnostics).
   Future<List<PendingSyncOperation>> getAll() async {
     final rows = await (select(pendingSyncOperations)
@@ -45,6 +60,33 @@ class PendingSyncDao extends DatabaseAccessor<AppDatabase>
     await (update(pendingSyncOperations)
           ..where((tbl) => tbl.operationId.equals(operationId)))
         .write(PendingSyncOperationsCompanion(syncedAt: Value(syncedAt)));
+  }
+
+  /// Records a failed replay attempt: bumps [PendingSyncOperations.attemptCount]
+  /// and stores [error] as [PendingSyncOperations.lastError] (T8.4).
+  Future<void> markFailed(
+    String operationId, {
+    required int attemptCount,
+    required String error,
+  }) async {
+    await (update(pendingSyncOperations)
+          ..where((tbl) => tbl.operationId.equals(operationId)))
+        .write(PendingSyncOperationsCompanion(
+      attemptCount: Value(attemptCount),
+      lastError: Value(error),
+    ));
+  }
+
+  /// Operations whose attempts have been exhausted (never confirmed synced),
+  /// oldest first — the "permanently failed" view for diagnostics / UI.
+  Future<List<PendingSyncOperation>> getFailed(int maxAttempts) async {
+    final rows = await (select(pendingSyncOperations)
+          ..where((tbl) =>
+              tbl.syncedAt.isNull() & tbl.attemptCount.isBiggerOrEqualValue(
+                  maxAttempts))
+          ..orderBy([(tbl) => OrderingTerm.asc(tbl.createdAt)]))
+        .get();
+    return rows.map(_fromRow).toList();
   }
 
   Future<void> deleteOperation(String operationId) async {
@@ -78,5 +120,7 @@ class PendingSyncDao extends DatabaseAccessor<AppDatabase>
         payload: row.payload,
         createdAt: row.createdAt,
         syncedAt: row.syncedAt,
+        attemptCount: row.attemptCount,
+        lastError: row.lastError,
       );
 }
