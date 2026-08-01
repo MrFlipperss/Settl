@@ -1,30 +1,50 @@
-// This is a basic Flutter widget test.
+// Basic smoke tests for the Settl app shell.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Verifies that the app boots through the GoRouter shell and that the
+// bottom navigation switches between the five tabs.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:settl/main.dart';
+import 'package:settl/app.dart';
+import 'package:settl/config/app_environment.dart';
+import 'package:settl/config/environment.dart';
+import 'package:settl/features/home/home_screen.dart';
+import 'package:settl/features/groups/groups_screen.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  setUpAll(() async {
+    // Mirrors main(): initializes AppConfig's late fields before the app boots.
+    SharedPreferences.setMockInitialValues({});
+    await Environment.init();
+    await AppConfig().initialize(environment: AppEnvironment.development);
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  testWidgets('App boots and shows the navigation shell', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: SettlApp()));
+    await tester.pumpAndSettle();
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // The shell renders the bottom navigation bar with all five tabs.
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Groups'), findsOneWidget);
+    expect(find.text('Spotlight'), findsOneWidget);
+    expect(find.text('Budget'), findsOneWidget);
+    expect(find.text('Profile'), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Home is the initial tab.
+    expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  testWidgets('Bottom navigation switches tabs', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: SettlApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Groups'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(GroupsScreen), findsOneWidget);
   });
 }

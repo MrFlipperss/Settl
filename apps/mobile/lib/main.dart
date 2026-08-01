@@ -3,8 +3,8 @@ import 'dart:developer' as developer show log;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:settl/config/app_environment.dart';
 import 'package:settl/config/environment.dart';
-import 'package:settl/config/config_provider.dart';
 import 'app.dart';
 
 Future<void> main() async {
@@ -12,6 +12,15 @@ Future<void> main() async {
 
   // Initialize configuration
   await Environment.init();
+
+  // Initialize the AppConfig singleton (fills its late-initialized fields).
+  // Required before any widget reads appConfigProvider.
+  const environment = kDebugMode
+      ? AppEnvironment.development
+      : kProfileMode
+          ? AppEnvironment.staging
+          : AppEnvironment.production;
+  await AppConfig().initialize(environment: environment);
 
   // Log the environment in debug mode
   if (kDebugMode) {

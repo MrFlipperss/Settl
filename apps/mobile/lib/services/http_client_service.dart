@@ -321,7 +321,7 @@ class HttpClientService {
 
   /// Close the HTTP client
   Future<void> close() async {
-    await _client.close();
+    _client.close();
   }
 }
 
