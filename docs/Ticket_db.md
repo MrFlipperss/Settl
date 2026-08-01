@@ -89,18 +89,18 @@
 ---
 ## Phase 6 — Authentication
 
-- [ ] T6.1 (D) - Supabase login.
-    
-- [ ] T6.2 (D) - Signup.
-    
-- [ ] T6.3 (D) - Session restore.
-    
-- [ ] T6.4 (D) - Logout.
-    
-- [ ] T6.5 (D) - Bootstrap profile.
-    
-- [ ] T6.6 (D) - Token refresh. Milestone: Authentication complete.
-    
+- [x] T6.1 (D) - Supabase login. Phone OTP via `AuthService.signInWithPhone` → `AuthRepository.sendOtp` (`signInWithOtp`, `OtpChannel.sms`). E.164 normalization via `phone_numbers_parser`.
+
+- [x] T6.2 (D) - Signup. `AuthService.verifyOtp` → `AuthRepository.verifyOtp` (`verifyOTP`, `OtpType.sms`); login and signup are unified in the Supabase phone-OTP flow (`shouldCreateUser: true`).
+
+- [x] T6.3 (D) - Session restore. `AuthRepository.restoreSession` reads `currentSession`; session persisted to secure storage via `SupabaseSecureStorage` (custom `LocalStorage` over `flutter_secure_storage`).
+
+- [x] T6.4 (D) - Logout. `AuthService.signOut` → `AuthRepository.signOut` (`signOut`, local scope); clears the persisted session.
+
+- [x] T6.5 (D) - Bootstrap profile. On first successful OTP verify, `AuthService` creates a local `Profile` row (generated participant UUID); backend reconciliation is handled by the sync layer (Phases 7–8).
+
+- [x] T6.6 (D) - Token refresh. `AuthRepository.refreshSession` (`refreshSession`) + `autoRefreshToken: true` in `Supabase.initialize`. Milestone: Authentication complete.
+
 ---
 ## Phase 7 — API Layer
 

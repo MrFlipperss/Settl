@@ -4,11 +4,11 @@ Last Updated: 2026-08-01
 
 ## Current Project Phase
 
-**Current Phase:** Authentication
+**Current Phase:** API Layer
 
-**Current Ticket:** T6.1 – Supabase login (Phase 5 complete)
+**Current Ticket:** T7.1 – Profile API (Phase 6 complete)
 
-**Overall Progress:** ~78%
+**Overall Progress:** ~82%
 
 ---
 
@@ -144,18 +144,43 @@ UI → Repository → Local DB → Sync Layer → Backend
 
 ## Phase 6 — Authentication
 
-- Login: 🟡
-- Signup: 🟡
-- Session Restore: ⬜
-- Logout: ⬜
-- Bootstrap Profile: ⬜
-- Token Refresh: ⬜
+Status: ✅ Complete
+
+- Dependencies: ✅ `supabase_flutter ^2.16.0` (gotrue 2.26.0, supabase 2.14.0) + `phone_numbers_parser ^9.0.25` (maintained fork of discontinued `phone_number`)
+- Phone OTP: ✅ `AuthService.signInWithPhone` sends SMS OTP (`signInWithOtp`, `OtpChannel.sms`); login and signup unified in the Supabase phone-OTP flow (`shouldCreateUser: true`)
+- OTP Verify: ✅ `AuthService.verifyOtp` → `verifyOTP` with `OtpType.sms`; returns domain `AuthSession`
+- E.164 Normalization: ✅ `PhoneUtils.normalizePhone` via `phone_numbers_parser` (sync API — adapted from the async `phone_number` example in `flutter_app_context.md`)
+- Session Restore: ✅ `AuthRepository.restoreSession` reads `currentSession`
+- Logout: ✅ `AuthService.signOut` (local scope)
+- Bootstrap Profile: ✅ `AuthService` creates a local `Profile` row on first sign-in (generated participant UUID; backend reconciliation deferred to sync layer)
+- Token Refresh: ✅ `AuthRepository.refreshSession` + `autoRefreshToken: true`
+- Secure Session Persistence: ✅ `SupabaseSecureStorage` — custom `LocalStorage` over `flutter_secure_storage` (Android Keystore / iOS Keychain), honoring T1.8 (credentials only in secure storage, never SharedPreferences)
+- Providers: ✅ `supabaseClientProvider`, `authRepositoryProvider`, `authServiceProvider`, `authStateProvider` (StreamProvider) in `providers.dart`
+- App Init: ✅ `Supabase.initialize` in `main()` with secure localStorage
+- Tests: ✅ 18 auth tests (normalizePhone, AuthSession model, AuthService with fake repositories), all passing
+
+### Phase 6 file map
+
+```
+lib/
+├── utils/
+│   └── phone_utils.dart
+├── models/
+│   └── auth_session.dart
+├── repositories/
+│   ├── interfaces/
+│   │   └── auth_repository.dart
+│   └── auth_repository_impl.dart
+└── services/
+    ├── auth_service.dart
+    └── supabase_secure_storage.dart
+```
 
 ---
 
 ## Phase 7 — API Layer
 
-Status: 🟡 Partial
+Status: ⬜ Not started
 
 ---
 
@@ -259,13 +284,14 @@ Status: 🟡 Partial
 
 ## Known Issues
 
+Phase 6 (Authentication) is complete: phone OTP login/signup, session restore, logout, local profile bootstrap, token refresh; 18 passing auth tests; session persisted via SupabaseSecureStorage over flutter_secure_storage.
 Phase 5 (Repositories) is complete: 5 repository interfaces + DAO-backed implementations, 18 passing repository tests, deprecated dynamic-`_db` repos removed.
 Phase 4 (Models) is complete: Balance model added, all 10 domain models have copyWith (sentinel-based null clearing), value equality, and snake_case JSON round-trip serialization, verified by 28 model tests.
 Phase 3 (Local Database) is complete: Drift schema (9 tables), DAO layer, providers, and 19 passing DAO tests.
 Phase 2 (Theme & Navigation) is complete: Material 3 themes, system/light/dark switching, responsive shell.
 Phase 1 is complete: routing (T1.5) verified with widget tests; secure token storage (T1.8) implemented with flutter_secure_storage.
-Known pre-existing compile errors remain only in lib/sync/sync_service.dart (imports supabase_flutter, not a dependency; uses `client` getter on abstract Database) - scheduled for Phase 8 (Synchronization).
-The old orphaned auth/API scaffolding (auth_service, api_service, auth_repository, profile_api_repository) was removed in Phase 5 - authentication is rebuilt in Phase 6 with Supabase, and the API layer in Phase 7.
+Known pre-existing compile error remains only in lib/sync/sync_service.dart (uses `client` getter on abstract Database) - scheduled for Phase 8 (Synchronization). The prior `uri_does_not_exist` on its supabase_flutter import cleared once supabase_flutter became a dependency in Phase 6.
+The old orphaned auth/API scaffolding (auth_service, api_service, auth_repository, profile_api_repository) was removed in Phase 5 - authentication was rebuilt in Phase 6 with Supabase; the API layer follows in Phase 7.
 
 ---
 

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:settl/config/app_environment.dart';
 import 'package:settl/config/environment.dart';
+import 'package:settl/services/supabase_secure_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
 
 Future<void> main() async {
@@ -21,6 +23,18 @@ Future<void> main() async {
           ? AppEnvironment.staging
           : AppEnvironment.production;
   await AppConfig().initialize(environment: environment);
+
+  // Initialize Supabase (auth + backend client). The session is persisted to
+  // platform secure storage via SupabaseSecureStorage (T1.8: credentials only
+  // in secure storage — never SharedPreferences).
+  await Supabase.initialize(
+    url: AppConfig().supabaseUrl,
+    publishableKey: AppConfig().supabaseAnonKey,
+    authOptions: FlutterAuthClientOptions(
+      localStorage: SupabaseSecureStorage(),
+      autoRefreshToken: true,
+    ),
+  );
 
   // Log the environment in debug mode
   if (kDebugMode) {
