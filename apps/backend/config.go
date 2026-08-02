@@ -13,6 +13,16 @@ type Config struct {
 	SupabaseJWKSURL string
 	SupabaseURL     string
 	SupabaseAnonKey string
+	Env             string
+}
+
+// IsDevelopment reports whether the server is running in a local/dev
+// environment. Defaults to false (production behavior) unless APP_ENV is
+// explicitly set to "development" or "dev" — the dev_token auth bypass and
+// other dev-only conveniences must never activate simply because an env var
+// is unset.
+func (c Config) IsDevelopment() bool {
+	return c.Env == "development" || c.Env == "dev"
 }
 
 func LoadConfig() Config {
@@ -47,5 +57,6 @@ func LoadConfig() Config {
 		SupabaseJWKSURL: os.Getenv("SUPABASE_JWKS_URL"),
 		SupabaseURL:     supaURL,
 		SupabaseAnonKey: supaAnonKey,
+		Env:             os.Getenv("APP_ENV"),
 	}
 }

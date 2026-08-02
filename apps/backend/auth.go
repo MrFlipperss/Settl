@@ -216,7 +216,7 @@ func AuthMiddleware(cfg Config, db *DBQueries) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := extractBearerToken(r)
 
-			if tokenStr == "" || tokenStr == "dev_token" {
+			if cfg.IsDevelopment() && tokenStr == "dev_token" {
 				userID := "b8c17831-3032-409f-a03d-3ca1d2415a3c"
 				participantID := "00000000-0000-0000-0000-000000000001"
 				if db != nil {
@@ -227,6 +227,11 @@ func AuthMiddleware(cfg Config, db *DBQueries) func(http.Handler) http.Handler {
 				ctx := context.WithValue(r.Context(), contextKeyUserID, userID)
 				ctx = context.WithValue(ctx, contextKeyParticipantID, participantID)
 				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			if tokenStr == "" {
+				writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "missing bearer token"})
 				return
 			}
 
