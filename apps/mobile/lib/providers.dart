@@ -33,10 +33,11 @@ import '../services/http_client_service.dart';
 import '../services/secure_storage_service.dart';
 import '../sync/conflict_resolver.dart';
 import '../sync/connectivity_service.dart';
+import '../sync/pull_worker.dart';
+import '../sync/push_worker.dart';
 import '../sync/retry_policy.dart';
 import '../sync/sync_queue.dart';
 import '../sync/sync_service.dart';
-import '../sync/sync_worker.dart';
 
 /// Provider for the app's theme mode (light / dark / system).
 /// Defaults to following the system setting; can be overridden from the
@@ -46,12 +47,6 @@ final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 /// Provider for tracking the current selected index in the bottom navigation bar.
 /// This is now enhanced to work with our configuration system
 final selectedIndexProvider = StateProvider<int>((ref) => 0);
-
-/// Example of how to use configuration values in providers
-final exampleConfigProvider = Provider<String>((ref) {
-  final config = ref.watch(appConfigProvider);
-  return 'Running ${config.appName} v${config.appVersion} in ${config.environment} mode';
-});
 
 /// Provider for the HTTP client service
 final httpClientServiceProvider = Provider<HttpClientService>((ref) {
@@ -99,7 +94,10 @@ final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
 });
 
 final contactRepositoryProvider = Provider<ContactRepository>((ref) {
-  return ContactRepositoryImpl(ref.watch(contactsDaoProvider));
+  return ContactRepositoryImpl(
+    ref.watch(contactsDaoProvider),
+    ref.watch(contactsApiProvider),
+  );
 });
 
 final collectionRepositoryProvider = Provider<CollectionRepository>((ref) {
@@ -107,11 +105,14 @@ final collectionRepositoryProvider = Provider<CollectionRepository>((ref) {
 });
 
 final balanceRepositoryProvider = Provider<BalanceRepository>((ref) {
-  return BalanceRepositoryImpl(ref.watch(expensesDaoProvider));
+  return BalanceRepositoryImpl(ref.watch(expenseRepositoryProvider));
 });
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
-  return ProfileRepositoryImpl(ref.watch(profilesDaoProvider));
+  return ProfileRepositoryImpl(
+    ref.watch(profilesDaoProvider),
+    ref.watch(profileApiProvider),
+  );
 });
 
 /// The initialized Supabase client. Requires `Supabase.initialize()` to have
@@ -145,12 +146,19 @@ final authStateProvider = StreamProvider<AuthSession?>((ref) {
 
 /// Base [ApiClient] for authenticated `/api/v1` endpoints (T7). Injects the
 /// current Supabase access token as the `Authorization: Bearer` header via
-/// [authServiceProvider]; when no session exists requests go out without it.
+/// [authRepositoryProvider]; when no session exists requests go out without
+/// it.
+///
+/// The token is read from [authRepositoryProvider] (not the higher-level
+/// [authServiceProvider] facade) so the provider graph stays acyclic: the
+/// facade depends on the profile repository, which now depends on the API
+/// layer built on top of this client.
 final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(
     client: ref.watch(httpClientProvider),
     baseUrl: ref.watch(apiBaseUrlProvider),
-    tokenProvider: () => ref.read(authServiceProvider).currentSession?.accessToken,
+    tokenProvider: () =>
+        ref.read(authRepositoryProvider).currentSession?.accessToken,
   );
 });
 
@@ -212,18 +220,26 @@ final syncQueueProvider = Provider<SyncQueue>((ref) {
   return SyncQueue(ref.watch(pendingSyncDaoProvider));
 });
 
-/// Replays queued mutations and pulls remote state (T8.3).
-final syncWorkerProvider = Provider<SyncWorker>((ref) {
-  return SyncWorker(
+/// Replays queued local mutations against the backend (T8.3, push half).
+final pushWorkerProvider = Provider<PushWorker>((ref) {
+  return PushWorker(
     dao: ref.watch(pendingSyncDaoProvider),
     expensesApi: ref.watch(expensesApiProvider),
     contactsApi: ref.watch(contactsApiProvider),
     collectionsApi: ref.watch(collectionsApiProvider),
     profileApi: ref.watch(profileApiProvider),
-    expensesLocal: ref.watch(expensesDaoProvider),
-    listsLocal: ref.watch(listsDaoProvider),
     retryPolicy: ref.watch(retryPolicyProvider),
     conflictResolver: ref.watch(conflictResolverProvider),
+  );
+});
+
+/// Pulls remote state into the local database (T8.3, pull half).
+final pullWorkerProvider = Provider<PullWorker>((ref) {
+  return PullWorker(
+    expensesApi: ref.watch(expensesApiProvider),
+    collectionsApi: ref.watch(collectionsApiProvider),
+    expensesLocal: ref.watch(expensesDaoProvider),
+    listsLocal: ref.watch(listsDaoProvider),
   );
 });
 
@@ -234,7 +250,8 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
 /// the initial `start()` call. `onDispose` runs at container teardown.
 final syncServiceProvider = Provider<SyncService>((ref) {
   final service = SyncService(
-    worker: ref.watch(syncWorkerProvider),
+    pushWorker: ref.watch(pushWorkerProvider),
+    pullWorker: ref.watch(pullWorkerProvider),
     connectivity: ref.watch(connectivityGatewayProvider),
     retryPolicy: ref.watch(retryPolicyProvider),
   );

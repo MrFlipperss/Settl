@@ -9,7 +9,7 @@ import '../models/pending_sync_operation.dart';
 /// Offline-first mutation queue facade (T8.2).
 ///
 /// Enqueues local writes as [PendingSyncOperation] rows whose [payload] is the
-/// snake_case wire JSON of the matching request DTO, so [SyncWorker] can replay
+/// snake_case wire JSON of the matching request DTO, so [PushWorker] can replay
 /// them to the backend unchanged. When the DTO carries no id, the queue
 /// generates one and bakes it into the payload — keeping
 /// [PendingSyncOperation.entityId] and the replayed request id in sync, which

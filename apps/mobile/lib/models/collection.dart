@@ -1,11 +1,11 @@
-class ListModel {
+class Collection {
   final String id;
   final String name;
   final String accountNumber;
   final String createdBy;
   final DateTime createdAt;
 
-  const ListModel({
+  const Collection({
     required this.id,
     required this.name,
     required this.accountNumber,
@@ -13,7 +13,7 @@ class ListModel {
     required this.createdAt,
   });
 
-  factory ListModel.fromJson(Map<String, dynamic> json) => ListModel(
+  factory Collection.fromJson(Map<String, dynamic> json) => Collection(
         id: json['id'] as String,
         name: json['name'] as String,
         accountNumber: json['account_number'] as String,
@@ -29,14 +29,14 @@ class ListModel {
         'created_at': createdAt.toIso8601String(),
       };
 
-  ListModel copyWith({
+  Collection copyWith({
     String? id,
     String? name,
     String? accountNumber,
     String? createdBy,
     DateTime? createdAt,
   }) =>
-      ListModel(
+      Collection(
         id: id ?? this.id,
         name: name ?? this.name,
         accountNumber: accountNumber ?? this.accountNumber,
@@ -47,7 +47,7 @@ class ListModel {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ListModel &&
+      other is Collection &&
           other.id == id &&
           other.name == name &&
           other.accountNumber == accountNumber &&
@@ -60,6 +60,6 @@ class ListModel {
 
   @override
   String toString() =>
-      'ListModel(id: $id, name: $name, accountNumber: $accountNumber, '
+      'Collection(id: $id, name: $name, accountNumber: $accountNumber, '
       'createdBy: $createdBy)';
 }

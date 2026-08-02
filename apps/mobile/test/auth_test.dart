@@ -339,4 +339,9 @@ class FakeProfileRepository implements ProfileRepository {
   Future<void> deleteProfileByUserId(String userId) async {
     _profiles.removeWhere((p) => p.userId == userId);
   }
+
+  @override
+  Future<void> ensureRemoteProfile(Profile profile) async {
+    // No-op: auth tests exercise the local profile path only.
+  }
 }

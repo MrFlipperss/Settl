@@ -9,11 +9,11 @@ import 'package:settl/database/daos/expenses_dao.dart';
 import 'package:settl/database/daos/lists_dao.dart';
 import 'package:settl/database/daos/pending_sync_dao.dart';
 import 'package:settl/database/daos/profiles_dao.dart';
+import 'package:settl/models/collection.dart';
+import 'package:settl/models/collection_member.dart';
 import 'package:settl/models/contact.dart';
 import 'package:settl/models/expense.dart';
 import 'package:settl/models/expense_split.dart';
-import 'package:settl/models/list_member.dart';
-import 'package:settl/models/list_model.dart';
 import 'package:settl/models/pending_sync_operation.dart';
 import 'package:settl/models/profile.dart';
 import 'package:sqlite3/open.dart';
@@ -206,7 +206,7 @@ void main() {
   });
 
   group('ListsDao', () {
-    final list = ListModel(
+    final collection = Collection(
       id: 'list-1',
       name: 'Trip',
       accountNumber: 'ACC-1',
@@ -214,16 +214,16 @@ void main() {
       createdAt: DateTime.utc(2026, 8, 1),
     );
 
-    test('create + getListById + members', () async {
-      await listsDao.createList(list);
-      await listsDao.addMemberToList(ListMember(
-        listId: 'list-1',
+    test('create + getCollectionById + members', () async {
+      await listsDao.createCollection(collection);
+      await listsDao.addMemberToCollection(CollectionMember(
+        collectionId: 'list-1',
         participantId: 'p-1',
         addedAt: DateTime.utc(2026, 8, 1),
       ));
 
-      final fetched = await listsDao.getListById('list-1');
-      final members = await listsDao.getMembersOfList('list-1');
+      final fetched = await listsDao.getCollectionById('list-1');
+      final members = await listsDao.getMembersOfCollection('list-1');
 
       expect(fetched!.name, 'Trip');
       expect(fetched.accountNumber, 'ACC-1');
@@ -231,9 +231,9 @@ void main() {
       expect(members.single.participantId, 'p-1');
     });
 
-    test('getListsByUser filters', () async {
-      await listsDao.createList(list);
-      await listsDao.createList(ListModel(
+    test('getCollectionsByUser filters', () async {
+      await listsDao.createCollection(collection);
+      await listsDao.createCollection(Collection(
         id: 'list-2',
         name: 'Rent',
         accountNumber: 'ACC-2',
@@ -241,36 +241,36 @@ void main() {
         createdAt: DateTime.utc(2026, 8, 2),
       ));
 
-      final mine = await listsDao.getListsByUser('user-1');
+      final mine = await listsDao.getCollectionsByUser('user-1');
 
       expect(mine.map((l) => l.id), ['list-1']);
     });
 
-    test('removeMemberFromList', () async {
-      await listsDao.createList(list);
-      await listsDao.addMemberToList(ListMember(
-        listId: 'list-1',
+    test('removeMemberFromCollection', () async {
+      await listsDao.createCollection(collection);
+      await listsDao.addMemberToCollection(CollectionMember(
+        collectionId: 'list-1',
         participantId: 'p-1',
         addedAt: DateTime.utc(2026, 8, 1),
       ));
 
-      await listsDao.removeMemberFromList('list-1', 'p-1');
+      await listsDao.removeMemberFromCollection('list-1', 'p-1');
 
-      expect(await listsDao.getMembersOfList('list-1'), isEmpty);
+      expect(await listsDao.getMembersOfCollection('list-1'), isEmpty);
     });
 
-    test('deleteList cascades to members', () async {
-      await listsDao.createList(list);
-      await listsDao.addMemberToList(ListMember(
-        listId: 'list-1',
+    test('deleteCollection cascades to members', () async {
+      await listsDao.createCollection(collection);
+      await listsDao.addMemberToCollection(CollectionMember(
+        collectionId: 'list-1',
         participantId: 'p-1',
         addedAt: DateTime.utc(2026, 8, 1),
       ));
 
-      await listsDao.deleteList('list-1');
+      await listsDao.deleteCollection('list-1');
 
-      expect(await listsDao.getListById('list-1'), isNull);
-      expect(await listsDao.getMembersOfList('list-1'), isEmpty);
+      expect(await listsDao.getCollectionById('list-1'), isNull);
+      expect(await listsDao.getMembersOfCollection('list-1'), isEmpty);
     });
   });
 

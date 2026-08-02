@@ -1,89 +1,93 @@
 import 'package:drift/drift.dart';
 
 import '../app_database.dart';
-import '../../models/list_member.dart';
-import '../../models/list_model.dart';
+import '../../models/collection_member.dart';
+import '../../models/collection.dart';
 
 part 'lists_dao.g.dart';
 
-/// CRUD access to [Lists] and [ListMembers], mapped to domain models.
+/// CRUD access to the [Lists] and [ListMembers] tables, mapped to
+/// [Collection]/[CollectionMember] domain models.
 @DriftAccessor(tables: [Lists, ListMembers])
 class ListsDao extends DatabaseAccessor<AppDatabase> with _$ListsDaoMixin {
   ListsDao(super.db);
 
-  Future<ListModel?> getListById(String listId) async {
-    final row = await (select(lists)..where((tbl) => tbl.listId.equals(listId)))
+  Future<Collection?> getCollectionById(String collectionId) async {
+    final row = await (select(lists)..where((tbl) => tbl.listId.equals(collectionId)))
         .getSingleOrNull();
-    return row == null ? null : _listFromRow(row);
+    return row == null ? null : _collectionFromRow(row);
   }
 
-  Future<List<ListModel>> getListsByUser(String userId) async {
+  Future<List<Collection>> getCollectionsByUser(String userId) async {
     final rows = await (select(lists)
           ..where((tbl) => tbl.createdBy.equals(userId))
           ..orderBy([(tbl) => OrderingTerm.desc(tbl.createdAt)]))
         .get();
-    return rows.map(_listFromRow).toList();
+    return rows.map(_collectionFromRow).toList();
   }
 
-  Future<List<ListModel>> getAllLists() async {
+  Future<List<Collection>> getAllCollections() async {
     final rows = await (select(lists)
           ..orderBy([(tbl) => OrderingTerm.desc(tbl.createdAt)]))
         .get();
-    return rows.map(_listFromRow).toList();
+    return rows.map(_collectionFromRow).toList();
   }
 
-  Future<void> createList(ListModel listModel) async {
+  Future<void> createCollection(Collection collection) async {
     await into(lists).insert(ListsCompanion.insert(
-      listId: listModel.id,
-      name: listModel.name,
-      accountNumber: listModel.accountNumber,
-      createdBy: listModel.createdBy,
-      createdAt: listModel.createdAt,
+      listId: collection.id,
+      name: collection.name,
+      accountNumber: collection.accountNumber,
+      createdBy: collection.createdBy,
+      createdAt: collection.createdAt,
     ));
   }
 
-  Future<void> updateList(ListModel listModel) async {
-    await (update(lists)..where((tbl) => tbl.listId.equals(listModel.id)))
+  Future<void> updateCollection(Collection collection) async {
+    await (update(lists)..where((tbl) => tbl.listId.equals(collection.id)))
         .write(ListsCompanion(
-      name: Value(listModel.name),
-      accountNumber: Value(listModel.accountNumber),
+      name: Value(collection.name),
+      accountNumber: Value(collection.accountNumber),
     ));
   }
 
-  Future<void> deleteList(String listId) async {
-    await (delete(lists)..where((tbl) => tbl.listId.equals(listId))).go();
+  Future<void> deleteCollection(String collectionId) async {
+    await (delete(lists)..where((tbl) => tbl.listId.equals(collectionId))).go();
     await (delete(listMembers)
-          ..where((tbl) => tbl.listId.equals(listId)))
+          ..where((tbl) => tbl.listId.equals(collectionId)))
         .go();
   }
 
-  // -- List members ---------------------------------------------------------
+  // -- Collection members ---------------------------------------------------
 
-  Future<void> addMemberToList(ListMember listMember) async {
+  Future<void> addMemberToCollection(CollectionMember collectionMember) async {
     await into(listMembers).insert(ListMembersCompanion.insert(
-      listId: listMember.listId,
-      participantId: listMember.participantId,
-      addedAt: listMember.addedAt,
+      listId: collectionMember.collectionId,
+      participantId: collectionMember.participantId,
+      addedAt: collectionMember.addedAt,
     ));
   }
 
-  Future<List<ListMember>> getMembersOfList(String listId) async {
+  Future<List<CollectionMember>> getMembersOfCollection(
+      String collectionId) async {
     final rows = await (select(listMembers)
-          ..where((tbl) => tbl.listId.equals(listId)))
+          ..where((tbl) => tbl.listId.equals(collectionId)))
         .get();
     return rows.map(_memberFromRow).toList();
   }
 
-  Future<void> removeMemberFromList(String listId, String participantId) async {
+  Future<void> removeMemberFromCollection(
+      String collectionId, String participantId) async {
     await (delete(listMembers)
           ..where((tbl) =>
-              tbl.listId.equals(listId) & tbl.participantId.equals(participantId)))
+              tbl.listId.equals(collectionId) &
+              tbl.participantId.equals(participantId)))
         .go();
   }
 
   // -- Mappers --------------------------------------------------------------
 
-  ListModel _listFromRow(ListRow row) => ListModel(
+  Collection _collectionFromRow(ListRow row) => Collection(
         id: row.listId,
         name: row.name,
         accountNumber: row.accountNumber,
@@ -91,8 +95,8 @@ class ListsDao extends DatabaseAccessor<AppDatabase> with _$ListsDaoMixin {
         createdAt: row.createdAt,
       );
 
-  ListMember _memberFromRow(ListMemberRow row) => ListMember(
-        listId: row.listId,
+  CollectionMember _memberFromRow(ListMemberRow row) => CollectionMember(
+        collectionId: row.listId,
         participantId: row.participantId,
         addedAt: row.addedAt,
       );

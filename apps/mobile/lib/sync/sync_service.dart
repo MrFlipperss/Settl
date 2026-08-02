@@ -1,27 +1,31 @@
 import 'dart:async';
 
 import 'connectivity_service.dart';
+import 'pull_worker.dart';
+import 'push_worker.dart';
 import 'retry_policy.dart';
-import 'sync_worker.dart';
 
 /// App-facing sync facade (T8.1).
 ///
-/// Owns the [SyncWorker] and [ConnectivityGateway] lifecycle, exposes sync
-/// status and connectivity as broadcast streams, and triggers a queue drain +
-/// pull when the device comes online, on [requestSync], or — after a failure —
-/// on the retry backoff schedule.
+/// Owns the [PushWorker] (queue drain), [PullWorker] (remote refresh) and
+/// [ConnectivityGateway] lifecycle, exposes sync status and connectivity as
+/// broadcast streams, and triggers a push + pull when the device comes online,
+/// on [requestSync], or — after a failure — on the retry backoff schedule.
 enum SyncStatus { idle, syncing, error }
 
 class SyncService {
   SyncService({
-    required SyncWorker worker,
+    required PushWorker pushWorker,
+    required PullWorker pullWorker,
     required ConnectivityGateway connectivity,
     required RetryPolicy retryPolicy,
-  })  : _worker = worker,
+  })  : _pushWorker = pushWorker,
+        _pullWorker = pullWorker,
         _connectivity = connectivity,
         _retryPolicy = retryPolicy;
 
-  final SyncWorker _worker;
+  final PushWorker _pushWorker;
+  final PullWorker _pullWorker;
   final ConnectivityGateway _connectivity;
   final RetryPolicy _retryPolicy;
 
@@ -61,14 +65,14 @@ class SyncService {
   }
 
   /// Drains the queue then pulls remote state. No-op while a sync is already
-  /// running; re-attempts (with backoff) when the drain or pull fails.
+  /// running; re-attempts (with backoff) when the push or pull fails.
   Future<void> requestSync() async {
     if (_draining) return;
     _draining = true;
     _setStatus(SyncStatus.syncing);
     try {
-      await _worker.drainQueue();
-      await _worker.refresh();
+      await _pushWorker.drainQueue();
+      await _pullWorker.refresh();
       _setStatus(SyncStatus.idle);
     } catch (_) {
       _setStatus(SyncStatus.error);

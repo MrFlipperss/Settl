@@ -22,10 +22,11 @@ import 'package:settl/database/daos/pending_sync_dao.dart';
 import 'package:settl/models/pending_sync_operation.dart';
 import 'package:settl/sync/conflict_resolver.dart';
 import 'package:settl/sync/connectivity_service.dart';
+import 'package:settl/sync/pull_worker.dart';
+import 'package:settl/sync/push_worker.dart';
 import 'package:settl/sync/retry_policy.dart';
 import 'package:settl/sync/sync_queue.dart';
 import 'package:settl/sync/sync_service.dart';
-import 'package:settl/sync/sync_worker.dart';
 import 'package:sqlite3/open.dart';
 
 const _baseUrl = 'http://localhost:3000/api';
@@ -286,8 +287,8 @@ void main() {
     });
   });
 
-  group('SyncWorker', () {
-    SyncWorker workerWith(http.Client client) => SyncWorker(
+  group('PushWorker', () {
+    PushWorker pushWorkerWith(http.Client client) => PushWorker(
           dao: pendingSyncDao,
           expensesApi: ExpensesApi(
               ApiClient(client: client, baseUrl: _baseUrl)),
@@ -297,8 +298,6 @@ void main() {
               ApiClient(client: client, baseUrl: _baseUrl)),
           profileApi:
               ProfileApi(ApiClient(client: client, baseUrl: _baseUrl)),
-          expensesLocal: expensesDao,
-          listsLocal: listsDao,
           retryPolicy: _retryPolicy,
           conflictResolver: conflictResolver,
         );
@@ -326,7 +325,7 @@ void main() {
         ),
       );
 
-      final synced = await workerWith(client).drainQueue();
+      final synced = await pushWorkerWith(client).drainQueue();
 
       expect(synced, 1);
       expect(await pendingSyncDao.getPending(), isEmpty);
@@ -349,7 +348,7 @@ void main() {
         ),
       );
 
-      final synced = await workerWith(client).drainQueue();
+      final synced = await pushWorkerWith(client).drainQueue();
 
       expect(synced, 0);
       final retryable = await pendingSyncDao.getPendingRetryable(3);
@@ -374,7 +373,7 @@ void main() {
         ),
       );
 
-      final synced = await workerWith(client).drainQueue();
+      final synced = await pushWorkerWith(client).drainQueue();
 
       expect(synced, 0);
       expect(await pendingSyncDao.getPendingRetryable(3), isEmpty);
@@ -401,7 +400,7 @@ void main() {
         ),
       );
 
-      final synced = await workerWith(client).drainQueue();
+      final synced = await pushWorkerWith(client).drainQueue();
 
       expect(synced, 0);
       expect(await pendingSyncDao.getAll(), isEmpty);
@@ -427,7 +426,7 @@ void main() {
         ),
       );
 
-      await workerWith(client).drainQueue();
+      await pushWorkerWith(client).drainQueue();
 
       final failed = await pendingSyncDao.getFailed(3);
       expect(failed, hasLength(1));
@@ -475,10 +474,21 @@ void main() {
         createdAt: DateTime.utc(2026, 7, 2),
       ));
 
-      await workerWith(client).drainQueue();
+      await pushWorkerWith(client).drainQueue();
 
       expect(postedIds, ['exp-old', 'exp-new']);
     });
+  });
+
+  group('PullWorker', () {
+    PullWorker pullWorkerWith(http.Client client) => PullWorker(
+          expensesApi:
+              ExpensesApi(ApiClient(client: client, baseUrl: _baseUrl)),
+          collectionsApi:
+              CollectionsApi(ApiClient(client: client, baseUrl: _baseUrl)),
+          expensesLocal: expensesDao,
+          listsLocal: listsDao,
+        );
 
     test('refresh pulls expenses (with splits) and collections into DAOs',
         () async {
@@ -501,7 +511,7 @@ void main() {
         return http.Response('not found', 404);
       });
 
-      await workerWith(client).refresh();
+      await pullWorkerWith(client).refresh();
 
       final expense = await expensesDao.getExpenseById('exp-1');
       expect(expense, isNotNull);
@@ -513,7 +523,7 @@ void main() {
       expect(splits.single.shareAmount, 12.5);
       expect(splits.single.participantId, 'u1');
 
-      final list = await listsDao.getListById('g1');
+      final list = await listsDao.getCollectionById('g1');
       expect(list, isNotNull);
       expect(list!.name, 'Trip g1');
       expect(list.accountNumber, 'acc-g1');
@@ -526,7 +536,7 @@ void main() {
       FakeConnectivityGateway connectivity,
     ) =>
         SyncService(
-          worker: SyncWorker(
+          pushWorker: PushWorker(
             dao: pendingSyncDao,
             expensesApi:
                 ExpensesApi(ApiClient(client: client, baseUrl: _baseUrl)),
@@ -536,10 +546,16 @@ void main() {
                 CollectionsApi(ApiClient(client: client, baseUrl: _baseUrl)),
             profileApi:
                 ProfileApi(ApiClient(client: client, baseUrl: _baseUrl)),
-            expensesLocal: expensesDao,
-            listsLocal: listsDao,
             retryPolicy: _retryPolicy,
             conflictResolver: conflictResolver,
+          ),
+          pullWorker: PullWorker(
+            expensesApi:
+                ExpensesApi(ApiClient(client: client, baseUrl: _baseUrl)),
+            collectionsApi:
+                CollectionsApi(ApiClient(client: client, baseUrl: _baseUrl)),
+            expensesLocal: expensesDao,
+            listsLocal: listsDao,
           ),
           connectivity: connectivity,
           retryPolicy: _retryPolicy,
@@ -630,5 +646,53 @@ void main() {
       await sub.cancel();
       await service.stop();
     });
+    test('a failed sync schedules a backoff retry that recovers to idle',
+      () async {
+      // GET /v1/expenses/ returns 500 on the first call, then behaves like
+      // happyBackend() from the second call onward — simulating a transient
+      // server hiccup that resolves itself before the retry fires.
+      var expenseListCalls = 0;
+      final flakyClient = MockClient((request) async {
+      if (request.method == 'GET' &&
+            request.url.path == '/api/v1/expenses/') {
+              expenseListCalls++;
+              if (expenseListCalls == 1) {
+                return http.Response('server error', 500);
+              }
+              return http.Response(
+                jsonEncode([expenseJson(id: 'exp-1')]),
+                200,
+                headers: {'content-type': 'application/json'},
+              );
+            }
+            if (request.method == 'GET' && request.url.path == '/api/v1/groups/') {
+              return http.Response('[]', 200,
+                  headers: {'content-type': 'application/json'});
+            }
+            return http.Response('not found', 404);
+          });
+
+          final service = serviceWith(flakyClient, FakeConnectivityGateway(true));
+          final statuses = <SyncStatus>[];
+          final sub = service.statusStream.listen(statuses.add);
+
+          // start() runs the initial sync, which fails on the flaky first call.
+          await service.start();
+          expect(service.status, SyncStatus.error);
+          expect(await expensesDao.getAllExpenses(), isEmpty);
+
+          // The scheduled backoff retry (baseDelay = 10ms in _retryPolicy) fires
+          // on its own and this time the backend is healthy.
+          await Future<void>.delayed(const Duration(milliseconds: 60));
+
+          expect(service.status, SyncStatus.idle);
+          expect(expenseListCalls, greaterThanOrEqualTo(2));
+          expect(await expensesDao.getAllExpenses(), hasLength(1));
+          expect(statuses, contains(SyncStatus.error));
+          expect(statuses.last, SyncStatus.idle);
+
+          await sub.cancel();
+          await service.stop();
+        });
   });
 }

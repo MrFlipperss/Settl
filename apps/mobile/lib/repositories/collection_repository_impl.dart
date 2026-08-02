@@ -1,6 +1,6 @@
 import 'package:settl/database/daos/lists_dao.dart';
-import 'package:settl/models/list_member.dart';
-import 'package:settl/models/list_model.dart';
+import 'package:settl/models/collection_member.dart';
+import 'package:settl/models/collection.dart';
 import 'package:settl/repositories/interfaces/collection_repository.dart';
 
 /// Drift-backed [CollectionRepository].
@@ -13,33 +13,39 @@ class CollectionRepositoryImpl implements CollectionRepository {
   CollectionRepositoryImpl(this._dao);
 
   @override
-  Future<ListModel?> getListById(String listId) => _dao.getListById(listId);
+  Future<Collection?> getCollectionById(String collectionId) =>
+      _dao.getCollectionById(collectionId);
 
   @override
-  Future<List<ListModel>> getListsByUser(String userId) =>
-      _dao.getListsByUser(userId);
+  Future<List<Collection>> getCollectionsByUser(String userId) =>
+      _dao.getCollectionsByUser(userId);
 
   @override
-  Future<List<ListModel>> getAllLists() => _dao.getAllLists();
+  Future<List<Collection>> getAllCollections() => _dao.getAllCollections();
 
   @override
-  Future<void> createList(ListModel listModel) => _dao.createList(listModel);
+  Future<void> createCollection(Collection collection) =>
+      _dao.createCollection(collection);
 
   @override
-  Future<void> updateList(ListModel listModel) => _dao.updateList(listModel);
+  Future<void> updateCollection(Collection collection) =>
+      _dao.updateCollection(collection);
 
   @override
-  Future<void> deleteList(String listId) => _dao.deleteList(listId);
+  Future<void> deleteCollection(String collectionId) =>
+      _dao.deleteCollection(collectionId);
 
   @override
-  Future<void> addMemberToList(ListMember listMember) =>
-      _dao.addMemberToList(listMember);
+  Future<void> addMemberToCollection(CollectionMember collectionMember) =>
+      _dao.addMemberToCollection(collectionMember);
 
   @override
-  Future<List<ListMember>> getMembersOfList(String listId) =>
-      _dao.getMembersOfList(listId);
+  Future<List<CollectionMember>> getMembersOfCollection(
+          String collectionId) =>
+      _dao.getMembersOfCollection(collectionId);
 
   @override
-  Future<void> removeMemberFromList(String listId, String participantId) =>
-      _dao.removeMemberFromList(listId, participantId);
+  Future<void> removeMemberFromCollection(
+          String collectionId, String participantId) =>
+      _dao.removeMemberFromCollection(collectionId, participantId);
 }

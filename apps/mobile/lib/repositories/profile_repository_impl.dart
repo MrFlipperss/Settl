@@ -1,15 +1,18 @@
+import 'package:settl/api/models/api_requests.dart';
+import 'package:settl/api/profile_api.dart';
 import 'package:settl/database/daos/profiles_dao.dart';
 import 'package:settl/models/profile.dart';
 import 'package:settl/repositories/interfaces/profile_repository.dart';
 
-/// Drift-backed [ProfileRepository].
+/// Drift-backed [ProfileRepository] with a remote mirror seam.
 ///
-/// Delegates all persistence to [ProfilesDao]; no HTTP or schema knowledge
-/// leaks into the UI layer.
+/// Delegates local persistence to [ProfilesDao] and remote profile upserts to
+/// [ProfileApi]; no schema or HTTP knowledge leaks into the UI layer.
 class ProfileRepositoryImpl implements ProfileRepository {
   final ProfilesDao _dao;
+  final ProfileApi _api;
 
-  ProfileRepositoryImpl(this._dao);
+  ProfileRepositoryImpl(this._dao, this._api);
 
   @override
   Future<Profile?> getProfileByUserId(String userId) =>
@@ -31,4 +34,13 @@ class ProfileRepositoryImpl implements ProfileRepository {
   @override
   Future<void> deleteProfileByUserId(String userId) =>
       _dao.deleteProfileByUserId(userId);
+
+  @override
+  Future<void> ensureRemoteProfile(Profile profile) async {
+    await _api.createProfile(ApiCreateProfileRequest(
+      displayName: profile.displayName,
+      phoneNumber: profile.phoneNumber,
+      upiId: profile.upiId,
+    ));
+  }
 }

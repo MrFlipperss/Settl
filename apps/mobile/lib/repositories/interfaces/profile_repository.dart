@@ -17,4 +17,11 @@ abstract class ProfileRepository {
   Future<void> updateProfile(Profile profile);
 
   Future<void> deleteProfileByUserId(String userId);
+
+  /// Mirrors [profile] to the backend (idempotent upsert of `POST /v1/profile`).
+  ///
+  /// Used at app bootstrap (T8.5) so the signed-in user has a remote profile
+  /// row for other participants to find. Best-effort: callers decide how to
+  /// treat failures (offline / backend unreachable defer to the next sync).
+  Future<void> ensureRemoteProfile(Profile profile);
 }

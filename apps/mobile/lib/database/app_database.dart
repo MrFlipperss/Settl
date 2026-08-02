@@ -4,8 +4,6 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'database.dart';
-
 part 'app_database.g.dart';
 
 // ---------------------------------------------------------------------------
@@ -161,7 +159,7 @@ class PendingSyncOperations extends Table {
   ReceiptDetails,
   PendingSyncOperations,
 ])
-class AppDatabase extends _$AppDatabase implements Database {
+class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   AppDatabase.open() : super(_openConnection());
@@ -184,14 +182,6 @@ class AppDatabase extends _$AppDatabase implements Database {
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
-
-  @override
-  Object get instance => this;
-
-  @override
-  Future<void> initialize() async {
-    // Connection opens lazily on first query; nothing extra to do.
-  }
 }
 
 LazyDatabase _openConnection() {

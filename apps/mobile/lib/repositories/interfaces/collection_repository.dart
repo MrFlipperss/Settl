@@ -1,28 +1,29 @@
-import 'package:settl/models/list_member.dart';
-import 'package:settl/models/list_model.dart';
+import 'package:settl/models/collection_member.dart';
+import 'package:settl/models/collection.dart';
 
-/// Contract for collection (list) + membership persistence.
+/// Contract for collection + membership persistence.
 ///
 /// Implementations back the UI with local storage (Drift DAOs) or, once the
 /// sync layer lands, a remote API. The UI and services depend on this
 /// interface only — never on HTTP or database details.
 abstract class CollectionRepository {
-  Future<ListModel?> getListById(String listId);
+  Future<Collection?> getCollectionById(String collectionId);
 
-  Future<List<ListModel>> getListsByUser(String userId);
+  Future<List<Collection>> getCollectionsByUser(String userId);
 
-  Future<List<ListModel>> getAllLists();
+  Future<List<Collection>> getAllCollections();
 
-  Future<void> createList(ListModel listModel);
+  Future<void> createCollection(Collection collection);
 
-  Future<void> updateList(ListModel listModel);
+  Future<void> updateCollection(Collection collection);
 
-  /// Deletes the list and all of its memberships.
-  Future<void> deleteList(String listId);
+  /// Deletes the collection and all of its memberships.
+  Future<void> deleteCollection(String collectionId);
 
-  Future<void> addMemberToList(ListMember listMember);
+  Future<void> addMemberToCollection(CollectionMember collectionMember);
 
-  Future<List<ListMember>> getMembersOfList(String listId);
+  Future<List<CollectionMember>> getMembersOfCollection(String collectionId);
 
-  Future<void> removeMemberFromList(String listId, String participantId);
+  Future<void> removeMemberFromCollection(
+      String collectionId, String participantId);
 }

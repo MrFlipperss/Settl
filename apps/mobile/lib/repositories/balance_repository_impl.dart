@@ -1,8 +1,8 @@
-import 'package:settl/database/daos/expenses_dao.dart';
 import 'package:settl/models/balance.dart';
 import 'package:settl/models/expense.dart';
 import 'package:settl/models/expense_split.dart';
 import 'package:settl/repositories/interfaces/balance_repository.dart';
+import 'package:settl/repositories/interfaces/expense_repository.dart';
 
 /// Local [BalanceRepository].
 ///
@@ -14,9 +14,9 @@ import 'package:settl/repositories/interfaces/balance_repository.dart';
 /// - only non-zero balances are returned (a positive [Balance.amountOwed]
 ///   means [Balance.fromParticipantId] owes [Balance.toParticipantId]).
 class BalanceRepositoryImpl implements BalanceRepository {
-  final ExpensesDao _expensesDao;
+  final ExpenseRepository _expenses;
 
-  BalanceRepositoryImpl(this._expensesDao);
+  BalanceRepositoryImpl(this._expenses);
 
   @override
   Future<List<Balance>> getBalancesForParticipant(String participantId) async {
@@ -30,11 +30,11 @@ class BalanceRepositoryImpl implements BalanceRepository {
 
   @override
   Future<List<Balance>> getAllBalances() async {
-    final expenses = await _expensesDao.getAllExpenses();
+    final expenses = await _expenses.getAllExpenses();
     final owed = <String, double>{};
 
     for (final expense in expenses) {
-      final splits = await _expensesDao.getSplitsForExpense(expense.id);
+      final splits = await _expenses.getSplitsForExpense(expense.id);
       for (final split in splits) {
         // A participant never owes the payer their own share of a bill
         // they paid, and a payer's split is owed to the payer itself.

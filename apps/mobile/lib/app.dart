@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:settl/api/models/api_requests.dart';
 import 'package:settl/config/config_provider.dart';
 import 'package:settl/theme/app_theme.dart';
 import 'providers.dart';
@@ -87,18 +86,14 @@ class _SettlAppState extends ConsumerState<SettlApp> {
     if (!mounted || profile == null) return;
 
     try {
-      await ref.read(profileApiProvider).createProfile(
-            ApiCreateProfileRequest(
-              displayName: profile.displayName,
-              phoneNumber: profile.phoneNumber,
-              upiId: profile.upiId,
-            ),
-          );
+      await ref.read(profileRepositoryProvider).ensureRemoteProfile(profile);
     } catch (_) {
       // Offline / backend unreachable — retried on the next sync pass.
     }
     try {
-      await ref.read(contactsApiProvider).claimContacts(profile.phoneNumber);
+      await ref
+          .read(contactRepositoryProvider)
+          .claimContacts(profile.phoneNumber);
     } catch (_) {
       // Same — claim is retried on the next sync pass.
     }

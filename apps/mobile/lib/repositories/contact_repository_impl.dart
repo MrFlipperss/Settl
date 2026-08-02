@@ -1,15 +1,17 @@
+import 'package:settl/api/contacts_api.dart';
 import 'package:settl/database/daos/contacts_dao.dart';
 import 'package:settl/models/contact.dart';
 import 'package:settl/repositories/interfaces/contact_repository.dart';
 
-/// Drift-backed [ContactRepository].
+/// Drift-backed [ContactRepository] with a remote claim seam.
 ///
-/// Delegates all persistence to [ContactsDao]; no HTTP or schema knowledge
-/// leaks into the UI layer.
+/// Delegates local persistence to [ContactsDao] and remote contact claiming to
+/// [ContactsApi]; no schema or HTTP knowledge leaks into the UI layer.
 class ContactRepositoryImpl implements ContactRepository {
   final ContactsDao _dao;
+  final ContactsApi _api;
 
-  ContactRepositoryImpl(this._dao);
+  ContactRepositoryImpl(this._dao, this._api);
 
   @override
   Future<Contact?> getContactById(String participantId) =>
@@ -31,4 +33,8 @@ class ContactRepositoryImpl implements ContactRepository {
   @override
   Future<void> deleteContact(String participantId) =>
       _dao.deleteContact(participantId);
+
+  @override
+  Future<int> claimContacts(String phoneNumber) =>
+      _api.claimContacts(phoneNumber);
 }

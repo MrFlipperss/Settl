@@ -3,17 +3,22 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:settl/api/api_client.dart';
+import 'package:settl/api/contacts_api.dart';
+import 'package:settl/api/profile_api.dart';
 import 'package:settl/database/app_database.dart';
 import 'package:settl/database/daos/contacts_dao.dart';
 import 'package:settl/database/daos/expenses_dao.dart';
 import 'package:settl/database/daos/lists_dao.dart';
 import 'package:settl/database/daos/profiles_dao.dart';
 import 'package:settl/models/balance.dart';
+import 'package:settl/models/collection.dart';
+import 'package:settl/models/collection_member.dart';
 import 'package:settl/models/contact.dart';
 import 'package:settl/models/expense.dart';
 import 'package:settl/models/expense_split.dart';
-import 'package:settl/models/list_member.dart';
-import 'package:settl/models/list_model.dart';
 import 'package:settl/models/profile.dart';
 import 'package:settl/repositories/balance_repository_impl.dart';
 import 'package:settl/repositories/collection_repository_impl.dart';
@@ -21,6 +26,13 @@ import 'package:settl/repositories/contact_repository_impl.dart';
 import 'package:settl/repositories/expense_repository_impl.dart';
 import 'package:settl/repositories/profile_repository_impl.dart';
 import 'package:sqlite3/open.dart';
+
+/// Never-invoked HTTP stub for the remote seams of repository impls; the
+/// repository tests exercise local persistence only.
+final _stubApiClient = ApiClient(
+  client: MockClient((_) async => http.Response('not used', 500)),
+  baseUrl: 'http://localhost:3000/api',
+);
 
 void main() {
   if (Platform.isWindows) {
@@ -39,10 +51,16 @@ void main() {
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
     expenseRepo = ExpenseRepositoryImpl(ExpensesDao(db));
-    contactRepo = ContactRepositoryImpl(ContactsDao(db));
+    contactRepo = ContactRepositoryImpl(
+      ContactsDao(db),
+      ContactsApi(_stubApiClient),
+    );
     collectionRepo = CollectionRepositoryImpl(ListsDao(db));
-    balanceRepo = BalanceRepositoryImpl(ExpensesDao(db));
-    profileRepo = ProfileRepositoryImpl(ProfilesDao(db));
+    balanceRepo = BalanceRepositoryImpl(expenseRepo);
+    profileRepo = ProfileRepositoryImpl(
+      ProfilesDao(db),
+      ProfileApi(_stubApiClient),
+    );
   });
 
   tearDown(() async {
@@ -150,7 +168,7 @@ void main() {
   });
 
   group('CollectionRepositoryImpl', () {
-    final listModel = ListModel(
+    final collection = Collection(
       id: 'list-1',
       name: 'Trip to Goa',
       accountNumber: 'ABC-123',
@@ -159,39 +177,40 @@ void main() {
     );
 
     test('create + get + getAll roundtrip', () async {
-      await collectionRepo.createList(listModel);
+      await collectionRepo.createCollection(collection);
 
-      expect(await collectionRepo.getListById('list-1'), listModel);
-      expect((await collectionRepo.getAllLists()).map((l) => l.id), ['list-1']);
+      expect(await collectionRepo.getCollectionById('list-1'), collection);
+      expect((await collectionRepo.getAllCollections()).map((l) => l.id),
+          ['list-1']);
     });
 
     test('members roundtrip and removal', () async {
-      await collectionRepo.createList(listModel);
-      await collectionRepo.addMemberToList(ListMember(
-        listId: 'list-1',
+      await collectionRepo.createCollection(collection);
+      await collectionRepo.addMemberToCollection(CollectionMember(
+        collectionId: 'list-1',
         participantId: 'part-1',
         addedAt: DateTime.utc(2026, 8, 1),
       ));
 
-      expect((await collectionRepo.getMembersOfList('list-1'))
+      expect((await collectionRepo.getMembersOfCollection('list-1'))
           .map((m) => m.participantId), ['part-1']);
 
-      await collectionRepo.removeMemberFromList('list-1', 'part-1');
-      expect(await collectionRepo.getMembersOfList('list-1'), isEmpty);
+      await collectionRepo.removeMemberFromCollection('list-1', 'part-1');
+      expect(await collectionRepo.getMembersOfCollection('list-1'), isEmpty);
     });
 
-    test('deleteList removes the list and its members', () async {
-      await collectionRepo.createList(listModel);
-      await collectionRepo.addMemberToList(ListMember(
-        listId: 'list-1',
+    test('deleteCollection removes the collection and its members', () async {
+      await collectionRepo.createCollection(collection);
+      await collectionRepo.addMemberToCollection(CollectionMember(
+        collectionId: 'list-1',
         participantId: 'part-1',
         addedAt: DateTime.utc(2026, 8, 1),
       ));
 
-      await collectionRepo.deleteList('list-1');
+      await collectionRepo.deleteCollection('list-1');
 
-      expect(await collectionRepo.getListById('list-1'), isNull);
-      expect(await collectionRepo.getMembersOfList('list-1'), isEmpty);
+      expect(await collectionRepo.getCollectionById('list-1'), isNull);
+      expect(await collectionRepo.getMembersOfCollection('list-1'), isEmpty);
     });
   });
 

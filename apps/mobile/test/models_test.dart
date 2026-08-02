@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:settl/models/balance.dart';
+import 'package:settl/models/collection.dart';
+import 'package:settl/models/collection_member.dart';
 import 'package:settl/models/contact.dart';
 import 'package:settl/models/expense.dart';
 import 'package:settl/models/expense_split.dart';
-import 'package:settl/models/list_member.dart';
-import 'package:settl/models/list_model.dart';
 import 'package:settl/models/participant.dart';
 import 'package:settl/models/pending_sync_operation.dart';
 import 'package:settl/models/profile.dart';
@@ -126,8 +126,8 @@ void main() {
     });
   });
 
-  group('ListModel', () {
-    final list = ListModel(
+  group('Collection', () {
+    final collection = Collection(
       id: 'list-1',
       name: 'Goa Trip',
       accountNumber: 'LST-0001',
@@ -136,28 +136,28 @@ void main() {
     );
 
     test('toJson/fromJson round-trips', () {
-      final json = list.toJson();
+      final json = collection.toJson();
       expect(json['account_number'], 'LST-0001');
-      expect(ListModel.fromJson(json), list);
-      expect(ListModel.fromJson(json).hashCode, list.hashCode);
+      expect(Collection.fromJson(json), collection);
+      expect(Collection.fromJson(json).hashCode, collection.hashCode);
     });
 
     test('copyWith updates only provided fields', () {
-      final updated = list.copyWith(name: 'Flatmates');
+      final updated = collection.copyWith(name: 'Flatmates');
       expect(updated.name, 'Flatmates');
       expect(updated.accountNumber, 'LST-0001');
     });
   });
 
-  group('ListMember', () {
-    final member = ListMember(
-      listId: 'list-1',
+  group('CollectionMember', () {
+    final member = CollectionMember(
+      collectionId: 'list-1',
       participantId: 'part-2',
       addedAt: DateTime.utc(2026, 5, 21, 9),
     );
 
     test('toJson/fromJson round-trips', () {
-      final parsed = ListMember.fromJson(member.toJson());
+      final parsed = CollectionMember.fromJson(member.toJson());
       expect(parsed, member);
       expect(parsed.hashCode, member.hashCode);
     });
@@ -165,7 +165,7 @@ void main() {
     test('copyWith updates only provided fields', () {
       final updated = member.copyWith(participantId: 'part-3');
       expect(updated.participantId, 'part-3');
-      expect(updated.listId, 'list-1');
+      expect(updated.collectionId, 'list-1');
     });
   });
 
