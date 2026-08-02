@@ -44,6 +44,10 @@ import '../sync/sync_service.dart';
 /// Profile settings screen.
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 
+/// Provider for tracking whether the liquid glass effect is enabled.
+/// When enabled, it overrides the theme with a glassmorphism effect.
+final liquidGlassEnabledProvider = StateProvider<bool>((ref) => false);
+
 /// Provider for tracking the current selected index in the bottom navigation bar.
 /// This is now enhanced to work with our configuration system
 final selectedIndexProvider = StateProvider<int>((ref) => 0);

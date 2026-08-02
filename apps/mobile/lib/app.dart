@@ -36,6 +36,7 @@ class _SettlAppState extends ConsumerState<SettlApp> {
   Widget build(BuildContext context) {
     final appConfig = ref.watch(appConfigProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final useLiquidGlass = ref.watch(liquidGlassEnabledProvider);
 
     // T8.5 — start the sync layer once, after the first frame: reconcile the
     // remote profile + claims, then run the initial drain and pull.
@@ -48,8 +49,8 @@ class _SettlAppState extends ConsumerState<SettlApp> {
     return MaterialApp.router(
       title: appConfig.appName,
       debugShowCheckedModeBanner: !appConfig.enableDebug, // Hide debug banner in production
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
+      theme: useLiquidGlass ? AppTheme.liquid : AppTheme.light,
+      darkTheme: useLiquidGlass ? AppTheme.liquidDark : AppTheme.dark,
       themeMode: themeMode,
       routerConfig: appRouter,
     );

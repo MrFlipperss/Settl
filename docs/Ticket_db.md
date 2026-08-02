@@ -136,15 +136,15 @@
 ---
 ## Phase 9 — Home
 
-- [ ] T9.1 (C) - Home page layout.
+- [x] T9.1 (C) - Home page layout.
     
-- [ ] T9.2 (C) - Search bar.
+- [x] T9.2 (C) - Search bar.
     
-- [ ] T9.3 (D) - Recent expenses.
+- [x] T9.3 (D) - Recent expenses.
     
-- [ ] T9.4 (D) - Quick actions.
+- [x] T9.4 (D) - Quick actions.
     
-- [ ] T9.5 (D) - Sync indicator. Milestone: Functional landing page.
+- [x] T9.5 (D) - Sync indicator. Milestone: Functional landing page.
     
 ---
 ## Phase 10 — Contacts
