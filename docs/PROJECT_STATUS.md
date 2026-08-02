@@ -1,6 +1,6 @@
 # Project Status
 
-Last Updated: 2026-08-01
+Last Updated: 2026-08-02
 
 ## Current Project Phase
 
@@ -14,11 +14,11 @@ Last Updated: 2026-08-01
 
 ## Current Priorities
 
-1. Review generated Flutter foundation against `flutter_app_context.md`.
-2. Replace direct Supabase repositories with offline-first repositories.
-3. Introduce a local database (Drift recommended).
-4. Implement the synchronization layer.
-5. Begin the core expense workflow.
+1. **Phase 9 — Home (in progress):** T9.1–T9.5 search-first landing page — prominent search/spotlight input (primary action), compact recent expenses, quick actions, subtle sync indicator; explicitly NOT a dashboard. Milestone: functional landing page.
+2. **Phase 10 — Contacts:** T10.1–T10.4 — contact search UI, backend integration, local search fallback, create-contact flow (`PhoneUtils.normalizePhone` E.164 mandate). Milestone: people-first workflow.
+3. **Phase 11 — Add Expense:** T11.1–T11.7 — expense screen, amount/payer/participant selection, split editor, repository integration, offline save. Milestone: core feature complete.
+4. **Phase 12 — Collections:** T12.1–T12.5 — collections list, create/edit/delete, use during expense creation.
+5. **Phase 13 — Balances:** T13.1–T13.3 — balance screen, settlement UI, refresh integration. Users can settle debts.
 
 ---
 
@@ -207,7 +207,8 @@ Status: ✅ Complete — all seven tickets (T8.1–T8.7) shipped with 21 passing
 lib/sync/
 ├── sync_service.dart        # facade: status/online streams, start/stop/requestSync, retry timer
 ├── sync_queue.dart          # enqueue mutations (id baked into payload for idempotent replay)
-├── sync_worker.dart         # FIFO drain + refresh (expenses w/ splits, collections)
+├── push_worker.dart         # FIFO drain + replay of queued mutations (T8.3, push half)
+├── pull_worker.dart         # remote refresh → local DAOs (expenses w/ splits, collections; T8.3, pull half)
 ├── retry_policy.dart        # maxAttempts 5, baseDelay 2s, maxDelay 2min, transient 408/429/5xx
 ├── connectivity_service.dart# ConnectivityGateway over connectivity_plus v7
 └── conflict_resolver.dart   # 409 → server-wins (drop) or keep-local (getFailed)
@@ -221,6 +222,53 @@ lib/sync/
 - Connectivity Listener (T8.6): ✅ `ConnectivityGatewayImpl` (connectivity_plus v7 list API)
 - Conflict Handling (T8.7): ✅ `ConflictResolver` server-wins default. Milestone: Offline-first working.
 - Tests: ✅ 21 sync tests (`test/sync_test.dart`, MockClient + FakeConnectivityGateway) + 4 widget tests; full suite 143 passing; `dart analyze lib` clean for new code (13 pre-existing warnings remain in `config/environment.dart` + `services/http_client_service.dart`)
+
+---
+
+## Post-Phase-8 Architecture Audit
+
+Status: ✅ Complete — full read-through of `apps/mobile` (Flutter) and `apps/backend` (Go) with fixes F1–F7. `dart analyze lib` = 13 warnings (all pre-existing in `config/environment.dart` + `services/http_client_service.dart`); `flutter test` = 147/147 passing.
+
+### Assessment: 8.5/10
+
+The offline-first layering (UI → Repository → Local DB → Sync → Backend) holds and repositories are the only data seam. Deductions: legacy `ListModel` naming persisted into the domain layer, dead scaffolding from earlier phases, one layering violation that bypassed repositories at bootstrap, and an oversized single sync worker.
+
+### Files changed (F1–F7)
+
+| Fix | What |
+|-----|------|
+| F1 | `app.dart` bootstrap now calls `ProfileRepository.ensureRemoteProfile` + `ContactRepository.claimContacts` instead of API clients directly; both repository impls take API clients; `apiClientProvider` token sourced from `authRepositoryProvider` (broke a provider cycle the repo→API wiring introduced) |
+| F2 | `BalanceRepositoryImpl` depends on `ExpenseRepository` (not `ExpensesDao`) — repositories no longer import other aggregates' DAOs |
+| F3 | Domain naming: `ListModel`→`Collection`, `ListMember`→`CollectionMember` (files → `collection.dart`/`collection_member.dart`); DAO/repo/sync methods collection-flavored; `CollectionMember.listId`→`collectionId`; wire keys + tables unchanged |
+| F4 | Deleted dead `lib/database/database.dart`; dropped `implements Database` + its members (`instance`/`initialize()`) from `AppDatabase` |
+| F5 | Deleted dead `exampleConfigProvider` from `providers.dart` |
+| F6 | Deleted dead `lib/services/expense_service.dart` |
+| F7 | Split `SyncWorker` → `PushWorker` (drain/replay/conflict) + `PullWorker` (remote refresh); `SyncService`, providers, and tests updated |
+
+### Fixed vs intentional
+
+**Fixed (audit):** repo-bypass in app bootstrap; `BalanceRepositoryImpl`→DAO dependency; stale "List*" naming; dead `Database` interface / `expense_service` / `exampleConfigProvider`; monolithic worker.
+**Intentional (left as-is):** generated drift `.g.dart` files (build_runner output, regenerated — never hand-edited); `Lists`/`ListMembers` table names + `Expense.listId` + `list_id` wire keys (schema/backend compat); backend 409 `expectedVersion: 0` quirk (defensive `ConflictResolver`); 13 pre-existing analyzer warnings; `HealthApi`/`BalancesApi` scaffolding (tested T7 artifacts).
+
+### Remaining recommendations
+
+- Rename drift tables `Lists`/`ListMembers` → `Collections`/`CollectionMembers` and `Expense.listId`→`collectionId` in a schema migration (v3) so domain naming is complete end-to-end.
+- Clear the 13 analyzer warnings (unused `prefs` in `config/environment.dart`; unnecessary `!` + unused `dart:io` import in `services/http_client_service.dart`).
+- T9.1 home-screen work (`lib/features/home/home_screen.dart` + test) is uncommitted in-tree — commit before building further phases.
+
+---
+
+## UI Design Principles (product direction — apply to all future UI work)
+
+Established during the T9 home-screen polish. Treat as guardrails, not suggestions.
+
+1. **Minimal over maximal.** Keep the home screen as minimal as possible. Continuously ask whether another element can be *removed* rather than added. Every new element is a cost, not a win.
+2. **Sync stays an implementation detail.** Do NOT enable the sync indicator unless it is completely invisible when idle and only appears while syncing, offline, or on error. Synchronization should never surface as a first-class UI element. (The existing `_SyncIndicator` already satisfies the visibility contract; it remains gated off pending a deliberate decision.)
+3. **Search bar is the primary interaction point.** Quick actions must not compete with it — keep them quiet, and reduce or remove them if they ever become redundant.
+4. **People-first, not list-first.** Collections are optional shortcuts, never the primary organizational unit. The UI should always feel people-first.
+5. **Conversational language.** Prefer conversational phrasing (e.g. "You paid ₹500") over raw data presentation (e.g. "Amount: ₹500") in future screens.
+6. **Time-grouped recents (future).** Eventually group recent expenses by "Today", "Yesterday", etc. instead of a single flat "Recent" list. `_formatDate` in `home_screen.dart` already computes the Today/Yesterday distinction.
+7. **Effortless recording is the differentiator.** Avoid adding features or visual clutter. The app's biggest differentiator is how effortless it feels to record an expense — not how much information it displays.
 
 ---
 
@@ -320,6 +368,7 @@ Phase 2 (Theme & Navigation) is complete: Material 3 themes, system/light/dark s
 Phase 1 is complete: routing (T1.5) verified with widget tests; secure token storage (T1.8) implemented with flutter_secure_storage.
 Phase 7 (API Layer) is complete: `ApiClient` + 6 domain API clients with 34 passing MockClient tests; the sync layer (Phase 8) now consumes them.
 Phase 8 (Synchronization) is complete: the pre-existing compile error in `lib/sync/sync_service.dart` (uses `client` getter on abstract Database) is fixed — the file was rewritten as the `SyncService` facade; 21 new sync tests + 4 widget tests, 143 total passing.
+Post-Phase-8 audit (F1–F7) is complete: repo-bypass in bootstrap fixed, BalanceRepository decoupled from ExpensesDao, List*/ListMember renamed to Collection/CollectionMember, dead `database.dart`/`expense_service.dart`/`exampleConfigProvider` removed, `SyncWorker` split into `PushWorker`+`PullWorker`; 147/147 tests passing, analyzer at the 13-warning baseline.
 The old orphaned auth/API scaffolding (auth_service, api_service, auth_repository, profile_api_repository) was removed in Phase 5 - authentication was rebuilt in Phase 6 with Supabase; the API layer follows in Phase 7.
 
 ---

@@ -123,7 +123,7 @@
 
 - [x] T8.2 (D) - Pending operation queue. `SyncQueue` (`lib/sync/sync_queue.dart`) + `PendingSyncDao.getPendingRetryable(maxAttempts)`/`getFailed(maxAttempts)`. `enqueueExpense`/`enqueueContact`/`enqueueCollection`/`enqueueProfile` serialize the request DTO to a snake_case wire payload, baking a generated id into it so `entityId` and the replayed request id match (idempotent retries).
 
-- [x] T8.3 (D) - Background sync worker. `SyncWorker` (`lib/sync/sync_worker.dart`): FIFO `drainQueue()` replays via the T7 API clients (`markSynced` on success); `refresh()` pulls expenses (with splits) and collections into the DAOs; unsupported ops (contact update/delete, profile delete, collection update/delete) fail permanently via `getFailed` instead of blocking the queue.
+- [x] T8.3 (D) - Background sync worker. Split into `PushWorker` (`lib/sync/push_worker.dart`) and `PullWorker` (`lib/sync/pull_worker.dart`). `PushWorker.drainQueue()` replays the FIFO retryable queue via the T7 API clients (`markSynced` on success); unsupported ops (contact update/delete, profile delete, collection update/delete) fail permanently via `getFailed` instead of blocking the queue. `PullWorker.refresh()` pulls expenses (with splits) and collections into the DAOs. `SyncService` owns both and calls `drainQueue()` then `refresh()` on each sync pass.
 
 - [x] T8.4 (D) - Retry strategy. `RetryPolicy` (`lib/sync/retry_policy.dart`): maxAttempts=5, baseDelay=2s, maxDelay=2min, exponential backoff; transient = network errors + 408/429/5xx; permanent 4xx stops retrying and surfaces via `getFailed`.
 
@@ -131,7 +131,7 @@
 
 - [x] T8.6 (D) - Connectivity listener. `ConnectivityGateway` + `ConnectivityGatewayImpl` (`lib/sync/connectivity_service.dart`) over `connectivity_plus` v7 list API (`any(r != none)`); `SyncService` subscribes on `start()` and drains whenever the device comes online.
 
-- [x] T8.7 (D) - Conflict handling. `ConflictResolver` (`lib/sync/conflict_resolver.dart`): 409s emit a `ConflictResolutionEvent` and resolve server-wins (drop mutation, next refresh re-pulls) or keep-local (op moves to `getFailed` for manual review). Milestone: Offline-first working. Verified: 21 new sync tests + 4 widget tests (bootstrap degradation), 143 total passing; `dart analyze lib` clean for new code.
+- [x] T8.7 (D) - Conflict handling. `ConflictResolver` (`lib/sync/conflict_resolver.dart`): 409s emit a `ConflictResolutionEvent` and resolve server-wins (drop mutation, next refresh re-pulls) or keep-local (op moves to `getFailed` for manual review). Milestone: Offline-first working. Verified: 21 new sync tests + 4 widget tests (bootstrap degradation), 143 total passing; `dart analyze lib` clean for new code. Milestone: Offline-first working. Verified: 22 sync tests (incl. backoff-retry recovery) + 4 widget tests (bootstrap degradation), `dart analyze lib` clean for new code.
     
 ---
 ## Phase 9 — Home
