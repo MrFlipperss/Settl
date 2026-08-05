@@ -53,70 +53,96 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     ),
-                    Row(
-                      children: [
-                        Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            shape: BoxShape.circle,
+                    // Settings gear — below the status bar, aligned with the
+                    // header content. The row's right padding keeps the
+                    // balance text clear of the gear zone.
+                    Positioned(
+                      top: 8,
+                      right: 16,
+                      child: Material(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => DesignSheet.show(
+                            context,
+                            child: const SettingsSheet(),
                           ),
-                          alignment: Alignment.center,
-                          child: const Text(
-                            'RS',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Rahul Sharma',
-                                style: TextStyle(
-                                  fontSize: 19,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'rahul@okaxis · UPI active',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white.withValues(alpha: 0.65),
-                                ),
-                              ),
-                            ],
+                          child: const Padding(
+                            padding: EdgeInsets.all(11),
+                            child: AppIcon('settings',
+                                size: 18, color: Colors.white),
                           ),
                         ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              'Net balance',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.white.withValues(alpha: 0.55),
-                              ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 56),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
                             ),
-                            const Text(
-                              '+₹1,950',
+                            alignment: Alignment.center,
+                            child: const Text(
+                              'RS',
                               style: TextStyle(
-                                fontSize: 18,
+                                fontSize: 20,
                                 fontWeight: FontWeight.w700,
                                 color: Colors.white,
                               ),
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Rahul Sharma',
+                                  style: TextStyle(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'rahul@okaxis · UPI active',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white.withValues(alpha: 0.65),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                'Net balance',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white.withValues(alpha: 0.55),
+                                ),
+                              ),
+                              const Text(
+                                '+₹1,950',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -171,24 +197,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
-        // Gear button over the header
-        Positioned(
-          top: 14,
-          right: 14,
-          child: Material(
-            color: Colors.white.withValues(alpha: 0.18),
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: () =>
-                  DesignSheet.show(context, child: const SettingsSheet()),
-              child: const Padding(
-                padding: EdgeInsets.all(9),
-                child: AppIcon('settings', size: 16, color: Colors.white),
-              ),
-            ),
-          ),
-        ),
+        // Gear button floats with the header (see header Stack above).
       ],
     );
   }
@@ -221,8 +230,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: _StatTile(
                             label: stats[row * 2 + col].label,
                             value: stats[row * 2 + col].value,
-                            color: stats[row * 2 + col].color ??
-                                tokens.primary,
+                            color: stats[row * 2 + col].color ?? tokens.primary,
                           ),
                         ),
                       ),

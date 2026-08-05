@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../activity/activity_screen.dart';
 import '../home/home_screen.dart';
@@ -121,41 +122,48 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     return Scaffold(
       backgroundColor: tokens.bg,
-      body: Stack(
-        children: [
-          body,
-          // Floating pill navigation
-          Positioned(
-            bottom: 20,
-            left: 40,
-            right: 40,
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 280),
-                child: _FloatingNav(
-                  currentIndex: widget.currentIndex,
-                  onSelected: widget.onIndexChanged,
-                ),
-              ),
-            ),
-          ),
-          // FAB — visible on Activity and Home only
-          if (widget.currentIndex != ShellTab.profile.index)
+      // All three tabs have coloured headers, so the status bar content
+      // must stay light in both light and dark mode.
+      body: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light.copyWith(
+          statusBarColor: Colors.transparent,
+        ),
+        child: Stack(
+          children: [
+            body,
+            // Floating pill navigation
             Positioned(
-              bottom: 96,
-              right: math.max(
-                16,
-                (screenWidth - _contentMaxWidth) / 2 + 16,
-              ),
-              child: _AddExpenseFab(
-                onTap: () => DesignSheet.show(
-                  context,
-                  child: const AddExpenseSheet(),
-                  maxHeightFactor: 0.92,
+              bottom: 20,
+              left: 40,
+              right: 40,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 280),
+                  child: _FloatingNav(
+                    currentIndex: widget.currentIndex,
+                    onSelected: widget.onIndexChanged,
+                  ),
                 ),
               ),
             ),
-        ],
+            // FAB — visible on Activity and Home only
+            if (widget.currentIndex != ShellTab.profile.index)
+              Positioned(
+                bottom: 96,
+                right: math.max(
+                  16,
+                  (screenWidth - _contentMaxWidth) / 2 + 16,
+                ),
+                child: _AddExpenseFab(
+                  onTap: () => DesignSheet.show(
+                    context,
+                    child: const AddExpenseSheet(),
+                    maxHeightFactor: 0.92,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
