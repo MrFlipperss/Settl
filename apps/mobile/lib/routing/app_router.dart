@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../features/activity/activity_screen.dart';
 import '../features/home/home_screen.dart';
-import '../features/groups/groups_screen.dart';
-import '../features/spotlight/spotlight_screen.dart';
-import '../features/budget/budget_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/navigation/shell.dart';
 
@@ -31,6 +29,17 @@ final GoRouter appRouter = GoRouter(
         );
       },
       branches: [
+        // Activity tab
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/activity',
+              pageBuilder: (context, state) => const NoTransitionPage(
+                child: ActivityScreen(),
+              ),
+            ),
+          ],
+        ),
         // Home tab
         StatefulShellBranch(
           routes: [
@@ -38,39 +47,6 @@ final GoRouter appRouter = GoRouter(
               path: '/home',
               pageBuilder: (context, state) => const NoTransitionPage(
                 child: HomeScreen(),
-              ),
-            ),
-          ],
-        ),
-        // Groups tab
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/groups',
-              pageBuilder: (context, state) => const NoTransitionPage(
-                child: GroupsScreen(),
-              ),
-            ),
-          ],
-        ),
-        // Spotlight tab
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/spotlight',
-              pageBuilder: (context, state) => const NoTransitionPage(
-                child: SpotlightScreen(),
-              ),
-            ),
-          ],
-        ),
-        // Budget tab
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/budget',
-              pageBuilder: (context, state) => const NoTransitionPage(
-                child: BudgetScreen(),
               ),
             ),
           ],

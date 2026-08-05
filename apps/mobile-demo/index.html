@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Settl — Demo</title>
+<style>
+  :root {
+    --bg: #0a0e17;
+    --bg-2: #101624;
+    --card: #151c2e;
+    --card-2: #1a2338;
+    --border: #232e45;
+    --text: #e8edf7;
+    --text-2: #9aa7c0;
+    --accent: #6c8cff;
+    --accent-2: #9db5ff;
+    --green: #34d399;
+    --red: #f87171;
+    --amber: #fbbf24;
+    --purple: #a78bfa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .phone {
+    width: 100%;
+    max-width: 390px;
+    height: 780px;
+    max-height: calc(100vh - 32px);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 44px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+  }
+  .notch {
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 130px; height: 30px; background: #000; border-radius: 0 0 18px 18px; z-index: 20;
+  }
+  .statusbar { padding: 14px 28px 6px; font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; color: var(--text-2); flex-shrink: 0; }
+  .app {
+    flex: 1; overflow-y: auto; padding: 8px 16px 90px;
+    scrollbar-width: none;
+  }
+  .app::-webkit-scrollbar { display: none; }
+  .header { display: flex; align-items: center; justify-content: space-between; padding: 8px 0 16px; }
+  .logo { display: flex; align-items: center; gap: 8px; }
+  .logo-badge { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, var(--accent), var(--purple)); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; color: #fff; }
+  .logo h1 { font-size: 19px; font-weight: 700; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; overflow: hidden; border: 2px solid var(--border); }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .balance-hero {
+    background: linear-gradient(135deg, #16224a, #101624);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 20px;
+    margin-bottom: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .balance-hero::after {
+    content: ''; position: absolute; top: -40px; right: -30px;
+    width: 160px; height: 160px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(108,140,255,0.25), transparent 70%);
+  }
+  .balance-label { font-size: 12px; color: var(--text-2); text-transform: uppercase; letter-spacing: 1px; }
+  .balance-amount { font-size: 34px; font-weight: 800; margin: 6px 0 2px; letter-spacing: -1px; }
+  .balance-net { font-size: 12px; color: var(--green); }
+  .balance-rows { display: flex; gap: 14px; margin-top: 16px; }
+  .balance-col { flex: 1; background: rgba(255,255,255,0.04); border-radius: 12px; padding: 10px 12px; }
+  .balance-col .lbl { font-size: 11px; color: var(--text-2); }
+  .balance-col .amt { font-size: 16px; font-weight: 700; margin-top: 2px; }
+  .positive { color: var(--green); }
+  .negative { color: var(--red); }
+  .section-title { font-size: 14px; font-weight: 600; color: var(--text-2); display: flex; justify-content: space-between; align-items: center; margin: 18px 0 10px; }
+  .section-title .link { color: var(--accent); font-size: 12px; font-weight: 500; }
+  .friend-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
+  }
+  .friend-card.owing-you { border-left: 3px solid var(--green); }
+  .friend-card.i-owe { border-left: 3px solid var(--red); }
+  .friend-avatar { width: 42px; height: 42px; border-radius: 50%; overflow: hidden; flex-shrink: 0; }
+  .friend-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .friend-info { flex: 1; min-width: 0; }
+  .friend-name { font-size: 14px; font-weight: 600; }
+  .friend-detail { font-size: 11px; color: var(--text-2); margin-top: 1px; }
+  .friend-amt { font-size: 14px; font-weight: 700; }
+  .expense-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
+  }
+  .cat-icon {
+    width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+  }
+  .expense-info { flex: 1; min-width: 0; }
+  .expense-note { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .expense-meta { font-size: 11px; color: var(--text-2); margin-top: 2px; }
+  .expense-amt { font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .group-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px; margin-bottom: 12px;
+  }
+  .group-top { display: flex; align-items: center; gap: 12px; }
+  .group-cover { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
+  .group-name { font-size: 15px; font-weight: 600; }
+  .group-meta { font-size: 11px; color: var(--text-2); margin-top: 2px; }
+  .group-members { display: flex; margin-top: 12px; padding-left: 0; }
+  .mini-avatar { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bg); margin-left: -8px; overflow: hidden; }
+  .mini-avatar:first-child { margin-left: 0; }
+  .mini-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .group-spend { margin-left: auto; font-size: 13px; font-weight: 700; }
+  .tabbar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: rgba(16,22,36,0.96); backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    display: flex; padding: 10px 8px 28px;
+    z-index: 10;
+  }
+  .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--text-2); font-size: 10px; font-weight: 500; padding: 6px 0; border-radius: 10px; }
+  .tab.active { color: var(--accent); }
+  .tab .icon { font-size: 20px; line-height: 1; }
+  .view { display: none; }
+  .view.active { display: block; }
+  .filter-pills { display: flex; gap: 8px; overflow-x: auto; margin: 12px 0; scrollbar-width: none; }
+  .filter-pills::-webkit-scrollbar { display: none; }
+  .pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; background: var(--card); border: 1px solid var(--border); color: var(--text-2); white-space: nowrap; }
+  .pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .badge { padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: 600; }
+  .badge.food { background: rgba(251,191,36,0.15); color: var(--amber); }
+  .badge.rent { background: rgba(167,139,250,0.15); color: var(--purple); }
+  .badge.ent { background: rgba(248,113,113,0.15); color: var(--red); }
+  .fade-in { animation: fadeIn 0.25s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span>5G ▸ 100%</span></div>
+
+    <div class="app" id="app">
+
+      <!-- HOME -->
+      <div class="view active fade-in" id="view-home">
+        <div class="header">
+          <div class="logo">
+            <div class="logo-badge">S</div>
+            <h1>Settl</h1>
+          </div>
+          <div class="avatar"><img id="me-avatar" alt=""></div>
+        </div>
+
+        <div class="balance-hero">
+          <div class="balance-label">Net Balance</div>
+          <div class="balance-amount" id="net-balance"></div>
+          <div class="balance-net" id="net-desc"></div>
+          <div class="balance-rows">
+            <div class="balance-col">
+              <div class="lbl">Owed to me</div>
+              <div class="amt positive" id="owed-me"></div>
+            </div>
+            <div class="balance-col">
+              <div class="lbl">I owe</div>
+              <div class="amt negative" id="i-owe"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title"><span>Balances</span><span class="link" onclick="goTab('balances')">See all →</span></div>
+        <div id="home-follow-ups"></div>
+
+        <div class="section-title"><span>Recent Expenses</span><span class="link" onclick="goTab('expenses')">See all →</span></div>
+        <div id="home-expenses"></div>
+      </div>
+
+      <!-- EXPENSES -->
+      <div class="view fade-in" id="view-expenses">
+        <div class="header">
+          <div class="logo"><div class="logo-badge">S</div><h1>Expenses</h1></div>
+        </div>
+        <div class="filter-pills">
+          <div class="pill active" data-f="all">All</div>
+          <div class="pill" data-f="Food">Food</div>
+          <div class="pill" data-f="Rent">Rent</div>
+          <div class="pill" data-f="Entertainment">Entertainment</div>
+        </div>
+        <div id="expense-list"></div>
+      </div>
+
+      <!-- GROUPS -->
+      <div class="view fade-in" id="view-groups">
+        <div class="header">
+          <div class="logo"><div class="logo-badge">S</div><h1>Groups</h1></div>
+        </div>
+        <div id="group-list"></div>
+      </div>
+
+      <!-- BALANCES -->
+      <div class="view fade-in" id="view-balances">
+        <div class="header">
+          <div class="logo"><div class="logo-badge">S</div><h1>Balances</h1></div>
+        </div>
+        <div class="section-title"><span>Who owes you</span></div>
+        <div id="balances-owed-me"></div>
+        <div class="section-title"><span>Who you owe</span></div>
+        <div id="balances-i-owe"></div>
+      </div>
+
+    </div>
+
+    <div class="tabbar">
+      <div class="tab active" data-tab="home" onclick="goTab('home')"><span class="icon">⌂</span>Home</div>
+      <div class="tab" data-tab="expenses" onclick="goTab('expenses')"><span class="icon">₹</span>Expenses</div>
+      <div class="tab" data-tab="groups" onclick="goTab('groups')"><span class="icon">◫</span>Groups</div>
+      <div class="tab" data-tab="balances" onclick="goTab('balances')"><span class="icon">⚖</span>Balances</div>
+    </div>
+  </div>
+
+<script>
+const PEOPLE = [
+  { id: '1', name: 'Advaith (You)', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' },
+  { id: '2', name: 'Sarah', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80' },
+  { id: '3', name: 'Rahul', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80' },
+  { id: '4', name: 'Priyanshu', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80' },
+  { id: '5', name: 'Ananya', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80' }
+];
+const ME = PEOPLE[0];
+
+const EXPENSES = [
+  { id: 'e1', payer: '3', amount: 2400000, cat: 'Rent', note: 'July House Rent & Maintenance', date: 'Jul 1', splits: ['1','3','5'], badge: 'rent' },
+  { id: 'e2', payer: '1', amount: 360000, cat: 'Food', note: 'Beachside Seafood Dinner at Baga', date: 'Jul 22', splits: ['1','2','3','4'], badge: 'food' },
+  { id: 'e3', payer: '2', amount: 90000, cat: 'Entertainment', note: 'Movie IMAX — Interstellar', date: 'Jul 18', splits: ['1','2'], badge: 'ent' },
+  { id: 'e4', payer: '1', amount: 145000, cat: 'Food', note: 'Artisanal Pizza & Drinks', date: 'Jul 20', splits: ['1','2','5'], badge: 'food' },
+  { id: 'e5', payer: '3', amount: 50000, cat: 'Food', note: 'Swiggy Team Lunch', date: 'Jul 14', splits: ['1','3'], badge: 'food' }
+];
+
+const GROUPS = [
+  { id: 'g1', name: 'Goa Trip 2026', cover: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=600&auto=format&fit=crop&q=80', members: ['1','2','3','4'], spend: 4850000, meta: '4 members' },
+  { id: 'g2', name: 'Flatmates 402', cover: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=600&auto=format&fit=crop&q=80', members: ['1','3','5'], spend: 12400000, meta: '3 members' },
+  { id: 'g3', name: 'Weekend Foodies', cover: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80', members: ['1','2','5'], spend: 1845000, meta: '3 members' }
+];
+
+// friend balances in paise: + = owed to me, - = I owe
+const BALANCES = [
+  { id: '2', amt: 45000 },
+  { id: '4', amt: 125000 },
+  { id: '3', amt: -32000 },
+  { id: '5', amt: 0 }
+];
+
+const CAT_ICON = { Food: '🍕', Rent: '🏠', Entertainment: '🎬', Transport: '🚇' };
+const inr = p => '₹' + (p / 100).toLocaleString('en-IN');
+
+function person(id) { return PEOPLE.find(p => p.id === id) || { name: '?', avatar: '' }; }
+
+function friendCard(f) {
+  const owed = f.amt >= 0;
+  const cls = f.amt > 0 ? 'owing-you' : f.amt < 0 ? 'i-owe' : '';
+  const p = person(f.id);
+  const detail = f.amt > 0 ? 'owes you' : f.amt < 0 ? 'you owe' : 'settled up';
+  return `
+    <div class="friend-card ${cls} fade-in">
+      <div class="friend-avatar"><img src="${p.avatar}" alt=""></div>
+      <div class="friend-info">
+        <div class="friend-name">${p.name}</div>
+        <div class="friend-detail">${detail}</div>
+      </div>
+      <div class="friend-amt ${owed ? 'positive' : 'negative'}">${owed ? '+' : '−'}${inr(Math.abs(f.amt))}</div>
+    </div>`;
+}
+
+function expenseCard(e) {
+  const payer = person(e.payer);
+  const meta = `${e.date} · paid by ${payer.name} · ${e.splits.length} split`;
+  return `
+    <div class="expense-card fade-in">
+      <div class="cat-icon" style="background:${e.cat==='Food'?'rgba(251,191,36,0.12)':e.cat==='Rent'?'rgba(167,139,250,0.12)':'rgba(248,113,113,0.12)'}">${CAT_ICON[e.cat] || '💸'}</div>
+      <div class="expense-info">
+        <div class="expense-note">${e.note}</div>
+        <div class="expense-meta">${meta}</div>
+      </div>
+      <span class="badge ${e.badge}">${e.cat}</span>
+      <div class="expense-amt">${inr(e.amount)}</div>
+    </div>`;
+}
+
+function groupCard(g) {
+  const avatars = g.members.slice(0, 5).map(m => `<div class="mini-avatar"><img src="${person(m).avatar}" alt=""></div>`).join('');
+  return `
+    <div class="group-card fade-in">
+      <div class="group-top">
+        <img class="group-cover" src="${g.cover}" alt="">
+        <div>
+          <div class="group-name">${g.name}</div>
+          <div class="group-meta">${g.meta}</div>
+        </div>
+        <div class="group-spend">${inr(g.spend)}</div>
+      </div>
+      <div class="group-members">${avatars}</div>
+    </div>`;
+}
+
+function render() {
+  // hero
+  const owedMe = BALANCES.filter(b => b.amt > 0).reduce((s, b) => s + b.amt, 0);
+  const iOwe = BALANCES.filter(b => b.amt < 0).reduce((s, b) => s + Math.abs(b.amt), 0);
+  const net = owedMe - iOwe;
+  document.getElementById('net-balance').textContent = (net >= 0 ? '+' : '−') + inr(Math.abs(net));
+  document.getElementById('net-desc').textContent = net >= 0 ? 'You are owed on net' : 'You owe net';
+  document.getElementById('owed-me').textContent = inr(owedMe);
+  document.getElementById('i-owe').textContent = inr(iOwe);
+  document.getElementById('me-avatar').src = ME.avatar;
+
+  // home follow-ups (non-zero balances first)
+  const nonzero = BALANCES.filter(b => b.amt !== 0).sort((a, b) => b.amt - a.amt);
+  document.getElementById('home-follow-ups').innerHTML = nonzero.slice(0, 4).map(friendCard).join('');
+
+  // home recent expenses
+  document.getElementById('home-expenses').innerHTML = EXPENSES.slice(0, 4).map(expenseCard).join('');
+
+  // expenses with filter
+  renderExpenses('all');
+
+  // groups
+  document.getElementById('group-list').innerHTML = GROUPS.map(groupCard).join('');
+
+  // balances
+  document.getElementById('balances-owed-me').innerHTML = BALANCES.filter(b => b.amt > 0).map(friendCard).join('') || '<div class="friend-card"><div class="friend-info"><div class="friend-name">All settled up 🎉</div></div></div>';
+  document.getElementById('balances-i-owe').innerHTML = BALANCES.filter(b => b.amt < 0).map(friendCard).join('') || '<div class="friend-card"><div class="friend-info"><div class="friend-name">Nothing owed 👍</div></div></div>';
+}
+
+function renderExpenses(filter) {
+  let list = EXPENSES;
+  if (filter !== 'all') list = EXPENSES.filter(e => e.cat === filter);
+  document.getElementById('expense-list').innerHTML = list.map(expenseCard).join('') || '<div class="friend-card"><div class="friend-info"><div class="friend-name">No expenses here yet</div></div></div>';
+}
+
+function goTab(tab) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + tab).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.getElementById('app').scrollTop = 0;
+}
+
+document.querySelectorAll('.pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    renderExpenses(pill.dataset.f);
+  });
+});
+
+render();
+</script>
+</body>
+</html>

@@ -1,476 +1,458 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../models/expense.dart';
-import '../../providers.dart';
-import '../../repositories/interfaces/expense_repository.dart';
-import '../../sync/sync_service.dart';
+import '../../theme/app_theme.dart';
+import '../../utils/format.dart';
+import '../mock_data.dart';
+import '../sheets/calculator.dart';
+import '../sheets/person_detail_sheet.dart';
+import '../widgets/app_icon.dart';
+import '../widgets/design_sheet.dart';
+import '../widgets/person_avatar.dart';
+import '../widgets/spending_ring.dart';
 
-/// T9 — Home screen.
-///
-/// Not a dashboard: the primary interaction is a prominent search/spotlight
-/// affordance for finding people and creating expenses. Below it sit a compact
-/// row of quick actions and a short list of recent expenses. A subtle sync
-/// indicator lives in the AppBar actions — never as a banner.
-class HomeScreen extends ConsumerWidget {
+const int _spent = 14280;
+const int _budget = 20000;
+
+/// Design Home: budget header, spending by category, search + calculator,
+/// and dues.
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settl'),
-        // actions: const [_SyncIndicator()],
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const _SpotlightSearchBar(),
-            const SizedBox(height: 20),
-            const _QuickActions(),
-            const SizedBox(height: 24),
-            Text('Recent', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            const _RecentExpenses(),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// T9.5 — Subtle sync indicator rendered inside the AppBar actions.
-///
-/// Watches [SyncService] status and connectivity, showing at most one small
-/// (~16-18px) muted icon. Renders nothing when idle and online by design.
-class _SyncIndicator extends ConsumerStatefulWidget {
-  const _SyncIndicator();
-
-  @override
-  ConsumerState<_SyncIndicator> createState() => _SyncIndicatorState();
-}
-
-class _SyncIndicatorState extends ConsumerState<_SyncIndicator> {
-  SyncStatus _status = SyncStatus.idle;
-  bool _online = false;
-  bool _available = true;
-
-  @override
-  void initState() {
-    super.initState();
-    // Best-effort: the sync provider chain reaches the Drift database, which
-    // throws [MissingPluginException] in the widget-test environment. Degrade
-    // to an invisible indicator instead of crashing the build.
-    try {
-      final sync = ref.read(syncServiceProvider);
-      _status = sync.status;
-      _online = sync.isOnline;
-    } catch (_) {
-      _available = false;
-    }
+  void _openPerson(BuildContext context, Person person) {
+    DesignSheet.show(context, child: PersonDetailSheet(person: person));
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_available) return const SizedBox.shrink();
+    final tokens = DesignTokens.of(context);
+    final pct = (_spent / _budget).clamp(0.0, 1.0);
 
-    final SyncService sync;
-    try {
-      sync = ref.watch(syncServiceProvider);
-    } catch (_) {
-      return const SizedBox.shrink();
-    }
-
-    return StreamBuilder<SyncStatus>(
-      stream: sync.statusStream,
-      initialData: _status,
-      builder: (context, statusSnapshot) {
-        return StreamBuilder<bool>(
-          stream: sync.onlineStream,
-          initialData: _online,
-          builder: (context, onlineSnapshot) {
-            final status = statusSnapshot.data ?? _status;
-            final online = onlineSnapshot.data ?? _online;
-            return _buildIndicator(context, ref, status, online);
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildIndicator(
-    BuildContext context,
-    WidgetRef ref,
-    SyncStatus status,
-    bool online,
-  ) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    // Idle + online → invisible by design.
-    if (status == SyncStatus.idle && online) {
-      return const SizedBox.shrink();
-    }
-
-    // Syncing → tiny progress indicator.
-    if (status == SyncStatus.syncing) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 12),
-        child: SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      );
-    }
-
-    // Error + online → muted amber warning, tap to retry.
-    if (status == SyncStatus.error && online) {
-      return Tooltip(
-        message: 'Sync paused — tap to retry',
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: () => ref.read(syncServiceProvider).requestSync(),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Icon(
-              Icons.warning_amber_rounded,
-              size: 18,
-              color: colorScheme.tertiary,
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // Coloured header
+          Container(
+            color: tokens.headerBg,
+            padding: const EdgeInsets.fromLTRB(22, 52, 22, 72),
+            child: Stack(
+              children: [
+                Positioned(
+                  top: -40,
+                  right: -40,
+                  child: Container(
+                    width: 180,
+                    height: 180,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 20,
+                  left: -20,
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.04),
+                    ),
+                  ),
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'August 2024',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.65),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '₹${formatInr(_spent)}',
+                            style: const TextStyle(
+                              fontSize: 38,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -1.5,
+                              height: 1.0,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'of ₹${formatInr(_budget)} budget',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white.withValues(alpha: 0.55),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Container(
+                            width: 180,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(100),
+                            ),
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: pct,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                  borderRadius: BorderRadius.circular(100),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '₹${formatInr(_budget - _spent)} remaining',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const SpendingRing(spent: _spent, budget: _budget),
+                  ],
+                ),
+              ],
             ),
           ),
-        ),
-      );
-    }
 
-    // Offline (or error while offline) → muted cloud_off.
-    return Tooltip(
-      message: 'Offline — changes will sync later',
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Icon(
-          Icons.cloud_off_outlined,
-          size: 18,
-          color: colorScheme.onSurfaceVariant,
-        ),
+          // Foreground card — rounded top corners overlap the header.
+          Transform.translate(
+            offset: const Offset(0, -28),
+            child: Container(
+              decoration: BoxDecoration(
+                color: tokens.cardBg,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildCategoriesCard(tokens),
+                  const SizedBox(height: 14),
+                  _buildSearchCard(tokens),
+                  const SizedBox(height: 14),
+                  _buildDuesCard(tokens, context),
+                  // Compensates the -28 translate so the scroll view ends
+                  // flush with the card's painted bottom edge.
+                  const SizedBox(height: 28),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
-}
 
-/// T9.2 — The primary element: a large, tappable search-style affordance.
-///
-/// Not a real text input — tapping it navigates to the Spotlight tab where
-/// text-to-action search lives (T10 scope).
-class _SpotlightSearchBar extends StatelessWidget {
-  const _SpotlightSearchBar();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    return Material(
-      color: colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(28),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => context.go('/spotlight'),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 56),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
+  Widget _buildCategoriesCard(DesignTokens tokens) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: tokens.cardBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: tokens.border),
+      ),
+      child: Column(
+        children: [
+          Row(
             children: [
-              Icon(
-                Icons.search,
-                size: 22,
-                color: colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Search people or add an expense',
-                  style: textTheme.bodyLarge?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
+                  'Spending by category',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: tokens.onSurface,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Icon(
-                Icons.keyboard_arrow_right,
-                size: 22,
-                color: colorScheme.onSurfaceVariant,
+              Text(
+                'See all',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: tokens.primary,
+                ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 14),
+          for (final cat in categories) _CategoryRow(category: cat),
+        ],
       ),
     );
   }
-}
 
-/// T9.4 — One compact row of three quick-action tiles.
-///
-/// Every tile navigates to a real destination — no dead buttons. Styled
-/// quietly (tertiary container) so the search bar stays the focal point.
-class _QuickActions extends StatelessWidget {
-  const _QuickActions();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        Expanded(
-          child: _QuickActionTile(
-            icon: Icons.add_circle_outline,
-            label: 'Add expense',
-            onTap: _goSpotlight,
-          ),
-        ),
-        SizedBox(width: 12),
-        Expanded(
-          child: _QuickActionTile(
-            icon: Icons.person_add_outlined,
-            label: 'Add person',
-            onTap: _goSpotlight,
-          ),
-        ),
-        SizedBox(width: 12),
-        Expanded(
-          child: _QuickActionTile(
-            icon: Icons.group_outlined,
-            label: 'View groups',
-            onTap: _goGroups,
-          ),
-        ),
-      ],
-    );
+  Widget _buildSearchCard(DesignTokens tokens) {
+    return _SearchCard(tokens: tokens);
   }
 
-  static void _goSpotlight(BuildContext context) => context.go('/spotlight');
-  static void _goGroups(BuildContext context) => context.go('/groups');
-}
-
-class _QuickActionTile extends StatelessWidget {
-  const _QuickActionTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final void Function(BuildContext context) onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    return Card(
-      elevation: 0,
-      color: colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+  Widget _buildDuesCard(DesignTokens tokens, BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: tokens.cardBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: tokens.border),
       ),
-      child: InkWell(
-        onTap: () => onTap(context),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Icon(icon, size: 24, color: colorScheme.onSurfaceVariant),
-              const SizedBox(height: 8),
-              Text(label, style: textTheme.labelMedium),
+              Expanded(
+                child: Text(
+                  'Dues',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: tokens.onSurface,
+                  ),
+                ),
+              ),
+              Text(
+                'See all',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: tokens.primary,
+                ),
+              ),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          for (final person in people)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Material(
+                color: tokens.surfaceVariant,
+                borderRadius: BorderRadius.circular(16),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => _openPerson(context, person),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      children: [
+                        PersonAvatar(person),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                person.name,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: tokens.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                person.upi,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: tokens.onSurfaceVar,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '${person.amount > 0 ? '+' : '−'}₹${formatInr(person.amount.abs())}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: person.amount > 0
+                                ? AppTheme.positive
+                                : AppTheme.negative,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 }
 
-/// T9.3 — Recent expenses section.
-///
-/// Reads the local repository and shows up to 5 most recent expenses. Handles
-/// loading, empty, and error states gracefully — the repository chain may
-/// throw [MissingPluginException] in the widget-test environment.
-class _RecentExpenses extends ConsumerWidget {
-  const _RecentExpenses();
+class _CategoryRow extends StatelessWidget {
+  const _CategoryRow({required this.category});
+
+  final Category category;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Best-effort: the repository provider chain reaches the Drift database,
-    // which throws [MissingPluginException] in the widget-test environment.
-    // Degrade to the empty state instead of crashing the build.
-    final ExpenseRepository repository;
-    try {
-      repository = ref.watch(expenseRepositoryProvider);
-    } catch (_) {
-      return const _EmptyState();
-    }
+  Widget build(BuildContext context) {
+    final tokens = DesignTokens.of(context);
+    final pct = (category.spent / category.budget).clamp(0.0, 1.0);
+    final over = category.spent > category.budget;
 
-    return FutureBuilder<List<Expense>>(
-      future: repository.getAllExpenses(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const SizedBox.shrink();
-        }
-
-        // Graceful degradation: on error or empty data, show the empty state.
-        final expenses = snapshot.data;
-        if (expenses == null || expenses.isEmpty) {
-          return const _EmptyState();
-        }
-
-        final recent = expenses.take(5).toList();
-        return Column(
-          children: [
-            for (final expense in recent) _ExpenseRow(expense: expense),
-          ],
-        );
-      },
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: category.color.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: AppIcon(
+                  category.icon,
+                  size: 14,
+                  color: category.color,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  category.name,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: tokens.onSurface,
+                  ),
+                ),
+              ),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '₹${formatInr(category.spent)}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: over ? AppTheme.negative : tokens.onSurface,
+                      ),
+                    ),
+                    TextSpan(
+                      text: ' / ₹${formatInr(category.budget)}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: tokens.onSurfaceVar,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Container(
+            height: 5,
+            decoration: BoxDecoration(
+              color: tokens.surfaceVariant,
+              borderRadius: BorderRadius.circular(100),
+            ),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: pct,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: over ? AppTheme.negative : category.color,
+                  borderRadius: BorderRadius.circular(100),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+class _SearchCard extends StatefulWidget {
+  const _SearchCard({required this.tokens});
+
+  final DesignTokens tokens;
+
+  @override
+  State<_SearchCard> createState() => _SearchCardState();
+}
+
+class _SearchCardState extends State<_SearchCard> {
+  bool _showCalc = false;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.receipt_long_outlined,
-              size: 48,
-              color: colorScheme.onSurfaceVariant,
-            ),
+    final tokens = widget.tokens;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tokens.cardBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: tokens.border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              AppIcon('search', size: 16, color: tokens.onSurfaceVar),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Search expenses…',
+                  style: TextStyle(fontSize: 14, color: tokens.onSurfaceVar),
+                ),
+              ),
+              Material(
+                color: _showCalc ? tokens.container : tokens.surfaceVariant,
+                borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => setState(() => _showCalc = !_showCalc),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: AppIcon(
+                      'bills',
+                      size: 16,
+                      color: _showCalc
+                          ? tokens.onContainer
+                          : tokens.onSurfaceVar,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_showCalc) ...[
             const SizedBox(height: 12),
-            Text(
-              'No expenses yet',
-              style: textTheme.titleSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Add your first expense to get started.',
-              style: textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
+            const Calculator(),
           ],
-        ),
+        ],
       ),
     );
-  }
-}
-
-class _ExpenseRow extends StatelessWidget {
-  const _ExpenseRow({required this.expense});
-
-  final Expense expense;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: colorScheme.secondaryContainer,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          _categoryIcon(expense.category),
-          size: 20,
-          color: colorScheme.onSecondaryContainer,
-        ),
-      ),
-      title: Text(
-        expense.note ?? expense.category,
-        style: textTheme.bodyLarge,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        _formatDate(expense.createdAt),
-        style: textTheme.bodySmall?.copyWith(
-          color: colorScheme.onSurfaceVariant,
-        ),
-      ),
-      trailing: Text(
-        _formatAmount(expense.amount),
-        style: textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  /// Maps a handful of known categories to icons; everything else falls back
-  /// to a neutral category icon.
-  static IconData _categoryIcon(String category) {
-    switch (category.toLowerCase()) {
-      case 'food':
-      case 'dining':
-      case 'restaurant':
-        return Icons.restaurant_outlined;
-      case 'transport':
-      case 'travel':
-      case 'cab':
-      case 'fuel':
-        return Icons.directions_car_outlined;
-      case 'groceries':
-      case 'shopping':
-        return Icons.shopping_bag_outlined;
-      case 'rent':
-      case 'housing':
-      case 'utilities':
-        return Icons.home_outlined;
-      case 'entertainment':
-      case 'movies':
-        return Icons.movie_outlined;
-      default:
-        return Icons.category_outlined;
-    }
-  }
-
-  /// Relative-ish date label: 'Today', 'Yesterday', else `dd MMM`.
-  static String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final thatDay = DateTime(date.year, date.month, date.day);
-    final diff = today.difference(thatDay).inDays;
-
-    if (diff == 0) return 'Today';
-    if (diff == 1) return 'Yesterday';
-
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    final day = date.day.toString().padLeft(2, '0');
-    return '$day ${months[date.month - 1]}';
-  }
-
-  /// Amount as `₹` + 2 decimals — no currency package.
-  static String _formatAmount(double amount) {
-    return '\u20B9${amount.toStringAsFixed(2)}';
   }
 }

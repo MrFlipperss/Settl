@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -14,7 +13,7 @@ class HttpClientService {
 
   HttpClientService(this._ref)
       : _client = http.Client(),
-        _baseUrl = _ref != null ? _ref!.read(apiBaseUrlProvider) : '';
+        _baseUrl = _ref != null ? _ref.read(apiBaseUrlProvider) : '';
 
   String _buildUrl(String endpoint) {
     // Remove leading slash if present to avoid double slashes
@@ -31,7 +30,7 @@ class HttpClientService {
     final requestHeaders = Map<String, String>.from(headers ?? {});
 
     if (_ref != null) {
-      final enableLogging = _ref!.read(enableLoggingProvider);
+      final enableLogging = _ref.read(enableLoggingProvider);
       if (enableLogging) {
         print('🔵 GET Request: $url');
         if (requestHeaders.isNotEmpty) {
@@ -46,7 +45,7 @@ class HttpClientService {
     );
 
     if (_ref != null) {
-      final enableLogging = _ref!.read(enableLoggingProvider);
+      final enableLogging = _ref.read(enableLoggingProvider);
       if (enableLogging) {
         print('🟢 GET Response [${response.statusCode}]: $url');
         if (enableLogging && response.body.length < 1000) {
@@ -86,7 +85,7 @@ class HttpClientService {
         : requestBody as String?;
 
     if (_ref != null) {
-      final enableLogging = _ref!.read(enableLoggingProvider);
+      final enableLogging = _ref.read(enableLoggingProvider);
       if (enableLogging) {
         print('🟠 POST Request: $url');
         if (requestHeaders.isNotEmpty) {
@@ -106,7 +105,7 @@ class HttpClientService {
     );
 
     if (_ref != null) {
-      final enableLogging = _ref!.read(enableLoggingProvider);
+      final enableLogging = _ref.read(enableLoggingProvider);
       if (enableLogging) {
         print('🟢 POST Response [${response.statusCode}]: $url');
         if (enableLogging && response.body.length < 1000) {
@@ -145,7 +144,7 @@ class HttpClientService {
         : requestBody as String?;
 
     if (_ref != null) {
-      final enableLogging = _ref!.read(enableLoggingProvider);
+      final enableLogging = _ref.read(enableLoggingProvider);
       if (enableLogging) {
         print('🟠 PUT Request: $url');
         if (requestHeaders.isNotEmpty) {
@@ -165,7 +164,7 @@ class HttpClientService {
     );
 
     if (_ref != null) {
-      final enableLogging = _ref!.read(enableLoggingProvider);
+      final enableLogging = _ref.read(enableLoggingProvider);
       if (enableLogging) {
         print('🟢� PUT Response [${response.statusCode}]: $url');
         if (enableLogging && response.body.length < 1000) {
@@ -204,7 +203,7 @@ class HttpClientService {
         : requestBody as String?;
 
     if (_ref != null) {
-      final enableLogging = _ref!.read(enableLoggingProvider);
+      final enableLogging = _ref.read(enableLoggingProvider);
       if (enableLogging) {
         print('🟠 PATCH Request: $url');
         if (requestHeaders.isNotEmpty) {
@@ -224,7 +223,7 @@ class HttpClientService {
     );
 
     if (_ref != null) {
-      final enableLogging = _ref!.read(enableLoggingProvider);
+      final enableLogging = _ref.read(enableLoggingProvider);
       if (enableLogging) {
         print('🟢 PATCH Response [${response.statusCode}]: $url');
         if (enableLogging && response.body.length < 1000) {
@@ -250,7 +249,7 @@ class HttpClientService {
     final requestHeaders = Map<String, String>.from(headers ?? {});
 
     if (_ref != null) {
-      final enableLogging = _ref!.read(enableLoggingProvider);
+      final enableLogging = _ref.read(enableLoggingProvider);
       if (enableLogging) {
         print('🔴 DELETE Request: $url');
         if (requestHeaders.isNotEmpty) {
@@ -265,7 +264,7 @@ class HttpClientService {
     );
 
     if (_ref != null) {
-      final enableLogging = _ref!.read(enableLoggingProvider);
+      final enableLogging = _ref.read(enableLoggingProvider);
       if (enableLogging) {
         print('🟢 DELETE Response [${response.statusCode}]: $url');
         if (enableLogging && response.body.length < 1000) {

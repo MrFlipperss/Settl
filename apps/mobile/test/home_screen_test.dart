@@ -1,9 +1,9 @@
-// Widget tests for the T9 Home screen.
+// Widget tests for the design Home screen.
 //
-// Verifies the search bar affordance, quick-action row, recent-expenses list
-// (rendered from a fake repository), the empty state, and that tapping the
-// search bar navigates to the Spotlight tab.
+// Verifies the budget header, spending-by-category card, the search +
+// calculator card, the dues list, and the person detail sheet flow.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,11 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:settl/app.dart';
 import 'package:settl/config/app_environment.dart';
 import 'package:settl/config/environment.dart';
-import 'package:settl/features/spotlight/spotlight_screen.dart';
-import 'package:settl/models/expense.dart';
-import 'package:settl/models/expense_split.dart';
-import 'package:settl/providers.dart';
-import 'package:settl/repositories/interfaces/expense_repository.dart';
+import 'package:settl/features/widgets/design_qr_code.dart';
 
 void main() {
   setUpAll(() async {
@@ -25,154 +21,66 @@ void main() {
     await AppConfig().initialize(environment: AppEnvironment.development);
   });
 
-  testWidgets(
-      'Home renders the AppBar title, search bar hint, and quick-action labels',
+  testWidgets('Home renders budget header, categories, search and dues',
       (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          expenseRepositoryProvider
-              .overrideWithValue(_FakeExpenseRepository(expenses: const [])),
-        ],
-        child: const SettlApp(),
-      ),
-    );
+    await tester.pumpWidget(const ProviderScope(child: SettlApp()));
     await tester.pumpAndSettle();
 
-    // AppBar title is 'Settl'; the nav bar label 'Home' also renders.
-    expect(find.text('Settl'), findsOneWidget);
-    expect(find.text('Home'), findsOneWidget);
-    expect(
-      find.text('Search people or add an expense'),
-      findsOneWidget,
-    );
-    expect(find.text('Add expense'), findsOneWidget);
-    expect(find.text('Add person'), findsOneWidget);
-    expect(find.text('View groups'), findsOneWidget);
+    expect(find.text('August 2024'), findsOneWidget);
+    expect(find.text('₹14,280'), findsOneWidget);
+    expect(find.text('of ₹20,000 budget'), findsOneWidget);
+    expect(find.text('₹5,720 remaining'), findsOneWidget);
+
+    expect(find.text('Spending by category'), findsOneWidget);
+    expect(find.text('Food'), findsOneWidget);
+    expect(find.text('Travel'), findsOneWidget);
+
+    expect(find.text('Search expenses…'), findsOneWidget);
+
+    expect(find.text('Dues'), findsOneWidget);
+    expect(find.text('Arjun'), findsOneWidget);
+    expect(find.text('rahul@okaxis'), findsOneWidget);
   });
 
-  testWidgets('Recent expenses render with note text and rupee amounts',
+  testWidgets('Toggling the calc button reveals the calculator',
       (tester) async {
-    final now = DateTime.now();
-    final expenses = [
-      Expense(
-        id: 'e1',
-        amount: 120.0,
-        category: 'Food',
-        splitType: 'equal',
-        payerId: 'u1',
-        note: 'Lunch at cafe',
-        createdAt: now,
-      ),
-      Expense(
-        id: 'e2',
-        amount: 45.50,
-        category: 'Transport',
-        splitType: 'equal',
-        payerId: 'u2',
-        note: 'Cab ride',
-        createdAt: now.subtract(const Duration(days: 1)),
-      ),
-    ];
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          expenseRepositoryProvider
-              .overrideWithValue(_FakeExpenseRepository(expenses: expenses)),
-        ],
-        child: const SettlApp(),
-      ),
-    );
+    await tester.pumpWidget(const ProviderScope(child: SettlApp()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Lunch at cafe'), findsOneWidget);
-    expect(find.text('Cab ride'), findsOneWidget);
-    expect(find.text('\u20B9120.00'), findsOneWidget);
-    expect(find.text('\u20B945.50'), findsOneWidget);
+    expect(find.text('='), findsNothing);
+
+    // The search card's calc toggle is the last bolt icon (the Bills
+    // category icon comes earlier in the tree).
+    final toggle = find.byIcon(Icons.bolt_outlined).last;
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(find.text('='), findsOneWidget);
+    expect(find.text('C'), findsOneWidget);
   });
 
-  testWidgets('Empty repository shows the "No expenses yet" empty state',
+  testWidgets('Tapping a dues row opens the person sheet with UPI QR flow',
       (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          expenseRepositoryProvider
-              .overrideWithValue(_FakeExpenseRepository(expenses: const [])),
-        ],
-        child: const SettlApp(),
-      ),
-    );
+    await tester.pumpWidget(const ProviderScope(child: SettlApp()));
     await tester.pumpAndSettle();
 
-    expect(find.text('No expenses yet'), findsOneWidget);
+    await tester.ensureVisible(find.text('Priya'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Priya'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Priya owes you'), findsOneWidget);
+    expect(find.text('₹1,200'), findsOneWidget);
+    expect(find.text('Send UPI QR Code'), findsOneWidget);
+    expect(find.byType(DesignQrCode), findsNothing);
+
+    await tester.tap(find.text('Send UPI QR Code'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DesignQrCode), findsOneWidget);
+    expect(find.text('Share QR Code'), findsOneWidget);
+    expect(find.text('Settle Up'), findsOneWidget);
   });
-
-  testWidgets('Tapping the search bar navigates to the Spotlight screen',
-      (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          expenseRepositoryProvider
-              .overrideWithValue(_FakeExpenseRepository(expenses: const [])),
-        ],
-        child: const SettlApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Search people or add an expense'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(SpotlightScreen), findsOneWidget);
-  });
-}
-
-/// Deterministic fake used to drive the recent-expenses section without the
-/// Drift database (which throws [MissingPluginException] in widget tests).
-class _FakeExpenseRepository implements ExpenseRepository {
-  _FakeExpenseRepository({required this.expenses});
-
-  final List<Expense> expenses;
-
-  @override
-  Future<List<Expense>> getAllExpenses() async => expenses;
-
-  @override
-  Future<Expense?> getExpenseById(String expenseId) async {
-    for (final e in expenses) {
-      if (e.id == expenseId) return e;
-    }
-    return null;
-  }
-
-  @override
-  Future<List<Expense>> getExpensesByUser(String userId) async {
-    return expenses.where((e) => e.payerId == userId).toList();
-  }
-
-  @override
-  Future<List<Expense>> getExpensesByList(String listId) async {
-    return expenses.where((e) => e.listId == listId).toList();
-  }
-
-  @override
-  Future<void> createExpense(Expense expense) async {}
-
-  @override
-  Future<void> updateExpense(Expense expense) async {}
-
-  @override
-  Future<void> deleteExpense(String expenseId) async {}
-
-  @override
-  Future<void> createExpenseSplit(ExpenseSplit split) async {}
-
-  @override
-  Future<List<ExpenseSplit>> getSplitsForExpense(String expenseId) async {
-    return const [];
-  }
-
-  @override
-  Future<void> deleteExpenseSplit(String splitId) async {}
 }
