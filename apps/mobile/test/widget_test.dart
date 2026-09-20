@@ -14,6 +14,7 @@ import 'package:settl/config/environment.dart';
 import 'package:settl/features/budget/budget_screen.dart';
 import 'package:settl/features/home/home_screen.dart';
 import 'package:settl/features/profile/profile_screen.dart';
+import 'package:settl/routing/app_router.dart';
 
 void main() {
   setUpAll(() async {
@@ -105,36 +106,32 @@ void main() {
     expect(find.byType(BudgetScreen), findsOneWidget);
   });
 
-  testWidgets('Floating bottom bar supports hold-and-drag and repositioning',
+  testWidgets('Floating bottom bar supports hold-and-drag to quickly switch screens',
       (tester) async {
+    appRouter.go('/home');
     await tester.pumpWidget(const ProviderScope(child: SettlApp()));
     await tester.pumpAndSettle();
 
-    final positionedFinder = find.byType(AnimatedPositioned);
-    expect(positionedFinder, findsOneWidget);
+    // Starts on Home (index 1)
+    expect(find.byType(HomeScreen), findsOneWidget);
 
-    final initialTopLeft = tester.getTopLeft(positionedFinder);
+    final navBarFinder = find.byType(NavigationBar);
+    expect(navBarFinder, findsOneWidget);
 
-    // Drag upwards by 120 pixels using a pan gesture on the top handle area
-    final barCenter = tester.getCenter(positionedFinder);
-    final handleTop = Offset(barCenter.dx, initialTopLeft.dy + 8);
-    await tester.dragFrom(handleTop, const Offset(0, -120));
+    final barCenter = tester.getCenter(navBarFinder);
+
+    // Hold and drag towards the left of the bar (towards Budget)
+    await tester.dragFrom(barCenter, const Offset(-90, 0));
     await tester.pumpAndSettle();
 
-    final draggedTopLeft = tester.getTopLeft(positionedFinder);
-    expect(draggedTopLeft.dy, lessThan(initialTopLeft.dy));
+    // Switched to Budget screen (index 0)
+    expect(find.byType(BudgetScreen), findsOneWidget);
 
-    // Double-tap the dragged handle to reset back to the bottom default dock
-    final draggedHandleTop = Offset(
-      tester.getCenter(positionedFinder).dx,
-      draggedTopLeft.dy + 8,
-    );
-    await tester.tapAt(draggedHandleTop);
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.tapAt(draggedHandleTop);
+    // Hold and drag towards the right of the bar (towards Profile)
+    await tester.dragFrom(tester.getCenter(navBarFinder), const Offset(120, 0));
     await tester.pumpAndSettle();
 
-    final resetTopLeft = tester.getTopLeft(positionedFinder);
-    expect(resetTopLeft.dy, closeTo(initialTopLeft.dy, 1.0));
+    // Switched to Profile screen (index 2)
+    expect(find.byType(ProfileScreen), findsOneWidget);
   });
 }

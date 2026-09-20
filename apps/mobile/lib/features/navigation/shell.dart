@@ -12,8 +12,8 @@ import '../../providers.dart';
 /// navigation bar to a side navigation rail (tablets, desktop, web).
 const double _railBreakpoint = 840;
 
-/// Fixed height of the floating navigation dock pill.
-const double _floatingBarHeight = 70.0;
+/// Height of the floating navigation dock pill.
+const double _floatingBarHeight = 64.0;
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({
@@ -39,11 +39,8 @@ class _AppShellState extends ConsumerState<AppShell> {
   // the build phase and corrupt the Router.
   bool _isProgrammaticJump = false;
 
-  // Drag state: Offset relative to the resting position (Offset.zero = default dock)
-  Offset _dragOffset = Offset.zero;
-  bool _isDragging = false;
-  Offset? _dragStartGlobal;
-  Offset? _dragStartOffset;
+  // Visual feedback state when user is actively holding and scrubbing the bar
+  bool _isScrubbing = false;
 
   // Screens for each tab
   final List<Widget> _screens = const [
@@ -137,71 +134,27 @@ class _AppShellState extends ConsumerState<AppShell> {
     widget.onIndexChanged(index);
   }
 
-  void _startDrag(Offset globalPosition) {
-    HapticFeedback.lightImpact();
-    setState(() {
-      _isDragging = true;
-      _dragStartGlobal = globalPosition;
-      _dragStartOffset = _dragOffset;
-    });
-  }
+  /// Handles hold-and-drag / scrub gesture across the bottom bar to switch screens.
+  void _handleScrubPosition(double localX, double barWidth) {
+    if (barWidth <= 0) return;
+    // 3 tabs: Budget (0), Home (1), Profile (2)
+    final slotWidth = barWidth / 3.0;
+    final targetIndex = (localX / slotWidth).floor().clamp(0, 2);
 
-  void _updateDrag(
-    Offset globalPosition,
-    double screenWidth,
-    double screenHeight,
-    EdgeInsets safePadding,
-    double barWidth,
-    double bottomMargin,
-  ) {
-    if (!_isDragging || _dragStartGlobal == null || _dragStartOffset == null) {
-      return;
-    }
-    final delta = globalPosition - _dragStartGlobal!;
-    final rawX = _dragStartOffset!.dx + delta.dx;
-    final rawY = _dragStartOffset!.dy + delta.dy;
-
-    // Clamping: ensure capsule stays within bounds
-    final defaultLeft = (screenWidth - barWidth) / 2.0;
-    final maxUpward = screenHeight - safePadding.top - _floatingBarHeight - bottomMargin - 16.0;
-
-    final clampedX = rawX.clamp(
-      16.0 - defaultLeft,
-      math.max(16.0 - defaultLeft, screenWidth - barWidth - 16.0 - defaultLeft),
-    ).toDouble();
-    // delta.dy is negative when dragging up; clamp between -maxUpward and 0
-    final clampedY = rawY.clamp(-math.max(0.0, maxUpward), 0.0).toDouble();
-
-    setState(() {
-      _dragOffset = Offset(clampedX, clampedY);
-    });
-  }
-
-  void _endDrag() {
-    if (!_isDragging) return;
-    HapticFeedback.selectionClick();
-    setState(() {
-      _isDragging = false;
-      _dragStartGlobal = null;
-      _dragStartOffset = null;
-
-      // Magnetic snapping:
-      // If pulled close to the resting bottom (within 55px), snap back down
-      if (_dragOffset.dy.abs() < 55) {
-        _dragOffset = Offset.zero;
-      } else if (_dragOffset.dx.abs() < 35) {
-        // Snap horizontally to center if near center
-        _dragOffset = Offset(0, _dragOffset.dy);
+    if (targetIndex != widget.currentIndex) {
+      HapticFeedback.selectionClick();
+      _isProgrammaticJump = true;
+      if (_pageController.positions.isNotEmpty) {
+        _pageController.animateToPage(
+          targetIndex,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        );
       }
-    });
-  }
-
-  void _resetPosition() {
-    HapticFeedback.mediumImpact();
-    setState(() {
-      _isDragging = false;
-      _dragOffset = Offset.zero;
-    });
+      _isProgrammaticJump = false;
+      widget.onIndexChanged(targetIndex);
+      ref.read(selectedIndexProvider.notifier).state = targetIndex;
+    }
   }
 
   @override
@@ -227,7 +180,6 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     final mediaQuery = MediaQuery.of(context);
     final screenWidth = mediaQuery.size.width;
-    final screenHeight = mediaQuery.size.height;
     final safePadding = mediaQuery.padding;
 
     final useRail = screenWidth >= _railBreakpoint;
@@ -250,38 +202,26 @@ class _AppShellState extends ConsumerState<AppShell> {
       );
     }
 
-    // Floating capsule geometry
-    // Ensure bottomMargin always stays well above gesture bars (at least 38px)
+    // Floating bar layout geometry
+    // Ensure generous clearance (at least 38px) above system gesture pill
     final bottomMargin = math.max(safePadding.bottom, 24.0) + 14.0;
-    final barWidth = math.min(screenWidth - 48.0, 340.0);
-    final defaultLeft = (screenWidth - barWidth) / 2.0;
-
-    final currentBottom = bottomMargin - _dragOffset.dy;
-    final currentLeft = defaultLeft + _dragOffset.dx;
+    final barWidth = math.min(screenWidth - 48.0, 320.0);
+    final leftMargin = (screenWidth - barWidth) / 2.0;
 
     return Scaffold(
       body: Stack(
         children: [
           Positioned.fill(child: pages),
-          AnimatedPositioned(
-            duration: _isDragging ? Duration.zero : const Duration(milliseconds: 280),
-            curve: Curves.easeOutBack,
-            bottom: currentBottom,
-            left: currentLeft,
+          Positioned(
+            bottom: bottomMargin,
+            left: leftMargin,
             width: barWidth,
             height: _floatingBarHeight,
             child: AnimatedScale(
-              scale: _isDragging ? 1.04 : 1.0,
-              duration: const Duration(milliseconds: 160),
+              scale: _isScrubbing ? 1.03 : 1.0,
+              duration: const Duration(milliseconds: 140),
               curve: Curves.easeOutCubic,
-              child: _buildFloatingBar(
-                context,
-                screenWidth,
-                screenHeight,
-                safePadding,
-                barWidth,
-                bottomMargin,
-              ),
+              child: _buildFloatingScrubberBar(context, barWidth),
             ),
           ),
         ],
@@ -289,14 +229,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
-  Widget _buildFloatingBar(
-    BuildContext context,
-    double screenWidth,
-    double screenHeight,
-    EdgeInsets safePadding,
-    double barWidth,
-    double bottomMargin,
-  ) {
+  Widget _buildFloatingScrubberBar(BuildContext context, double barWidth) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isLiquid = ref.watch(liquidGlassEnabledProvider);
@@ -304,11 +237,11 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     final backgroundColor = isLiquid
         ? (isDark
-            ? const Color(0xFF182219).withValues(alpha: 0.78)
-            : Colors.white.withValues(alpha: 0.80))
+            ? const Color(0xFF162017).withValues(alpha: 0.80)
+            : Colors.white.withValues(alpha: 0.82))
         : (isDark
             ? colorScheme.surfaceContainerHigh.withValues(alpha: 0.92)
-            : colorScheme.surface.withValues(alpha: 0.94));
+            : colorScheme.surface.withValues(alpha: 0.95));
 
     final borderColor = isDark
         ? Colors.white.withValues(alpha: isLiquid ? 0.25 : 0.16)
@@ -318,26 +251,33 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onLongPressStart: (details) => _startDrag(details.globalPosition),
-      onLongPressMoveUpdate: (details) => _updateDrag(
-        details.globalPosition,
-        screenWidth,
-        screenHeight,
-        safePadding,
-        barWidth,
-        bottomMargin,
-      ),
-      onLongPressEnd: (_) => _endDrag(),
+      onHorizontalDragDown: (details) {
+        setState(() => _isScrubbing = true);
+        _handleScrubPosition(details.localPosition.dx, barWidth);
+      },
+      onHorizontalDragStart: (details) {
+        setState(() => _isScrubbing = true);
+        _handleScrubPosition(details.localPosition.dx, barWidth);
+      },
+      onHorizontalDragUpdate: (details) {
+        _handleScrubPosition(details.localPosition.dx, barWidth);
+      },
+      onHorizontalDragEnd: (_) {
+        setState(() => _isScrubbing = false);
+      },
+      onHorizontalDragCancel: () {
+        setState(() => _isScrubbing = false);
+      },
       child: Container(
         height: _floatingBarHeight,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(35),
+          borderRadius: BorderRadius.circular(32),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: _isDragging ? 0.32 : 0.18),
-              blurRadius: _isDragging ? 26 : 16,
-              offset: _isDragging ? const Offset(0, 10) : const Offset(0, 5),
-              spreadRadius: _isDragging ? 2 : 0,
+              color: Colors.black.withValues(alpha: _isScrubbing ? 0.30 : 0.18),
+              blurRadius: _isScrubbing ? 24 : 16,
+              offset: _isScrubbing ? const Offset(0, 8) : const Offset(0, 4),
+              spreadRadius: _isScrubbing ? 1 : 0,
             ),
             if (isLiquid)
               BoxShadow(
@@ -348,7 +288,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(35),
+          borderRadius: BorderRadius.circular(32),
           child: BackdropFilter(
             filter: ui.ImageFilter.blur(
               sigmaX: isLiquid ? 25 : 20,
@@ -358,92 +298,54 @@ class _AppShellState extends ConsumerState<AppShell> {
               height: _floatingBarHeight,
               decoration: BoxDecoration(
                 color: backgroundColor,
-                borderRadius: BorderRadius.circular(35),
+                borderRadius: BorderRadius.circular(32),
                 border: Border.all(color: borderColor, width: 1.2),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Dedicated drag grip indicator
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onPanStart: (details) => _startDrag(details.globalPosition),
-                    onPanUpdate: (details) => _updateDrag(
-                      details.globalPosition,
-                      screenWidth,
-                      screenHeight,
-                      safePadding,
-                      barWidth,
-                      bottomMargin,
-                    ),
-                    onPanEnd: (_) => _endDrag(),
-                    onDoubleTap: _resetPosition,
-                    child: Container(
-                      height: 12,
-                      width: double.infinity,
-                      alignment: Alignment.center,
-                      child: Container(
-                        width: 32,
-                        height: 3.5,
-                        decoration: BoxDecoration(
-                          color: colorScheme.onSurface.withValues(alpha: _isDragging ? 0.55 : 0.28),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Material 3 NavigationBar inside floating dock
-                  Expanded(
-                    child: NavigationBarTheme(
-                      data: NavigationBarThemeData(
-                        backgroundColor: Colors.transparent,
-                        surfaceTintColor: Colors.transparent,
-                        elevation: 0,
-                        height: 52,
-                        indicatorColor: colorScheme.secondaryContainer.withValues(alpha: 0.8),
-                        iconTheme: WidgetStateProperty.resolveWith((states) {
-                          if (states.contains(WidgetState.selected)) {
-                            return IconThemeData(
-                              size: 22,
-                              color: colorScheme.primary,
-                            );
-                          }
-                          return IconThemeData(
-                            size: 20,
-                            color: colorScheme.onSurfaceVariant,
-                          );
-                        }),
-                        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-                          if (states.contains(WidgetState.selected)) {
-                            return TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.primary,
-                              height: 1.0,
-                            );
-                          }
-                          return TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.normal,
-                            color: colorScheme.onSurfaceVariant,
-                            height: 1.0,
-                          );
-                        }),
-                      ),
-                      child: NavigationBar(
-                        backgroundColor: Colors.transparent,
-                        surfaceTintColor: Colors.transparent,
-                        elevation: 0,
-                        height: 52,
-                        selectedIndex: widget.currentIndex,
-                        onDestinationSelected: widget.onIndexChanged,
-                        destinations: _barDestinations,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                ],
+              child: NavigationBarTheme(
+                data: NavigationBarThemeData(
+                  backgroundColor: Colors.transparent,
+                  surfaceTintColor: Colors.transparent,
+                  elevation: 0,
+                  height: _floatingBarHeight,
+                  indicatorColor: colorScheme.secondaryContainer.withValues(alpha: 0.8),
+                  iconTheme: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return IconThemeData(
+                        size: 22,
+                        color: colorScheme.primary,
+                      );
+                    }
+                    return IconThemeData(
+                      size: 20,
+                      color: colorScheme.onSurfaceVariant,
+                    );
+                  }),
+                  labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.primary,
+                        height: 1.0,
+                      );
+                    }
+                    return TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.normal,
+                      color: colorScheme.onSurfaceVariant,
+                      height: 1.0,
+                    );
+                  }),
+                ),
+                child: NavigationBar(
+                  backgroundColor: Colors.transparent,
+                  surfaceTintColor: Colors.transparent,
+                  elevation: 0,
+                  height: _floatingBarHeight,
+                  selectedIndex: widget.currentIndex,
+                  onDestinationSelected: widget.onIndexChanged,
+                  destinations: _barDestinations,
+                ),
               ),
             ),
           ),
