@@ -12,8 +12,8 @@ import '../../providers.dart';
 /// navigation bar to a side navigation rail (tablets, desktop, web).
 const double _railBreakpoint = 840;
 
-/// Estimated height of the floating navigation bar capsule.
-const double _floatingBarHeight = 78.0;
+/// Fixed height of the floating navigation dock pill.
+const double _floatingBarHeight = 70.0;
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({
@@ -39,8 +39,8 @@ class _AppShellState extends ConsumerState<AppShell> {
   // the build phase and corrupt the Router.
   bool _isProgrammaticJump = false;
 
-  // Drag & float state for the floating navigation bar
-  Offset? _dragPosition;
+  // Drag state: Offset relative to the resting position (Offset.zero = default dock)
+  Offset _dragOffset = Offset.zero;
   bool _isDragging = false;
   Offset? _dragStartGlobal;
   Offset? _dragStartOffset;
@@ -137,12 +137,12 @@ class _AppShellState extends ConsumerState<AppShell> {
     widget.onIndexChanged(index);
   }
 
-  void _startDrag(Offset globalPosition, double defaultLeft, double defaultTop) {
+  void _startDrag(Offset globalPosition) {
     HapticFeedback.lightImpact();
     setState(() {
       _isDragging = true;
       _dragStartGlobal = globalPosition;
-      _dragStartOffset = _dragPosition ?? Offset(defaultLeft, defaultTop);
+      _dragStartOffset = _dragOffset;
     });
   }
 
@@ -152,68 +152,56 @@ class _AppShellState extends ConsumerState<AppShell> {
     double screenHeight,
     EdgeInsets safePadding,
     double barWidth,
+    double bottomMargin,
   ) {
     if (!_isDragging || _dragStartGlobal == null || _dragStartOffset == null) {
       return;
     }
     final delta = globalPosition - _dragStartGlobal!;
-    final raw = _dragStartOffset! + delta;
+    final rawX = _dragStartOffset!.dx + delta.dx;
+    final rawY = _dragStartOffset!.dy + delta.dy;
+
+    // Clamping: ensure capsule stays within bounds
+    final defaultLeft = (screenWidth - barWidth) / 2.0;
+    final maxUpward = screenHeight - safePadding.top - _floatingBarHeight - bottomMargin - 16.0;
+
+    final clampedX = rawX.clamp(
+      16.0 - defaultLeft,
+      math.max(16.0 - defaultLeft, screenWidth - barWidth - 16.0 - defaultLeft),
+    ).toDouble();
+    // delta.dy is negative when dragging up; clamp between -maxUpward and 0
+    final clampedY = rawY.clamp(-math.max(0.0, maxUpward), 0.0).toDouble();
+
     setState(() {
-      _dragPosition = _clampPosition(
-        raw,
-        screenWidth,
-        screenHeight,
-        safePadding,
-        barWidth,
-      );
+      _dragOffset = Offset(clampedX, clampedY);
     });
   }
 
-  void _endDrag(double defaultLeft, double defaultTop) {
+  void _endDrag() {
     if (!_isDragging) return;
     HapticFeedback.selectionClick();
     setState(() {
       _isDragging = false;
       _dragStartGlobal = null;
       _dragStartOffset = null;
-      if (_dragPosition != null) {
-        // Snapping heuristics:
-        // 1. If released close to bottom, magnetically dock to default bottom
-        if ((_dragPosition!.dy - defaultTop).abs() < 64) {
-          _dragPosition = Offset(defaultLeft, defaultTop);
-        } else if ((_dragPosition!.dx - defaultLeft).abs() < 40) {
-          // 2. If near horizontal center, snap horizontally to center
-          _dragPosition = Offset(defaultLeft, _dragPosition!.dy);
-        }
+
+      // Magnetic snapping:
+      // If pulled close to the resting bottom (within 55px), snap back down
+      if (_dragOffset.dy.abs() < 55) {
+        _dragOffset = Offset.zero;
+      } else if (_dragOffset.dx.abs() < 35) {
+        // Snap horizontally to center if near center
+        _dragOffset = Offset(0, _dragOffset.dy);
       }
     });
   }
 
-  void _resetPosition(double defaultLeft, double defaultTop) {
+  void _resetPosition() {
     HapticFeedback.mediumImpact();
     setState(() {
       _isDragging = false;
-      _dragPosition = Offset(defaultLeft, defaultTop);
+      _dragOffset = Offset.zero;
     });
-  }
-
-  Offset _clampPosition(
-    Offset raw,
-    double screenWidth,
-    double screenHeight,
-    EdgeInsets safePadding,
-    double barWidth,
-  ) {
-    const margin = 12.0;
-    const minX = margin;
-    final maxX = math.max(minX, screenWidth - barWidth - margin);
-    final minY = safePadding.top + margin;
-    final maxY = math.max(minY, screenHeight - safePadding.bottom - _floatingBarHeight - margin);
-
-    return Offset(
-      raw.dx.clamp(minX, maxX),
-      raw.dy.clamp(minY, maxY),
-    );
   }
 
   @override
@@ -262,18 +250,14 @@ class _AppShellState extends ConsumerState<AppShell> {
       );
     }
 
-    // Geometry for the floating navigation capsule
-    final barWidth = math.min(screenWidth - 32.0, 380.0);
+    // Floating capsule geometry
+    // Ensure bottomMargin always stays well above gesture bars (at least 38px)
+    final bottomMargin = math.max(safePadding.bottom, 24.0) + 14.0;
+    final barWidth = math.min(screenWidth - 48.0, 340.0);
     final defaultLeft = (screenWidth - barWidth) / 2.0;
-    final defaultTop = screenHeight - safePadding.bottom - _floatingBarHeight - 16.0;
 
-    final effectiveOffset = _clampPosition(
-      _dragPosition ?? Offset(defaultLeft, defaultTop),
-      screenWidth,
-      screenHeight,
-      safePadding,
-      barWidth,
-    );
+    final currentBottom = bottomMargin - _dragOffset.dy;
+    final currentLeft = defaultLeft + _dragOffset.dx;
 
     return Scaffold(
       body: Stack(
@@ -282,9 +266,10 @@ class _AppShellState extends ConsumerState<AppShell> {
           AnimatedPositioned(
             duration: _isDragging ? Duration.zero : const Duration(milliseconds: 280),
             curve: Curves.easeOutBack,
-            left: effectiveOffset.dx,
-            top: effectiveOffset.dy,
+            bottom: currentBottom,
+            left: currentLeft,
             width: barWidth,
+            height: _floatingBarHeight,
             child: AnimatedScale(
               scale: _isDragging ? 1.04 : 1.0,
               duration: const Duration(milliseconds: 160),
@@ -295,8 +280,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                 screenHeight,
                 safePadding,
                 barWidth,
-                defaultLeft,
-                defaultTop,
+                bottomMargin,
               ),
             ),
           ),
@@ -311,8 +295,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     double screenHeight,
     EdgeInsets safePadding,
     double barWidth,
-    double defaultLeft,
-    double defaultTop,
+    double bottomMargin,
   ) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -321,121 +304,145 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     final backgroundColor = isLiquid
         ? (isDark
-            ? const Color(0xFF1B241C).withValues(alpha: 0.72)
-            : Colors.white.withValues(alpha: 0.76))
+            ? const Color(0xFF182219).withValues(alpha: 0.78)
+            : Colors.white.withValues(alpha: 0.80))
         : (isDark
-            ? colorScheme.surfaceContainerHigh.withValues(alpha: 0.88)
-            : colorScheme.surface.withValues(alpha: 0.92));
+            ? colorScheme.surfaceContainerHigh.withValues(alpha: 0.92)
+            : colorScheme.surface.withValues(alpha: 0.94));
 
     final borderColor = isDark
-        ? Colors.white.withValues(alpha: isLiquid ? 0.22 : 0.14)
+        ? Colors.white.withValues(alpha: isLiquid ? 0.25 : 0.16)
         : (isLiquid
-            ? Colors.white.withValues(alpha: 0.85)
-            : colorScheme.outlineVariant.withValues(alpha: 0.45));
+            ? Colors.white.withValues(alpha: 0.90)
+            : colorScheme.outlineVariant.withValues(alpha: 0.50));
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onLongPressStart: (details) => _startDrag(details.globalPosition, defaultLeft, defaultTop),
+      onLongPressStart: (details) => _startDrag(details.globalPosition),
       onLongPressMoveUpdate: (details) => _updateDrag(
         details.globalPosition,
         screenWidth,
         screenHeight,
         safePadding,
         barWidth,
+        bottomMargin,
       ),
-      onLongPressEnd: (_) => _endDrag(defaultLeft, defaultTop),
+      onLongPressEnd: (_) => _endDrag(),
       child: Container(
+        height: _floatingBarHeight,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(36),
+          borderRadius: BorderRadius.circular(35),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: _isDragging ? 0.28 : 0.16),
-              blurRadius: _isDragging ? 28 : 18,
+              color: Colors.black.withValues(alpha: _isDragging ? 0.32 : 0.18),
+              blurRadius: _isDragging ? 26 : 16,
               offset: _isDragging ? const Offset(0, 10) : const Offset(0, 5),
               spreadRadius: _isDragging ? 2 : 0,
             ),
             if (isLiquid)
               BoxShadow(
-                color: colorScheme.primary.withValues(alpha: 0.16),
-                blurRadius: 16,
+                color: colorScheme.primary.withValues(alpha: 0.18),
+                blurRadius: 14,
                 offset: const Offset(0, 2),
               ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(36),
+          borderRadius: BorderRadius.circular(35),
           child: BackdropFilter(
             filter: ui.ImageFilter.blur(
-              sigmaX: isLiquid ? 24 : 18,
-              sigmaY: isLiquid ? 24 : 18,
+              sigmaX: isLiquid ? 25 : 20,
+              sigmaY: isLiquid ? 25 : 20,
             ),
             child: Container(
+              height: _floatingBarHeight,
               decoration: BoxDecoration(
                 color: backgroundColor,
-                borderRadius: BorderRadius.circular(36),
+                borderRadius: BorderRadius.circular(35),
                 border: Border.all(color: borderColor, width: 1.2),
               ),
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Grip / Drag handle at top
+                  // Dedicated drag grip indicator
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onPanStart: (details) => _startDrag(details.globalPosition, defaultLeft, defaultTop),
+                    onPanStart: (details) => _startDrag(details.globalPosition),
                     onPanUpdate: (details) => _updateDrag(
                       details.globalPosition,
                       screenWidth,
                       screenHeight,
                       safePadding,
                       barWidth,
+                      bottomMargin,
                     ),
-                    onPanEnd: (_) => _endDrag(defaultLeft, defaultTop),
-                    onDoubleTap: () => _resetPosition(defaultLeft, defaultTop),
+                    onPanEnd: (_) => _endDrag(),
+                    onDoubleTap: _resetPosition,
                     child: Container(
-                      height: 16,
+                      height: 12,
+                      width: double.infinity,
                       alignment: Alignment.center,
                       child: Container(
-                        width: 36,
-                        height: 4,
+                        width: 32,
+                        height: 3.5,
                         decoration: BoxDecoration(
-                          color: colorScheme.onSurface.withValues(alpha: _isDragging ? 0.45 : 0.22),
+                          color: colorScheme.onSurface.withValues(alpha: _isDragging ? 0.55 : 0.28),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ),
                   ),
-                  // Material 3 NavigationBar inside the floating pill
-                  NavigationBarTheme(
-                    data: NavigationBarThemeData(
-                      backgroundColor: Colors.transparent,
-                      surfaceTintColor: Colors.transparent,
-                      elevation: 0,
-                      height: 56,
-                      indicatorColor: colorScheme.secondaryContainer.withValues(alpha: 0.75),
-                      labelTextStyle: WidgetStateProperty.resolveWith((states) {
-                        if (states.contains(WidgetState.selected)) {
-                          return TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: colorScheme.primary,
+                  // Material 3 NavigationBar inside floating dock
+                  Expanded(
+                    child: NavigationBarTheme(
+                      data: NavigationBarThemeData(
+                        backgroundColor: Colors.transparent,
+                        surfaceTintColor: Colors.transparent,
+                        elevation: 0,
+                        height: 52,
+                        indicatorColor: colorScheme.secondaryContainer.withValues(alpha: 0.8),
+                        iconTheme: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return IconThemeData(
+                              size: 22,
+                              color: colorScheme.primary,
+                            );
+                          }
+                          return IconThemeData(
+                            size: 20,
+                            color: colorScheme.onSurfaceVariant,
                           );
-                        }
-                        return TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.normal,
-                          color: colorScheme.onSurfaceVariant,
-                        );
-                      }),
-                    ),
-                    child: NavigationBar(
-                      backgroundColor: Colors.transparent,
-                      elevation: 0,
-                      selectedIndex: widget.currentIndex,
-                      onDestinationSelected: widget.onIndexChanged,
-                      destinations: _barDestinations,
+                        }),
+                        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.primary,
+                              height: 1.0,
+                            );
+                          }
+                          return TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.normal,
+                            color: colorScheme.onSurfaceVariant,
+                            height: 1.0,
+                          );
+                        }),
+                      ),
+                      child: NavigationBar(
+                        backgroundColor: Colors.transparent,
+                        surfaceTintColor: Colors.transparent,
+                        elevation: 0,
+                        height: 52,
+                        selectedIndex: widget.currentIndex,
+                        onDestinationSelected: widget.onIndexChanged,
+                        destinations: _barDestinations,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                 ],
               ),
             ),
