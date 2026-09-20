@@ -294,6 +294,34 @@ class FakeAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AuthSession> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    _maybeFail();
+    session = _testSession();
+    _controller.add(session);
+    return session!;
+  }
+
+  @override
+  Future<AuthSession> signUpWithEmail({
+    required String email,
+    required String password,
+    required Map<String, dynamic> data,
+  }) async {
+    _maybeFail();
+    session = _testSession();
+    _controller.add(session);
+    return session!;
+  }
+
+  @override
+  Future<void> sendPasswordResetEmail(String email) async {
+    _maybeFail();
+  }
+
+  @override
   Future<void> signOut() async {
     _maybeFail();
     session = null;

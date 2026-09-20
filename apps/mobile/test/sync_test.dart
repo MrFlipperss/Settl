@@ -201,7 +201,7 @@ void main() {
     });
 
     test('enqueueExpense bakes a generated id into the payload', () async {
-      final request = ApiCreateExpenseRequest(
+      const request = ApiCreateExpenseRequest(
         payerId: 'u1',
         amount: 50.0,
         splitType: 'equal',
@@ -253,7 +253,7 @@ void main() {
       expect(policy.isTransient(const ApiException('x', 503)), isTrue);
       expect(policy.isTransient(const ApiException('x', 408)), isTrue);
       expect(policy.isTransient(const ApiException('x', 429)), isTrue);
-      expect(policy.isTransient(SocketException('down')), isTrue);
+      expect(policy.isTransient(const SocketException('down')), isTrue);
       expect(policy.isTransient(TimeoutException('t')), isTrue);
 
       expect(policy.isTransient(const ApiException('x', 400)), isFalse);

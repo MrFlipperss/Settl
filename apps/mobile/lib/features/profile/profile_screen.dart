@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/auth_session.dart';
 import '../../providers.dart';
-import '../groups/groups_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -194,14 +193,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const SizedBox(height: 20),
                       // Liquid Glass Toggle Switch
                       ListTile(
-                        leading: const Icon(Icons.glass_outlined),
+                        leading: const Icon(Icons.blur_on),
                         title: const Text('Liquid Glass Effect'),
                         trailing: Switch(
                           value: useLiquidGlass,
                           onChanged: (value) {
                             ref.read(liquidGlassEnabledProvider.notifier).state = value;
                           },
-                          activeColor: colorScheme.primary,
+                          activeThumbColor: colorScheme.primary,
                         ),
                         subtitle: const Text('Adds frosted glass effects to cards and surfaces'),
                       ),
@@ -242,4 +241,41 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 }
+
+class GroupsView extends StatelessWidget {
+  const GroupsView({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.groups_outlined,
+              size: 64,
+              color: Theme.of(context).colorScheme.outline,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No groups yet',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Create or join a group to start splitting expenses with friends and roommates.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 

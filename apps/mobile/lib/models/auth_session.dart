@@ -6,6 +6,7 @@
 class AuthSession {
   const AuthSession({
     required this.userId,
+    this.email,
     this.phoneNumber,
     required this.accessToken,
     this.refreshToken,
@@ -14,6 +15,9 @@ class AuthSession {
 
   /// Supabase user id (UUID).
   final String userId;
+
+  /// Email address used to sign in, when available.
+  final String? email;
 
   /// E.164 phone number used to sign in, when available.
   final String? phoneNumber;
@@ -32,6 +36,7 @@ class AuthSession {
 
   AuthSession copyWith({
     String? userId,
+    Object? email = _unset,
     Object? phoneNumber = _unset,
     String? accessToken,
     Object? refreshToken = _unset,
@@ -39,6 +44,7 @@ class AuthSession {
   }) {
     return AuthSession(
       userId: userId ?? this.userId,
+      email: identical(email, _unset) ? this.email : email as String?,
       phoneNumber: identical(phoneNumber, _unset)
           ? this.phoneNumber
           : phoneNumber as String?,
@@ -57,6 +63,7 @@ class AuthSession {
       identical(this, other) ||
       other is AuthSession &&
           other.userId == userId &&
+          other.email == email &&
           other.phoneNumber == phoneNumber &&
           other.accessToken == accessToken &&
           other.refreshToken == refreshToken &&
@@ -64,11 +71,11 @@ class AuthSession {
 
   @override
   int get hashCode =>
-      Object.hash(userId, phoneNumber, accessToken, refreshToken, expiresAt);
+      Object.hash(userId, email, phoneNumber, accessToken, refreshToken, expiresAt);
 
   @override
   String toString() =>
-      'AuthSession(userId: $userId, phoneNumber: $phoneNumber, '
+      'AuthSession(userId: $userId, email: $email, phoneNumber: $phoneNumber, '
       'accessToken: $accessToken, refreshToken: $refreshToken, '
       'expiresAt: $expiresAt)';
 }

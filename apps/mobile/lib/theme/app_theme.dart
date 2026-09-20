@@ -68,7 +68,7 @@ class AppTheme {
     );
   }
 
-  static ThemeData _build Liquid(Brightness brightness) {
+  static ThemeData _buildLiquid(Brightness brightness) {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       brightness: brightness,
@@ -79,9 +79,9 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: colorScheme.copyWith(
         // Semi-transparent backgrounds for glass effect
-        surface: colorScheme.surface.withOpacity(0.8),
-        surfaceContainerLow: colorScheme.surfaceContainerLow.withOpacity(0.7),
-        surfaceContainerHigh: colorScheme.surfaceContainerHigh.withOpacity(0.9),
+        surface: colorScheme.surface.withValues(alpha: 0.8),
+        surfaceContainerLow: colorScheme.surfaceContainerLow.withValues(alpha: 0.7),
+        surfaceContainerHigh: colorScheme.surfaceContainerHigh.withValues(alpha: 0.9),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent, // Transparent for glass effect
@@ -93,51 +93,51 @@ class AppTheme {
           fontWeight: FontWeight.bold,
         ),
       ),
-      cardTheme: CardTheme(
-        color: colorScheme.surfaceContainerLow.withOpacity(0.6),
+      cardTheme: CardThemeData(
+        color: colorScheme.surfaceContainerLow.withValues(alpha: 0.6),
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: BorderSide(
-            color: colorScheme.outline.withOpacity(0.3),
+            color: colorScheme.outline.withValues(alpha: 0.3),
             width: 1.5,
           ),
         ),
         shadowColor: Colors.transparent, // No shadow for glass effect
       ),
-      dialogTheme: DialogTheme(
-        backgroundColor: colorScheme.surfaceContainerLow.withOpacity(0.8),
+      dialogTheme: DialogThemeData(
+        backgroundColor: colorScheme.surfaceContainerLow.withValues(alpha: 0.8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
           side: BorderSide(
-            color: colorScheme.outline.withOpacity(0.4),
+            color: colorScheme.outline.withValues(alpha: 0.4),
           ),
         ),
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: colorScheme.surfaceContainerLow.withOpacity(0.8),
+        backgroundColor: colorScheme.surfaceContainerLow.withValues(alpha: 0.8),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           side: BorderSide(
-            color: colorScheme.outline.withOpacity(0.3),
+            color: colorScheme.outline.withValues(alpha: 0.3),
           ),
         ),
       ),
       // Input fields with glass effect
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: colorScheme.surfaceContainerLow.withOpacity(0.5),
+        fillColor: colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(
-            color: colorScheme.outline.withOpacity(0.4),
+            color: colorScheme.outline.withValues(alpha: 0.4),
             width: 1.5,
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(
-            color: colorScheme.outline.withOpacity(0.3),
+            color: colorScheme.outline.withValues(alpha: 0.3),
             width: 1.5,
           ),
         ),
@@ -153,26 +153,26 @@ class AppTheme {
       // Buttons with glass effect
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: colorScheme.primaryContainer.withOpacity(0.7),
+          backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.7),
           foregroundColor: colorScheme.onPrimaryContainer,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: colorScheme.outline.withOpacity(0.3),
+              color: colorScheme.outline.withValues(alpha: 0.3),
             ),
           ),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: colorScheme.primary.withOpacity(0.8),
+          backgroundColor: colorScheme.primary.withValues(alpha: 0.8),
           foregroundColor: colorScheme.onPrimary,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: colorScheme.outline.withOpacity(0.3),
+              color: colorScheme.outline.withValues(alpha: 0.3),
             ),
           ),
         ),
@@ -181,59 +181,25 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: colorScheme.primary,
           side: BorderSide(
-            color: colorScheme.outline.withOpacity(0.5),
+            color: colorScheme.outline.withValues(alpha: 0.5),
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
       ),
-      // Cards and containers
-      cardTheme: CardTheme(
-        color: colorScheme.surfaceContainerLow.withOpacity(0.6),
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: colorScheme.outline.withOpacity(0.3),
-            width: 1.5,
-          ),
-        ),
-        shadowColor: Colors.transparent,
-      ),
       // Navigation components
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: colorScheme.surface.withOpacity(0.8),
-        indicatorColor: colorScheme.secondaryContainer.withOpacity(0.6),
+        backgroundColor: colorScheme.surface.withValues(alpha: 0.8),
+        indicatorColor: colorScheme.secondaryContainer.withValues(alpha: 0.6),
         height: 64,
       ),
       navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: colorScheme.surface.withOpacity(0.8),
-        indicatorColor: colorScheme.secondaryContainer.withOpacity(0.6),
-      ),
-      // Dialogs and popups
-      dialogTheme: DialogTheme(
-        backgroundColor: colorScheme.surfaceContainerLow.withOpacity(0.8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(
-            color: colorScheme.outline.withOpacity(0.4),
-            width: 1.5,
-          ),
-        ),
-      ),
-      // Bottom sheets
-      bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: colorScheme.surfaceContainerLow.withOpacity(0.8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          side: BorderSide(
-            color: colorScheme.outline.withOpacity(0.3),
-          ),
-        ),
+        backgroundColor: colorScheme.surface.withValues(alpha: 0.8),
+        indicatorColor: colorScheme.secondaryContainer.withValues(alpha: 0.6),
       ),
       // Tab bars
-      tabBarTheme: TabBarTheme(
+      tabBarTheme: TabBarThemeData(
         labelColor: colorScheme.primary,
         unselectedLabelColor: colorScheme.onSurfaceVariant,
         indicator: UnderlineTabIndicator(
@@ -243,14 +209,14 @@ class AppTheme {
           ),
           insets: const EdgeInsets.symmetric(horizontal: 16),
         ),
-        labelStyle: TextStyle(
+        labelStyle: const TextStyle(
           fontWeight: FontWeight.w600,
         ),
         indicatorSize: TabBarIndicatorSize.label,
       ),
       // Chip theme
       chipTheme: ChipThemeData(
-        backgroundColor: colorScheme.inputDecorationTheme.fillColor,
+        backgroundColor: colorScheme.surfaceContainerHighest,
         padding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 8,
@@ -258,7 +224,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(
-            color: colorScheme.outline.withOpacity(0.3),
+            color: colorScheme.outline.withValues(alpha: 0.3),
           ),
         ),
         labelStyle: TextStyle(
@@ -268,7 +234,7 @@ class AppTheme {
           color: colorScheme.onSurfaceVariant,
         ),
         secondarySelectedColor: colorScheme.secondaryContainer,
-        disabledColor: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        disabledColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
       ),
       // Switch and toggle themes
       switchTheme: SwitchThemeData(
@@ -283,9 +249,9 @@ class AppTheme {
         trackColor: WidgetStateProperty.resolveWith<Color?>(
           (Set<WidgetState> states) {
             if (states.contains(WidgetState.selected)) {
-              return colorScheme.primary.withOpacity(0.3);
+              return colorScheme.primary.withValues(alpha: 0.3);
             }
-            return colorScheme.outline.withOpacity(0.3);
+            return colorScheme.outline.withValues(alpha: 0.3);
           },
         ),
       ),

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../features/auth/login_screen.dart';
+import '../features/auth/signup_screen.dart';
+import '../features/auth/forgot_password_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/groups/groups_screen.dart';
 import '../features/spotlight/spotlight_screen.dart';
@@ -13,16 +16,23 @@ final GoRouter appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
   initialLocation: '/home',
   routes: [
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => const LoginScreen(),
+    ),
+    GoRoute(
+      path: '/signup',
+      builder: (context, state) => const SignUpScreen(),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      builder: (context, state) => const ForgotPasswordScreen(),
+    ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
         return AppShell(
-          // The navigationShell is the single source of truth for the active
-          // tab index. The shell mirrors it into selectedIndexProvider so
-          // non-GoRouter consumers can react to tab changes.
           currentIndex: navigationShell.currentIndex,
           onIndexChanged: (int newIndex) {
-            // Switch to the branch, resetting its stack when the tab is
-            // tapped again while already active.
             navigationShell.goBranch(
               newIndex,
               initialLocation: newIndex == navigationShell.currentIndex,
@@ -31,7 +41,7 @@ final GoRouter appRouter = GoRouter(
         );
       },
       branches: [
-        // Home tab
+        // Index 0: Home
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -42,7 +52,7 @@ final GoRouter appRouter = GoRouter(
             ),
           ],
         ),
-        // Groups tab
+        // Index 1: Groups
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -53,7 +63,7 @@ final GoRouter appRouter = GoRouter(
             ),
           ],
         ),
-        // Spotlight tab
+        // Index 2: Spotlight
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -64,7 +74,7 @@ final GoRouter appRouter = GoRouter(
             ),
           ],
         ),
-        // Budget tab
+        // Index 3: Budget
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -75,7 +85,7 @@ final GoRouter appRouter = GoRouter(
             ),
           ],
         ),
-        // Profile tab
+        // Index 4: Profile
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -90,3 +100,4 @@ final GoRouter appRouter = GoRouter(
     ),
   ],
 );
+

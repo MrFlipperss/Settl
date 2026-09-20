@@ -85,7 +85,10 @@ void main() {
     expect(find.byType(NavigationBar), findsNothing);
 
     // Tab switching still works through the rail.
-    await tester.tap(find.text('Groups'));
+    await tester.tap(find.descendant(
+      of: find.byType(NavigationRail),
+      matching: find.text('Groups'),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.byType(GroupsScreen), findsOneWidget);

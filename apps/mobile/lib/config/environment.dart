@@ -84,7 +84,7 @@ class Environment {
   /// Load any environment-specific preferences
   static Future<void> _loadPreferences() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      await SharedPreferences.getInstance();
       // Could load environment overrides from shared preferences if needed
       // For example, allowing debug builds to point to staging environment
     } catch (e) {
