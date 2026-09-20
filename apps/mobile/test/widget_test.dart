@@ -104,4 +104,37 @@ void main() {
 
     expect(find.byType(BudgetScreen), findsOneWidget);
   });
+
+  testWidgets('Floating bottom bar supports hold-and-drag and repositioning',
+      (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: SettlApp()));
+    await tester.pumpAndSettle();
+
+    final positionedFinder = find.byType(AnimatedPositioned);
+    expect(positionedFinder, findsOneWidget);
+
+    final initialTopLeft = tester.getTopLeft(positionedFinder);
+
+    // Drag upwards by 120 pixels using a pan gesture on the top handle area
+    final barCenter = tester.getCenter(positionedFinder);
+    final handleTop = Offset(barCenter.dx, initialTopLeft.dy + 8);
+    await tester.dragFrom(handleTop, const Offset(0, -120));
+    await tester.pumpAndSettle();
+
+    final draggedTopLeft = tester.getTopLeft(positionedFinder);
+    expect(draggedTopLeft.dy, lessThan(initialTopLeft.dy));
+
+    // Double-tap the dragged handle to reset back to the bottom default dock
+    final draggedHandleTop = Offset(
+      tester.getCenter(positionedFinder).dx,
+      draggedTopLeft.dy + 8,
+    );
+    await tester.tapAt(draggedHandleTop);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(draggedHandleTop);
+    await tester.pumpAndSettle();
+
+    final resetTopLeft = tester.getTopLeft(positionedFinder);
+    expect(resetTopLeft.dy, closeTo(initialTopLeft.dy, 1.0));
+  });
 }
