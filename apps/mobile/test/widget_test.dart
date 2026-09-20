@@ -1,7 +1,7 @@
 // Basic smoke tests for the Settl app shell.
 //
 // Verifies that the app boots through the GoRouter shell and that the
-// bottom navigation switches between the five tabs.
+// bottom navigation switches between the three tabs: Budget, Home, Profile.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,8 +11,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:settl/app.dart';
 import 'package:settl/config/app_environment.dart';
 import 'package:settl/config/environment.dart';
+import 'package:settl/features/budget/budget_screen.dart';
 import 'package:settl/features/home/home_screen.dart';
-import 'package:settl/features/groups/groups_screen.dart';
+import 'package:settl/features/profile/profile_screen.dart';
 
 void main() {
   setUpAll(() async {
@@ -22,30 +23,40 @@ void main() {
     await AppConfig().initialize(environment: AppEnvironment.development);
   });
 
-  testWidgets('App boots and shows the navigation shell', (tester) async {
+  testWidgets('App boots and shows the 3-tab navigation shell', (tester) async {
     await tester.pumpWidget(const ProviderScope(child: SettlApp()));
     await tester.pumpAndSettle();
 
-    // The shell renders the bottom navigation bar with all five tabs.
+    // The shell renders the bottom navigation bar with three tabs.
     expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Groups'), findsOneWidget);
-    expect(find.text('Spotlight'), findsOneWidget);
     expect(find.text('Budget'), findsOneWidget);
+    expect(find.text('Home'), findsWidgets);
     expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('Groups'), findsNothing);
+    expect(find.text('Spotlight'), findsNothing);
 
-    // Home is the initial tab.
+    // Home is the initial middle tab.
     expect(find.byType(HomeScreen), findsOneWidget);
   });
 
-  testWidgets('Bottom navigation switches tabs', (tester) async {
+  testWidgets('Bottom navigation switches tabs between Budget, Profile, and Home', (tester) async {
     await tester.pumpWidget(const ProviderScope(child: SettlApp()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Groups'));
+    await tester.tap(find.text('Budget'));
     await tester.pumpAndSettle();
+    expect(find.byType(BudgetScreen), findsOneWidget);
 
-    expect(find.byType(GroupsScreen), findsOneWidget);
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileScreen), findsOneWidget);
+
+    await tester.tap(find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('Home'),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(HomeScreen), findsOneWidget);
   });
 
   testWidgets('Theme mode switching updates the app theme', (tester) async {
@@ -84,13 +95,13 @@ void main() {
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
 
-    // Tab switching still works through the rail.
+    // Tab switching works through the rail.
     await tester.tap(find.descendant(
       of: find.byType(NavigationRail),
-      matching: find.text('Groups'),
+      matching: find.text('Budget'),
     ));
     await tester.pumpAndSettle();
 
-    expect(find.byType(GroupsScreen), findsOneWidget);
+    expect(find.byType(BudgetScreen), findsOneWidget);
   });
 }

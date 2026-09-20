@@ -161,53 +161,51 @@ class _SyncIndicatorState extends ConsumerState<_SyncIndicator> {
   }
 }
 
-/// T9.2 — The primary element: a large, tappable search-style affordance.
-///
-/// Not a real text input — tapping it navigates to the Spotlight tab where
-/// text-to-action search lives (T10 scope).
-class _SpotlightSearchBar extends StatelessWidget {
+/// T9.2 — The primary search bar affordance with inline search input.
+class _SpotlightSearchBar extends StatefulWidget {
   const _SpotlightSearchBar();
+
+  @override
+  State<_SpotlightSearchBar> createState() => _SpotlightSearchBarState();
+}
+
+class _SpotlightSearchBarState extends State<_SpotlightSearchBar> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
 
-    return Material(
-      color: colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(28),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => context.go('/spotlight'),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 56),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            children: [
-              Icon(
-                Icons.search,
-                size: 22,
-                color: colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Search people or add an expense',
-                  style: textTheme.bodyLarge?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Icon(
-                Icons.keyboard_arrow_right,
-                size: 22,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ],
-          ),
+    return TextField(
+      controller: _controller,
+      decoration: InputDecoration(
+        hintText: 'Search people or add an expense',
+        prefixIcon: const Icon(Icons.search, size: 22),
+        suffixIcon: _controller.text.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear, size: 20),
+                onPressed: () {
+                  setState(() {
+                    _controller.clear();
+                  });
+                },
+              )
+            : const Icon(Icons.keyboard_arrow_right, size: 22),
+        filled: true,
+        fillColor: colorScheme.surfaceContainerHighest,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(28),
+          borderSide: BorderSide.none,
         ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       ),
+      onChanged: (_) => setState(() {}),
     );
   }
 }
@@ -227,7 +225,7 @@ class _QuickActions extends StatelessWidget {
           child: _QuickActionTile(
             icon: Icons.add_circle_outline,
             label: 'Add expense',
-            onTap: _goSpotlight,
+            onTap: _showAddExpenseHint,
           ),
         ),
         SizedBox(width: 12),
@@ -235,7 +233,7 @@ class _QuickActions extends StatelessWidget {
           child: _QuickActionTile(
             icon: Icons.person_add_outlined,
             label: 'Add person',
-            onTap: _goSpotlight,
+            onTap: _showAddPersonHint,
           ),
         ),
         SizedBox(width: 12),
@@ -250,8 +248,25 @@ class _QuickActions extends StatelessWidget {
     );
   }
 
-  static void _goSpotlight(BuildContext context) => context.go('/spotlight');
-  static void _goGroups(BuildContext context) => context.go('/groups');
+  static void _showAddExpenseHint(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Expense creation coming up in Phase 11!'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  static void _showAddPersonHint(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Contacts coming up in Phase 10!'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  static void _goGroups(BuildContext context) => context.go('/profile');
 }
 
 class _QuickActionTile extends StatelessWidget {

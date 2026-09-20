@@ -3,10 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/signup_screen.dart';
 import '../features/auth/forgot_password_screen.dart';
-import '../features/home/home_screen.dart';
-import '../features/groups/groups_screen.dart';
-import '../features/spotlight/spotlight_screen.dart';
 import '../features/budget/budget_screen.dart';
+import '../features/home/home_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/navigation/shell.dart';
 
@@ -41,40 +39,7 @@ final GoRouter appRouter = GoRouter(
         );
       },
       branches: [
-        // Index 0: Home
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/home',
-              pageBuilder: (context, state) => const NoTransitionPage(
-                child: HomeScreen(),
-              ),
-            ),
-          ],
-        ),
-        // Index 1: Groups
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/groups',
-              pageBuilder: (context, state) => const NoTransitionPage(
-                child: GroupsScreen(),
-              ),
-            ),
-          ],
-        ),
-        // Index 2: Spotlight
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/spotlight',
-              pageBuilder: (context, state) => const NoTransitionPage(
-                child: SpotlightScreen(),
-              ),
-            ),
-          ],
-        ),
-        // Index 3: Budget
+        // Index 0: Budget tab (Left)
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -85,7 +50,18 @@ final GoRouter appRouter = GoRouter(
             ),
           ],
         ),
-        // Index 4: Profile
+        // Index 1: Home tab (Middle, default initial)
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/home',
+              pageBuilder: (context, state) => const NoTransitionPage(
+                child: HomeScreen(),
+              ),
+            ),
+          ],
+        ),
+        // Index 2: Profile tab (Right)
         StatefulShellBranch(
           routes: [
             GoRoute(

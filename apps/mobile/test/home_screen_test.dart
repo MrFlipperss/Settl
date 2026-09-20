@@ -4,6 +4,7 @@
 // (rendered from a fake repository), the empty state, and that tapping the
 // search bar navigates to the Spotlight tab.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,7 +12,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:settl/app.dart';
 import 'package:settl/config/app_environment.dart';
 import 'package:settl/config/environment.dart';
-import 'package:settl/features/spotlight/spotlight_screen.dart';
 import 'package:settl/models/expense.dart';
 import 'package:settl/models/expense_split.dart';
 import 'package:settl/providers.dart';
@@ -108,7 +108,7 @@ void main() {
     expect(find.text('No expenses yet'), findsOneWidget);
   });
 
-  testWidgets('Tapping the search bar navigates to the Spotlight screen',
+  testWidgets('Entering text in the search bar updates the inline search input',
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -121,10 +121,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Search people or add an expense'));
+    final searchFinder = find.byType(TextField);
+    await tester.enterText(searchFinder, 'Coffee');
     await tester.pumpAndSettle();
 
-    expect(find.byType(SpotlightScreen), findsOneWidget);
+    expect(find.text('Coffee'), findsOneWidget);
   });
 }
 

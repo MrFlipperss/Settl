@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../home/home_screen.dart';
-import '../groups/groups_screen.dart';
-import '../spotlight/spotlight_screen.dart';
 import '../budget/budget_screen.dart';
+import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
 import '../../providers.dart';
 
@@ -37,33 +35,21 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   // Screens for each tab
   final List<Widget> _screens = const [
-    HomeScreen(),
-    GroupsScreen(),
-    SpotlightScreen(),
     BudgetScreen(),
+    HomeScreen(),
     ProfileScreen(),
   ];
 
   static const List<NavigationDestination> _barDestinations = [
     NavigationDestination(
-      icon: Icon(Icons.home_outlined),
-      selectedIcon: Icon(Icons.home),
-      label: 'Home',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.groups_outlined),
-      selectedIcon: Icon(Icons.groups),
-      label: 'Groups',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.search),
-      selectedIcon: Icon(Icons.search),
-      label: 'Spotlight',
-    ),
-    NavigationDestination(
       icon: Icon(Icons.account_balance_wallet_outlined),
       selectedIcon: Icon(Icons.account_balance_wallet),
       label: 'Budget',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.home_outlined),
+      selectedIcon: Icon(Icons.home),
+      label: 'Home',
     ),
     NavigationDestination(
       icon: Icon(Icons.person_outline),
@@ -74,24 +60,14 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   static const List<NavigationRailDestination> _railDestinations = [
     NavigationRailDestination(
-      icon: Icon(Icons.home_outlined),
-      selectedIcon: Icon(Icons.home),
-      label: Text('Home'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.groups_outlined),
-      selectedIcon: Icon(Icons.groups),
-      label: Text('Groups'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.search),
-      selectedIcon: Icon(Icons.search),
-      label: Text('Spotlight'),
-    ),
-    NavigationRailDestination(
       icon: Icon(Icons.account_balance_wallet_outlined),
       selectedIcon: Icon(Icons.account_balance_wallet),
       label: Text('Budget'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.home_outlined),
+      selectedIcon: Icon(Icons.home),
+      label: Text('Home'),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.person_outline),
