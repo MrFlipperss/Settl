@@ -1,0 +1,10 @@
+{
+  "description": "Effortlessly manage your finances with an intuitive expense tracker that helps users monitor spending, set budgets, and achieve financial goals.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
