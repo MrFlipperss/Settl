@@ -135,7 +135,12 @@ class AuthService {
           email: trimmedEmail,
           password: password,
         );
-        await _bootstrapProfile(session);
+        // Email/password sessions may not have a phone number.
+        // Create the profile here only when a phone number is available.
+        if (session.phoneNumber != null &&
+            session.phoneNumber!.trim().isNotEmpty) {
+          await _bootstrapProfile(session);
+        }
         return AsyncValue.data(session);
       } catch (error, stackTrace) {
         return AsyncValue.error(error, stackTrace);
@@ -152,41 +157,104 @@ class AuthService {
     required String email,
     required String password,
     required String displayName,
+    required String phoneNumber,
   }) async {
     _setLoading(true);
     try {
       final trimmedEmail = email.trim();
+      final trimmedName = displayName.trim();
+      final normalizedPhone = normalizePhone(phoneNumber);
+
       if (trimmedEmail.isEmpty) {
         return AsyncValue.error(
           ArgumentError('Email cannot be empty'),
           StackTrace.current,
         );
       }
-      if (password.isEmpty || password.length < 6) {
+
+      if (password.length < 6) {
         return AsyncValue.error(
           ArgumentError('Password must be at least 6 characters'),
           StackTrace.current,
         );
       }
-      if (displayName.isEmpty) {
+
+      if (trimmedName.isEmpty) {
         return AsyncValue.error(
           ArgumentError('Display name cannot be empty'),
           StackTrace.current,
         );
       }
-      try {
-        final session = await _authRepository.signUpWithEmail(
-          email: trimmedEmail,
-          password: password,
-          data: {
-            'display_name': displayName,
-          },
+
+      if (normalizedPhone == null) {
+        return AsyncValue.error(
+          ArgumentError('Please enter a valid phone number'),
+          StackTrace.current,
         );
-        await _bootstrapProfile(session);
-        return AsyncValue.data(session);
-      } catch (error, stackTrace) {
-        return AsyncValue.error(error, stackTrace);
       }
+
+      final session = await _authRepository.signUpWithEmail(
+        email: trimmedEmail,
+        password: password,
+        data: {
+          'display_name': trimmedName,
+          'phone_number': normalizedPhone,
+        },
+      );
+
+      await _bootstrapProfile(
+        session,
+        phoneNumber: normalizedPhone,
+        displayName: trimmedName,
+      );
+
+      return AsyncValue.data(session);
+    } catch (error, stackTrace) {
+      return AsyncValue.error(error, stackTrace);
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<AsyncValue<void>> completeProfile({
+    required String phoneNumber,
+  }) async {
+    _setLoading(true);
+
+    try {
+      final session = currentSession;
+      if (session == null) {
+        throw StateError('Please sign in again to complete your profile.');
+      }
+
+      final normalizedPhone = normalizePhone(phoneNumber);
+      if (normalizedPhone == null) {
+        throw ArgumentError('Please enter a valid phone number.');
+      }
+
+      final existing =
+          await _profileRepository.getProfileByUserId(session.userId);
+
+      final profile = existing == null
+          ? Profile(
+              userId: session.userId,
+              participantId: _uuid.v4(),
+              displayName: session.email?.split('@').first ?? 'User',
+              phoneNumber: normalizedPhone,
+              createdAt: DateTime.now(),
+            )
+          : existing.copyWith(phoneNumber: normalizedPhone);
+
+      if (existing == null) {
+        await _profileRepository.createProfile(profile);
+      } else {
+        await _profileRepository.updateProfile(profile);
+      }
+
+      await _profileRepository.ensureRemoteProfile(profile);
+      return const AsyncValue.data(null);
+    } catch (error, stackTrace) {
+      return AsyncValue.error(error, stackTrace);
     } finally {
       _setLoading(false);
     }
@@ -235,17 +303,29 @@ class AuthService {
   /// Creates one from the session when the user has no profile yet. The
   /// participant id is generated locally; the backend reconciliation happens
   /// in the sync layer (Phase 7/8).
-  Future<void> _bootstrapProfile(AuthSession session) async {
+  Future<void> _bootstrapProfile(
+    AuthSession session, {
+    String? phoneNumber,
+    String? displayName,
+  }) async {
     final existing =
         await _profileRepository.getProfileByUserId(session.userId);
     if (existing != null) return;
+
+    final resolvedPhone = phoneNumber ?? session.phoneNumber;
+
+    if (resolvedPhone == null || resolvedPhone.trim().isEmpty) {
+      throw ArgumentError(
+        'A phone number is required to complete your profile.',
+      );
+    }
+
     await _profileRepository.createProfile(
       Profile(
         userId: session.userId,
         participantId: _uuid.v4(),
-        displayName:
-            session.email?.split('@').first ?? session.phoneNumber ?? 'User',
-        phoneNumber: session.phoneNumber ?? '',
+        displayName: displayName ?? session.email?.split('@').first ?? 'User',
+        phoneNumber: resolvedPhone,
         createdAt: DateTime.now(),
       ),
     );

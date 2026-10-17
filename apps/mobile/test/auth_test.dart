@@ -174,6 +174,51 @@ void main() {
       expect(all.single.displayName, 'Existing');
     });
 
+    test('signUpWithEmail normalizes phone and bootstraps profile details',
+        () async {
+      final auth = FakeAuthRepository();
+      final profiles = FakeProfileRepository();
+      final service = AuthService(
+        authRepository: auth,
+        profileRepository: profiles,
+      );
+
+      final result = await service.signUpWithEmail(
+        email: '  new@example.com ',
+        password: 'password',
+        displayName: '  New User ',
+        phoneNumber: '9876543210',
+      );
+
+      expect(result.hasError, isFalse);
+      expect(auth.lastSignUpEmail, 'new@example.com');
+      expect(auth.lastSignUpData, {
+        'display_name': 'New User',
+        'phone_number': phone,
+      });
+      final profile = await profiles.getProfileByUserId('u1');
+      expect(profile?.displayName, 'New User');
+      expect(profile?.phoneNumber, phone);
+    });
+
+    test('signUpWithEmail rejects an invalid phone number', () async {
+      final auth = FakeAuthRepository();
+      final service = AuthService(
+        authRepository: auth,
+        profileRepository: FakeProfileRepository(),
+      );
+
+      final result = await service.signUpWithEmail(
+        email: 'new@example.com',
+        password: 'password',
+        displayName: 'New User',
+        phoneNumber: 'not-a-phone',
+      );
+
+      expect(result.hasError, isTrue);
+      expect(auth.lastSignUpEmail, isNull);
+    });
+
     test('restoreSession returns null when signed out', () async {
       final auth = FakeAuthRepository();
       final service = AuthService(
@@ -248,6 +293,8 @@ class FakeAuthRepository implements AuthRepository {
   String? lastSentOtpPhone;
   String? lastVerifiedPhone;
   String? lastVerifiedToken;
+  String? lastSignUpEmail;
+  Map<String, dynamic>? lastSignUpData;
 
   final _controller = StreamController<AuthSession?>.broadcast();
 
@@ -311,7 +358,15 @@ class FakeAuthRepository implements AuthRepository {
     required Map<String, dynamic> data,
   }) async {
     _maybeFail();
-    session = _testSession();
+    lastSignUpEmail = email;
+    lastSignUpData = data;
+    session = AuthSession(
+      userId: 'u1',
+      email: email,
+      phoneNumber: data['phone_number'] as String?,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+    );
     _controller.add(session);
     return session!;
   }

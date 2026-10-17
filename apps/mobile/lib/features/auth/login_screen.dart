@@ -28,7 +28,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _handleEmailLogin() async {
     final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+    final password = _passwordController.text;
 
     if (email.isEmpty || !email.contains('@')) {
       setState(() {
@@ -37,7 +37,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    if (password.isEmpty || password.length < 6) {
+    if (password.length < 6) {
       setState(() {
         _errorMessage = 'Password must be at least 6 characters';
       });
@@ -50,22 +50,59 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     try {
-      // Best-effort remote authentication call if Supabase client is available
-      final authRepo = ref.read(authRepositoryProvider);
-      final session = authRepo.currentSession;
-      if (session != null && mounted) {
-        context.go('/home');
+      final result = await ref.read(authServiceProvider).signInWithEmail(
+            email: email,
+            password: password,
+          );
+
+      if (!mounted) return;
+
+      if (result.hasError) {
+        setState(() {
+          _errorMessage = result.error.toString();
+          _isLoading = false;
+        });
         return;
       }
-    } catch (_) {
-      // In test / offline mode, proceed smoothly
-    }
 
-    if (mounted) {
+      final session = ref.read(authServiceProvider).currentSession;
+
+      if (session == null) {
+        setState(() {
+          _errorMessage =
+              'Login succeeded, but no session was found. Please try again.';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      try {
+        final profile = await ref
+            .read(profileRepositoryProvider)
+            .getProfileByUserId(session.userId);
+
+        if (!mounted) return;
+
+        if (profile == null || profile.phoneNumber.trim().isEmpty) {
+          context.go('/complete-profile');
+        } else {
+          context.go('/home');
+        }
+      } catch (e) {
+        if (!mounted) return;
+
+        setState(() {
+          _errorMessage = 'Could not load your profile: $e';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+
       setState(() {
+        _errorMessage = e.toString();
         _isLoading = false;
       });
-      context.go('/home');
     }
   }
 
@@ -155,7 +192,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Sign in with Email', style: TextStyle(fontSize: 16)),
+                      : const Text('Sign in with Email',
+                          style: TextStyle(fontSize: 16)),
                 ),
                 const SizedBox(height: 16),
                 TextButton(
@@ -170,4 +208,3 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 }
-

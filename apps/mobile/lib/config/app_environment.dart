@@ -19,7 +19,7 @@ enum AppEnvironment {
   String get apiBaseUrl {
     switch (this) {
       case AppEnvironment.development:
-        return 'http://localhost:3000/api';
+        return 'https://settl-kru1.onrender.com/api';
       case AppEnvironment.staging:
         return 'https://staging-settl.onrender.com/api';
       case AppEnvironment.production:
@@ -45,7 +45,7 @@ enum AppEnvironment {
     // For development, we can use hardcoded values or environment variables
     switch (this) {
       case AppEnvironment.development:
-        return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+        return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJncnN3aGx5dXZwaWNmYmFqaGVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3Mjc5ODYsImV4cCI6MjEwMDMwMzk4Nn0.UohS2l6QhjMZwBL2WKPczej5YuF6NpPoXKf17GK0XNI';
       case AppEnvironment.staging:
         // Would come from secure build config
         return '';

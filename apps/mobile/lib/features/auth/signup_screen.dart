@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers.dart';
+import '../../utils/phone_utils.dart';
 import '../../widgets/auth/auth_form_field.dart';
 import '../../widgets/auth/auth_button.dart';
 import '../../widgets/auth/auth_divider.dart';
@@ -19,6 +20,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _displayNameController = TextEditingController();
+  final _phoneController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -27,6 +29,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _displayNameController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -43,6 +46,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
             email: _emailController.text,
             password: _passwordController.text,
             displayName: _displayNameController.text,
+            phoneNumber: _phoneController.text,
           );
       if (!mounted) return;
       setState(() {
@@ -103,6 +107,23 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your full name';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                AuthFormField(
+                  labelText: 'Phone Number',
+                  hintText: 'Enter your phone number',
+                  controller: _phoneController,
+                  prefixIcon: Icons.phone_outlined,
+                  keyboardType: TextInputType.phone,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter your phone number';
+                    }
+                    if (normalizePhone(value) == null) {
+                      return 'Please enter a valid phone number';
                     }
                     return null;
                   },
