@@ -57,8 +57,7 @@ func (q *DBQueries) CreateProfile(ctx context.Context, userID string, req Create
 
 	var participantID string
 	err = tx.QueryRow(ctx,
-		`INSERT INTO public.participants (kind, created_at, updated_at) VALUES ('user', $1, $1) RETURNING id`,
-		now,
+		`INSERT INTO public.participants (kind) VALUES ('user') RETURNING id`,
 	).Scan(&participantID)
 	if err != nil {
 		return nil, fmt.Errorf("insert participant: %w", err)
