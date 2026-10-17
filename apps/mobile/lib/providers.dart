@@ -44,6 +44,9 @@ import '../sync/sync_service.dart';
 /// Profile settings screen.
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 
+/// Enables the Liquid Glass visual theme.
+final liquidGlassEnabledProvider = StateProvider<bool>((ref) => false);
+
 /// Provider for the selected accent preset index (see [accentPresets]).
 /// Defaults to the first preset (Violet).
 final accentIndexProvider = StateProvider<int>((ref) => 0);

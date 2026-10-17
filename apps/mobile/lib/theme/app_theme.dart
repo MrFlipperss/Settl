@@ -25,9 +25,24 @@ class AppTheme {
   /// Liquid Glass dark theme - Apple-inspired frosted glass effect in dark mode
   static ThemeData get liquidDark => _buildLiquid(Brightness.dark);
 
-  static ThemeData _build(Brightness brightness) {
+  static ThemeData build({
+    required Color accent,
+    required bool isDark,
+    bool liquidGlass = false,
+  }) {
+    final brightness = isDark ? Brightness.dark : Brightness.light;
+
+    return liquidGlass
+        ? _buildLiquid(brightness, seedColor: accent)
+        : _build(brightness, seedColor: accent);
+  }
+
+  static ThemeData _build(
+    Brightness brightness, {
+    Color? seedColor,
+  }) {
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: AppColors.primary,
+      seedColor: seedColor ?? AppColors.primary,
       brightness: brightness,
     );
 
@@ -68,9 +83,12 @@ class AppTheme {
     );
   }
 
-  static ThemeData _buildLiquid(Brightness brightness) {
+  static ThemeData _buildLiquid(
+    Brightness brightness, {
+    Color? seedColor,
+  }) {
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: AppColors.primary,
+      seedColor: seedColor ?? AppColors.primary,
       brightness: brightness,
     );
 
@@ -80,8 +98,10 @@ class AppTheme {
       colorScheme: colorScheme.copyWith(
         // Semi-transparent backgrounds for glass effect
         surface: colorScheme.surface.withValues(alpha: 0.8),
-        surfaceContainerLow: colorScheme.surfaceContainerLow.withValues(alpha: 0.7),
-        surfaceContainerHigh: colorScheme.surfaceContainerHigh.withValues(alpha: 0.9),
+        surfaceContainerLow:
+            colorScheme.surfaceContainerLow.withValues(alpha: 0.7),
+        surfaceContainerHigh:
+            colorScheme.surfaceContainerHigh.withValues(alpha: 0.9),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent, // Transparent for glass effect
@@ -148,7 +168,8 @@ class AppTheme {
             width: 2,
           ),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       ),
       // Buttons with glass effect
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -234,7 +255,8 @@ class AppTheme {
           color: colorScheme.onSurfaceVariant,
         ),
         secondarySelectedColor: colorScheme.secondaryContainer,
-        disabledColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        disabledColor:
+            colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
       ),
       // Switch and toggle themes
       switchTheme: SwitchThemeData(
@@ -255,6 +277,64 @@ class AppTheme {
           },
         ),
       ),
+    );
+  }
+}
+
+class AccentPreset {
+  const AccentPreset({
+    required this.name,
+    required this.hex,
+  });
+
+  final String name;
+  final Color hex;
+}
+
+const List<AccentPreset> accentPresets = [
+  AccentPreset(name: 'Violet', hex: Color(0xFF7C4DFF)),
+  AccentPreset(name: 'Blue', hex: Color(0xFF2979FF)),
+  AccentPreset(name: 'Green', hex: Color(0xFF2E7D32)),
+  AccentPreset(name: 'Orange', hex: Color(0xFFEF6C00)),
+  AccentPreset(name: 'Rose', hex: Color(0xFFE53966)),
+];
+
+class DesignTokens {
+  const DesignTokens({
+    required this.primary,
+    required this.onSurface,
+    required this.onSurfaceVar,
+    required this.surfaceVariant,
+    required this.container,
+    required this.onContainer,
+    required this.cardBg,
+    required this.border,
+    required this.headerBg,
+  });
+
+  final Color primary;
+  final Color onSurface;
+  final Color onSurfaceVar;
+  final Color surfaceVariant;
+  final Color container;
+  final Color onContainer;
+  final Color cardBg;
+  final Color border;
+  final Color headerBg;
+
+  factory DesignTokens.of(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return DesignTokens(
+      primary: scheme.primary,
+      onSurface: scheme.onSurface,
+      onSurfaceVar: scheme.onSurfaceVariant,
+      surfaceVariant: scheme.surfaceContainerHighest,
+      container: scheme.secondaryContainer,
+      onContainer: scheme.onSecondaryContainer,
+      cardBg: scheme.surfaceContainerLow,
+      border: scheme.outlineVariant,
+      headerBg: scheme.surface,
     );
   }
 }

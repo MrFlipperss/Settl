@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -45,6 +46,11 @@ type JWKSCache struct {
 
 var globalJWKSCache *JWKSCache
 
+// authHTTPClient bounds time spent waiting on remote authentication endpoints.
+var authHTTPClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
 func initJWKSCache(jwksURL string) *JWKSCache {
 	return &JWKSCache{
 		jwksURL: jwksURL,
@@ -75,14 +81,27 @@ func (c *JWKSCache) GetPublicKey(kid string) (*rsa.PublicKey, error) {
 		return nil, fmt.Errorf("no JWKS URL configured")
 	}
 
-	resp, err := http.Get(c.jwksURL)
+	resp, err := authHTTPClient.Get(c.jwksURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetch JWKS: %w", err)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch JWKS: unexpected status %d", resp.StatusCode)
+	}
+
+	const maxJWKSBody = 1 << 20 // 1 MiB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxJWKSBody+1))
+	if err != nil {
+		return nil, fmt.Errorf("read JWKS: %w", err)
+	}
+	if len(body) > maxJWKSBody {
+		return nil, fmt.Errorf("JWKS response exceeds %d bytes", maxJWKSBody)
+	}
+
 	var jwks JWKS
-	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
+	if err := json.Unmarshal(body, &jwks); err != nil {
 		return nil, fmt.Errorf("decode JWKS: %w", err)
 	}
 
@@ -143,10 +162,10 @@ func verifyJWT(tokenStr string, cfg Config) (jwt.MapClaims, error) {
 	// 1) Try local JWT verification iff we have a JWT secret configured.
 	if cfg.JWTSecret != "" {
 		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); ok {
+			if token.Method.Alg() == jwt.SigningMethodHS256.Alg() {
 				return []byte(cfg.JWTSecret), nil
 			}
-			if _, ok := token.Method.(*jwt.SigningMethodRSA); ok {
+			if token.Method.Alg() == jwt.SigningMethodRS256.Alg() {
 				kid, ok := token.Header["kid"].(string)
 				if !ok {
 					return nil, fmt.Errorf("missing kid header")
@@ -157,7 +176,10 @@ func verifyJWT(tokenStr string, cfg Config) (jwt.MapClaims, error) {
 				return nil, fmt.Errorf("JWKS not initialized")
 			}
 			return nil, jwt.ErrSignatureInvalid
-		})
+		}, jwt.WithValidMethods([]string{
+			jwt.SigningMethodHS256.Alg(),
+			jwt.SigningMethodRS256.Alg(),
+		}), jwt.WithExpirationRequired())
 		if err == nil && token.Valid {
 			claims, _ = token.Claims.(jwt.MapClaims)
 			if claims != nil {
@@ -188,7 +210,7 @@ func verifyViaSupabaseAPI(supabaseURL, anonKey, tokenStr string) (jwt.MapClaims,
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	req.Header.Set("apikey", anonKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := authHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("verify via supa: %w", err)
 	}

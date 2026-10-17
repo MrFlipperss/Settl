@@ -210,7 +210,7 @@ class _SpotlightSearchBarState extends State<_SpotlightSearchBar> {
   }
 }
 
-/// T9.4 — One compact row of three quick-action tiles.
+/// T9.4 — One compact row of four quick-action tiles.
 ///
 /// Every tile navigates to a real destination — no dead buttons. Styled
 /// quietly (tertiary container) so the search bar stays the focal point.
@@ -244,6 +244,14 @@ class _QuickActions extends StatelessWidget {
             onTap: _goGroups,
           ),
         ),
+        SizedBox(width: 12),
+        Expanded(
+          child: _QuickActionTile(
+            icon: Icons.account_balance_wallet_outlined,
+            label: 'Budgets',
+            onTap: _goBudgets,
+          ),
+        ),
       ],
     );
   }
@@ -266,7 +274,9 @@ class _QuickActions extends StatelessWidget {
     );
   }
 
-  static void _goGroups(BuildContext context) => context.go('/profile');
+  static void _goGroups(BuildContext context) => context.push('/groups');
+
+  static void _goBudgets(BuildContext context) => context.push('/budget');
 }
 
 class _QuickActionTile extends StatelessWidget {

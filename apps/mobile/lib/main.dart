@@ -4,16 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:settl/config/app_environment.dart';
-import 'package:settl/config/environment.dart';
 import 'package:settl/services/supabase_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize configuration
-  await Environment.init();
 
   // Initialize the AppConfig singleton (fills its late-initialized fields).
   // Required before any widget reads appConfigProvider.
@@ -38,7 +34,7 @@ Future<void> main() async {
 
   // Log the environment in debug mode
   if (kDebugMode) {
-    developer.log('Application starting in ${Environment.currentEnvironment} mode',
+    developer.log('Application starting in ${AppConfig().environment.name} mode',
         name: 'APP_STARTUP');
   }
 

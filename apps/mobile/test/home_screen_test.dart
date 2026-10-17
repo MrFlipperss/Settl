@@ -11,7 +11,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:settl/app.dart';
 import 'package:settl/config/app_environment.dart';
-import 'package:settl/config/environment.dart';
 import 'package:settl/models/expense.dart';
 import 'package:settl/models/expense_split.dart';
 import 'package:settl/providers.dart';
@@ -21,7 +20,6 @@ void main() {
   setUpAll(() async {
     // Mirrors main(): initializes AppConfig's late fields before the app boots.
     SharedPreferences.setMockInitialValues({});
-    await Environment.init();
     await AppConfig().initialize(environment: AppEnvironment.development);
   });
 

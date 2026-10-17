@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
+import '../features/activity/activity_screen.dart';
+import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/signup_screen.dart';
-import '../features/auth/forgot_password_screen.dart';
-import '../features/budget/budget_screen.dart';
+import '../features/destinations/feature_destination_screen.dart';
 import '../features/home/home_screen.dart';
-import '../features/profile/profile_screen.dart';
 import '../features/navigation/shell.dart';
+import '../features/profile/profile_screen.dart';
 
-final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final GoRouter appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
@@ -27,30 +29,9 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const ForgotPasswordScreen(),
     ),
     StatefulShellRoute.indexedStack(
-      builder: (context, state, navigationShell) {
-        return AppShell(
-          currentIndex: navigationShell.currentIndex,
-          onIndexChanged: (int newIndex) {
-            navigationShell.goBranch(
-              newIndex,
-              initialLocation: newIndex == navigationShell.currentIndex,
-            );
-          },
-        );
-      },
+      builder: (context, state, navigationShell) =>
+          AppShell(navigationShell: navigationShell),
       branches: [
-        // Index 0: Budget tab (Left)
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/budget',
-              pageBuilder: (context, state) => const NoTransitionPage(
-                child: BudgetScreen(),
-              ),
-            ),
-          ],
-        ),
-        // Index 1: Home tab (Middle, default initial)
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -61,7 +42,16 @@ final GoRouter appRouter = GoRouter(
             ),
           ],
         ),
-        // Index 2: Profile tab (Right)
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/activity',
+              pageBuilder: (context, state) => const NoTransitionPage(
+                child: ActivityScreen(),
+              ),
+            ),
+          ],
+        ),
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -74,6 +64,23 @@ final GoRouter appRouter = GoRouter(
         ),
       ],
     ),
+    // These feature routes are opened from Home and intentionally sit outside
+    // the three primary tabs. Back returns the user to Home.
+    GoRoute(
+      path: '/groups',
+      builder: (context, state) => const FeatureDestinationScreen(
+        title: 'Groups',
+        icon: Icons.groups_2_outlined,
+        description: 'Shared groups and their expenses will live here.',
+      ),
+    ),
+    GoRoute(
+      path: '/budget',
+      builder: (context, state) => const FeatureDestinationScreen(
+        title: 'Budgets',
+        icon: Icons.account_balance_wallet_outlined,
+        description: 'Create budgets and track spending by category here.',
+      ),
+    ),
   ],
 );
-

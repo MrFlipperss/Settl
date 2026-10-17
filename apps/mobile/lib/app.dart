@@ -36,7 +36,6 @@ class _SettlAppState extends ConsumerState<SettlApp> {
   Widget build(BuildContext context) {
     final appConfig = ref.watch(appConfigProvider);
     final themeMode = ref.watch(themeModeProvider);
-    final accent = accentPresets[ref.watch(accentIndexProvider)];
 
     // T8.5 — start the sync layer once, after the first frame: reconcile the
     // remote profile + claims, then run the initial drain and pull.
@@ -46,13 +45,30 @@ class _SettlAppState extends ConsumerState<SettlApp> {
           .addPostFrameCallback((_) => unawaited(_startSync()));
     }
 
-    final isDark = themeMode == ThemeMode.dark;
-    final theme = AppTheme.build(accent: accent, isDark: isDark);
-    final darkTheme = AppTheme.build(accent: accent, isDark: true);
+    final accentIndex = ref
+        .watch(accentIndexProvider)
+        .clamp(0, accentPresets.length - 1)
+        .toInt();
+
+    final accent = accentPresets[accentIndex].hex;
+    final useLiquidGlass = ref.watch(liquidGlassEnabledProvider);
+
+    final theme = AppTheme.build(
+      accent: accent,
+      isDark: false,
+      liquidGlass: useLiquidGlass,
+    );
+
+    final darkTheme = AppTheme.build(
+      accent: accent,
+      isDark: true,
+      liquidGlass: useLiquidGlass,
+    );
 
     return MaterialApp.router(
       title: appConfig.appName,
-      debugShowCheckedModeBanner: !appConfig.enableDebug, // Hide debug banner in production
+      debugShowCheckedModeBanner:
+          !appConfig.enableDebug, // Hide debug banner in production
       theme: theme,
       darkTheme: darkTheme,
       themeMode: themeMode,
