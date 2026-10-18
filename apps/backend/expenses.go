@@ -447,6 +447,17 @@ func updateExpenseHandler(q *DBQueries) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 			return
 		}
+		for _, split := range splits {
+			allowed, authErr := q.CanUseParticipant(r.Context(), callerPID, split.ParticipantID)
+			if authErr != nil {
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "participant authorization failed"})
+				return
+			}
+			if !allowed {
+				writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "split participant is not authorized"})
+				return
+			}
+		}
 
 		updated, err := q.UpdateExpense(r.Context(), id, req, splits, 0)
 		if err != nil {

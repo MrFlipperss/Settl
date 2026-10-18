@@ -40,6 +40,8 @@ void main() {
       repository: repository,
     ));
     await tester.pumpAndSettle();
+    expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+    expect(find.text('Paid by you (Me)'), findsOneWidget);
     await tester.enterText(find.byType(TextField).at(0), 'Dinner');
     await tester.enterText(find.byType(TextField).at(1), '10.01');
     await tester.tap(find.text('Alice'));
@@ -154,6 +156,16 @@ class _FakeExpenseRepository implements ExpenseRepository {
   Future<Expense?> getExpenseById(String id) async => null;
   @override
   Future<List<Expense>> getExpensesByUser(String id) async => [];
+  @override
+  Stream<List<Expense>> watchExpensesByUser(String id) => const Stream.empty();
+  @override
+  Future<void> updatePeopleExpense(
+      {required String expenseId,
+      required String description,
+      required int amountPaise,
+      required String payerId,
+      required List<String> participantIds,
+      required int expectedVersion}) async {}
   @override
   Future<List<Expense>> getExpensesByList(String id) async => [];
   @override

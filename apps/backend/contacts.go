@@ -185,6 +185,13 @@ func createContactHandler(q *DBQueries) http.HandlerFunc {
 
 		contact, err := q.CreateContact(r.Context(), req, createdBy)
 		if err != nil {
+			if req.ID != nil && *req.ID != "" {
+				existing, lookupErr := q.GetContact(r.Context(), *req.ID)
+				if lookupErr == nil && existing != nil && existing.CreatedBy == createdBy {
+					writeJSON(w, http.StatusOK, existing)
+					return
+				}
+			}
 			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 			return
 		}

@@ -39,6 +39,18 @@ class ListsDao extends DatabaseAccessor<AppDatabase> with _$ListsDaoMixin {
     return rows.map(_collectionFromRow).toList();
   }
 
+  /// Reconciles the server's authenticated group view. Local pending creates
+  /// are retained so an offline group is not lost before its first push.
+  Future<void> removeCollectionsOutside(Set<String> remoteIds) async {
+    final rows = await select(lists).get();
+    for (final row in rows) {
+      if (remoteIds.contains(row.listId) || row.accountNumber == 'PENDING') {
+        continue;
+      }
+      await deleteCollection(row.listId);
+    }
+  }
+
   Future<void> createCollection(Collection collection) async {
     await into(lists).insert(ListsCompanion.insert(
       listId: collection.id,

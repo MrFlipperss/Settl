@@ -29,6 +29,10 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
       _dao.getExpensesByUser(userId);
 
   @override
+  Stream<List<Expense>> watchExpensesByUser(String userId) =>
+      _dao.watchExpensesByUser(userId);
+
+  @override
   Future<List<Expense>> getExpensesByList(String listId) =>
       _dao.getExpensesByList(listId);
 
@@ -109,6 +113,62 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
 
   @override
   Future<void> updateExpense(Expense expense) => _dao.updateExpense(expense);
+
+  @override
+  Future<void> updatePeopleExpense({
+    required String expenseId,
+    required String description,
+    required int amountPaise,
+    required String payerId,
+    required List<String> participantIds,
+    required int expectedVersion,
+  }) async {
+    final name = description.trim();
+    final ids = participantIds.map((id) => id.trim()).toList();
+    final payer = payerId.trim();
+    if (name.isEmpty) throw ArgumentError('Description cannot be empty.');
+    if (amountPaise <= 0) throw ArgumentError('Amount must be positive.');
+    if (payer.isEmpty || ids.isEmpty || !ids.contains(payer)) {
+      throw ArgumentError('Select a valid payer and participants.');
+    }
+    if (ids.any((id) => id.isEmpty) || ids.toSet().length != ids.length) {
+      throw ArgumentError('Participants must be valid and unique.');
+    }
+    final current = await _dao.getExpenseById(expenseId);
+    if (current == null) throw StateError('Expense is no longer available.');
+    final queue = _syncQueue;
+    if (queue == null) throw StateError('Expense sync is not available.');
+    final base = amountPaise ~/ ids.length;
+    final remainder = amountPaise % ids.length;
+    final updated = current.copyWith(
+      amount: amountPaise / 100.0,
+      payerId: payer,
+      note: name,
+      version: expectedVersion + 1,
+    );
+    final splits = [
+      for (var i = 0; i < ids.length; i++)
+        ExpenseSplit(
+          id: _uuid.v4(),
+          expenseId: expenseId,
+          participantId: ids[i],
+          shareAmount: (base + (i < remainder ? 1 : 0)) / 100.0,
+        ),
+    ];
+    await _dao.replaceExpenseWithSplits(updated, splits);
+    await queue.enqueueExpense(
+      operation: SyncOperation.update,
+      request: ApiCreateExpenseRequest(
+        id: expenseId,
+        payerId: payer,
+        amount: amountPaise / 100.0,
+        splitType: 'equal',
+        note: name,
+        idempotencyKey: current.idempotencyKey ?? expenseId,
+        splits: [for (final id in ids) ApiCreateSplitItem(userId: id)],
+      ),
+    );
+  }
 
   @override
   Future<void> deleteExpense(String expenseId) => _dao.deleteExpense(expenseId);

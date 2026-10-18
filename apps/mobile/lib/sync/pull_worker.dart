@@ -83,6 +83,7 @@ class PullWorker {
 
   Future<void> _refreshCollections() async {
     final remote = await _collectionsApi.listCollections();
+    await _listsLocal.removeCollectionsOutside(remote.map((e) => e.id).toSet());
     for (final api in remote) {
       final local = Collection(
         id: api.id,

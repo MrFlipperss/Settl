@@ -267,6 +267,15 @@ func addListMemberHandler(q *DBQueries) http.HandlerFunc {
 			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "access denied: not a member of group"})
 			return
 		}
+		allowed, err := q.CanUseParticipant(r.Context(), caller, req.UserID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "participant authorization failed"})
+			return
+		}
+		if !allowed {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "participant is not an authorized contact"})
+			return
+		}
 
 		// user_id in AddMemberRequest refers to participant_id
 		if err := q.AddListMember(r.Context(), listID, req.UserID); err != nil {

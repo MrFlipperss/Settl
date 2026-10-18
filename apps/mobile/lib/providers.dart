@@ -107,6 +107,7 @@ final contactRepositoryProvider = Provider<ContactRepository>((ref) {
   return ContactRepositoryImpl(
     ref.watch(contactsDaoProvider),
     ref.watch(contactsApiProvider),
+      ref.watch(syncQueueProvider),
   );
 });
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/collection.dart';
+import '../../api/api_exception.dart';
 import '../../models/collection_member.dart';
 import '../../models/contact.dart';
 import '../../providers.dart';
@@ -137,7 +138,9 @@ class _GroupMembersScreenState extends ConsumerState<GroupMembersScreen> {
       ? error.message
       : error is ArgumentError
           ? error.message?.toString() ?? 'invalid member'
-          : 'Please try again.';
+          : error is ApiException
+              ? error.message
+              : 'Please try again.';
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -158,6 +161,8 @@ class _GroupMembersScreenState extends ConsumerState<GroupMembersScreen> {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                if (_isMutating) const LinearProgressIndicator(),
+                if (_isMutating) const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -166,8 +171,14 @@ class _GroupMembersScreenState extends ConsumerState<GroupMembersScreen> {
                     ),
                     FilledButton.icon(
                       onPressed: _isMutating ? null : () => _addMember(data),
-                      icon: const Icon(Icons.person_add_outlined),
-                      label: const Text('Add person'),
+                      icon: _isMutating
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.person_add_outlined),
+                      label: Text(_isMutating ? 'Saving…' : 'Add person'),
                     ),
                   ],
                 ),

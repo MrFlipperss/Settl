@@ -111,6 +111,15 @@ void main() {
       expect(mine.map((expense) => expense.id), ['exp-2', 'exp-1']);
     });
 
+    test('watchExpensesByUser reacts to a locally saved pending expense', () async {
+      final values = expensesDao.watchExpensesByUser('user-1');
+      final first = await values.first;
+      expect(first, isEmpty);
+      await expensesDao.createExpense(expense);
+      final next = await values.firstWhere((items) => items.isNotEmpty);
+      expect(next.single.id, 'exp-1');
+    });
+
     test('updateExpense overwrites mutable fields', () async {
       await expensesDao.createExpense(expense);
       await expensesDao.updateExpense(Expense(
@@ -269,6 +278,22 @@ void main() {
       final mine = await listsDao.getCollectionsByUser('user-1');
 
       expect(mine.map((l) => l.id), ['list-2', 'list-1']);
+    });
+
+    test('group membership remains account scoped', () async {
+      await listsDao.createCollection(collection);
+      await listsDao.createCollection(Collection(
+        id: 'list-2', name: 'Other', accountNumber: 'ACC-2',
+        createdBy: 'user-2', createdAt: DateTime.utc(2026, 8, 2),
+      ));
+      await listsDao.addMemberToCollection(CollectionMember(
+        collectionId: 'list-1', participantId: 'user-1', addedAt: DateTime.utc(2026, 8, 1),
+      ));
+      await listsDao.addMemberToCollection(CollectionMember(
+        collectionId: 'list-2', participantId: 'user-2', addedAt: DateTime.utc(2026, 8, 2),
+      ));
+      expect((await listsDao.getCollectionsByUser('user-1')).map((g) => g.id), ['list-1']);
+      expect((await listsDao.getCollectionsByUser('user-2')).map((g) => g.id), ['list-2']);
     });
 
     test('removeMemberFromCollection', () async {

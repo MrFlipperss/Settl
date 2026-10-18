@@ -224,6 +224,23 @@ class _FakeExpenseRepository implements ExpenseRepository {
   }
 
   @override
+  Stream<List<Expense>> watchExpensesByUser(String userId) => Stream.value(
+        expenses
+            .where((expense) =>
+                expense.payerId == userId ||
+                splitParticipants[expense.id]?.contains(userId) == true)
+            .toList(),
+      );
+  @override
+  Future<void> updatePeopleExpense(
+      {required String expenseId,
+      required String description,
+      required int amountPaise,
+      required String payerId,
+      required List<String> participantIds,
+      required int expectedVersion}) async {}
+
+  @override
   Future<List<Expense>> getExpensesByList(String listId) async {
     return expenses.where((e) => e.listId == listId).toList();
   }

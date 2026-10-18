@@ -15,7 +15,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   final _descriptionController = TextEditingController();
   final _amountController = TextEditingController();
   late Future<_PeopleData> _peopleFuture;
-  String? _payerId;
   final _selectedIds = <String>{};
   bool _isSubmitting = false;
 
@@ -51,7 +50,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         if (contact.participantId != profile.participantId)
           _Person(id: contact.participantId, name: contact.displayName),
     ];
-    _payerId ??= profile.participantId;
     _selectedIds.add(profile.participantId);
     return _PeopleData(profile: profile, people: people);
   }
@@ -67,10 +65,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       _showMessage('Enter a positive amount with up to two decimals.');
       return;
     }
-    if (_payerId == null || !_selectedIds.contains(_payerId)) {
-      _showMessage('Select the payer and include them in the split.');
-      return;
-    }
     if (_selectedIds.isEmpty) {
       _showMessage('Select at least one person.');
       return;
@@ -80,7 +74,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       await ref.read(expenseRepositoryProvider).createPeopleExpense(
             description: description,
             amountPaise: amountPaise,
-            payerId: _payerId!,
+            payerId: data.profile.participantId,
             participantIds: _selectedIds.toList(),
           );
       if (!mounted) return;
@@ -155,17 +149,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                   onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _payerId,
-                  decoration: const InputDecoration(labelText: 'Paid by'),
-                  items: [
-                    for (final person in data.people)
-                      DropdownMenuItem(
-                          value: person.id, child: Text(person.name)),
-                  ],
-                  onChanged: _isSubmitting
-                      ? null
-                      : (value) => setState(() => _payerId = value),
+                InputDecorator(
+                  decoration: const InputDecoration(labelText: 'Payer'),
+                  child: Text('Paid by you (${data.profile.displayName})'),
                 ),
                 const SizedBox(height: 20),
                 Text('Split equally between',
@@ -176,15 +162,16 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     contentPadding: EdgeInsets.zero,
                     value: _selectedIds.contains(person.id),
                     title: Text(person.name),
-                    onChanged: _isSubmitting
-                        ? null
-                        : (selected) => setState(() {
-                              if (selected == true) {
-                                _selectedIds.add(person.id);
-                              } else {
-                                _selectedIds.remove(person.id);
-                              }
-                            }),
+                    onChanged:
+                        _isSubmitting || person.id == data.profile.participantId
+                            ? null
+                            : (selected) => setState(() {
+                                  if (selected == true) {
+                                    _selectedIds.add(person.id);
+                                  } else {
+                                    _selectedIds.remove(person.id);
+                                  }
+                                }),
                   ),
                 if (_selectedIds.isNotEmpty &&
                     _parsePaise(_amountController.text) != null)

@@ -2,6 +2,9 @@ import 'package:settl/api/contacts_api.dart';
 import 'package:settl/database/daos/contacts_dao.dart';
 import 'package:settl/models/contact.dart';
 import 'package:settl/repositories/interfaces/contact_repository.dart';
+import 'package:settl/sync/sync_queue.dart';
+import 'package:settl/api/models/api_requests.dart';
+import 'package:settl/models/pending_sync_operation.dart';
 
 /// Drift-backed [ContactRepository] with a remote claim seam.
 ///
@@ -10,8 +13,9 @@ import 'package:settl/repositories/interfaces/contact_repository.dart';
 class ContactRepositoryImpl implements ContactRepository {
   final ContactsDao _dao;
   final ContactsApi _api;
+  final SyncQueue? _syncQueue;
 
-  ContactRepositoryImpl(this._dao, this._api);
+  ContactRepositoryImpl(this._dao, this._api, [this._syncQueue]);
 
   @override
   Future<Contact?> getContactById(String participantId) =>
@@ -25,7 +29,20 @@ class ContactRepositoryImpl implements ContactRepository {
   Future<List<Contact>> getAllContacts() => _dao.getAllContacts();
 
   @override
-  Future<void> createContact(Contact contact) => _dao.createContact(contact);
+  Future<void> createContact(Contact contact) async {
+    await _dao.createContact(contact);
+    final queue = _syncQueue;
+    if (queue != null) {
+      await queue.enqueueContact(
+        operation: SyncOperation.insert,
+        request: ApiCreateContactRequest(
+          id: contact.participantId,
+          displayName: contact.displayName,
+          phoneNumber: contact.phoneNumber,
+        ),
+      );
+    }
+  }
 
   @override
   Future<void> updateContact(Contact contact) => _dao.updateContact(contact);

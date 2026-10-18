@@ -233,7 +233,7 @@ class _QuickActions extends StatelessWidget {
           child: _QuickActionTile(
             icon: Icons.person_add_outlined,
             label: 'Add person',
-            onTap: _showAddPersonHint,
+            onTap: _goContacts,
           ),
         ),
         SizedBox(width: 12),
@@ -259,14 +259,7 @@ class _QuickActions extends StatelessWidget {
   static void _goAddExpense(BuildContext context) =>
       context.push('/expenses/new');
 
-  static void _showAddPersonHint(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Contacts coming up in Phase 10!'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
+  static void _goContacts(BuildContext context) => context.push('/contacts');
 
   static void _goGroups(BuildContext context) => context.push('/groups');
 
@@ -362,10 +355,10 @@ class _RecentExpensesForParticipant extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final repository = ref.watch(expenseRepositoryProvider);
 
-    return FutureBuilder(
-      future: repository.getExpensesByUser(participantId),
+    return StreamBuilder<List<Expense>>(
+      stream: repository.watchExpensesByUser(participantId),
       builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox.shrink();
         }
 
@@ -377,11 +370,9 @@ class _RecentExpensesForParticipant extends ConsumerWidget {
         final recent = [...expenses]
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-        return Column(
-          children: [
-            for (final expense in recent.take(5)) _ExpenseRow(expense: expense),
-          ],
-        );
+        return Column(children: [
+          for (final expense in recent.take(5)) _ExpenseRow(expense: expense),
+        ]);
       },
     );
   }
@@ -470,6 +461,7 @@ class _ExpenseRow extends StatelessWidget {
           fontWeight: FontWeight.w600,
         ),
       ),
+      onTap: () => context.push('/expenses/${expense.id}'),
     );
   }
 

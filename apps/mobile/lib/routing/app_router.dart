@@ -10,6 +10,8 @@ import '../features/destinations/feature_destination_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/groups/groups_screen.dart';
 import '../features/expenses/add_expense_screen.dart';
+import '../features/expenses/expense_detail_screen.dart';
+import '../features/contacts/contacts_screen.dart';
 import '../features/navigation/shell.dart';
 import '../features/profile/profile_screen.dart';
 
@@ -80,6 +82,16 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/expenses/new',
       builder: (context, state) => const AddExpenseScreen(),
+    ),
+    GoRoute(
+      path: '/expenses/:expenseId',
+      builder: (context, state) => ExpenseDetailScreen(
+        expenseId: state.pathParameters['expenseId']!,
+      ),
+    ),
+    GoRoute(
+      path: '/contacts',
+      builder: (context, state) => const ContactsScreen(),
     ),
     GoRoute(
       path: '/budget',

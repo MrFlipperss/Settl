@@ -27,6 +27,7 @@ import 'package:settl/repositories/contact_repository_impl.dart';
 import 'package:settl/repositories/expense_repository_impl.dart';
 import 'package:settl/repositories/profile_repository_impl.dart';
 import 'package:settl/sync/sync_queue.dart';
+import 'package:settl/models/pending_sync_operation.dart';
 import 'package:sqlite3/open.dart';
 
 /// Never-invoked HTTP stub for the remote seams of repository impls; the
@@ -116,6 +117,31 @@ void main() {
 
       final fetched = await expenseRepo.getExpenseById('exp-1');
       expect(fetched, expense);
+    });
+
+    test('updatePeopleExpense replaces splits and queues an update', () async {
+      await expenseRepo.createExpense(expense);
+      await expenseRepo.createExpenseSplit(const ExpenseSplit(
+        id: 'old-split',
+        expenseId: 'exp-1',
+        participantId: 'user-1',
+        shareAmount: 1200.50,
+      ));
+      await expenseRepo.updatePeopleExpense(
+        expenseId: 'exp-1',
+        description: 'Updated',
+        amountPaise: 1001,
+        payerId: 'user-1',
+        participantIds: ['user-1', 'user-2'],
+        expectedVersion: 1,
+      );
+      expect((await expenseRepo.getExpenseById('exp-1'))!.note, 'Updated');
+      expect(
+          (await expenseRepo.getSplitsForExpense('exp-1'))
+              .map((s) => s.shareAmount),
+          [5.01, 5.0]);
+      expect((await PendingSyncDao(db).getPending()).last.operation,
+          SyncOperation.update);
     });
 
     test('getExpensesByList filters by listId', () async {
