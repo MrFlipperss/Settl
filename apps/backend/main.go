@@ -80,7 +80,9 @@ func main() {
 			r.Post("/", createListHandler(db))
 			r.Get("/", listListsHandler(db))
 			r.Get("/{groupID}", getListHandler(db))
+			r.Get("/{groupID}/members", listMembersHandler(db))
 			r.Post("/{groupID}/members", addListMemberHandler(db))
+			r.Delete("/{groupID}/members/{participantID}", removeListMemberHandler(db))
 		})
 
 		r.Route("/expenses", func(r chi.Router) {

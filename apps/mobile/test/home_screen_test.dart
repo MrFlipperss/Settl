@@ -11,10 +11,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:settl/app.dart';
 import 'package:settl/config/app_environment.dart';
+import 'package:settl/models/auth_session.dart';
 import 'package:settl/models/expense.dart';
 import 'package:settl/models/expense_split.dart';
+import 'package:settl/models/profile.dart';
 import 'package:settl/providers.dart';
 import 'package:settl/repositories/interfaces/expense_repository.dart';
+import 'package:settl/repositories/interfaces/profile_repository.dart';
+import 'package:settl/services/auth_service.dart';
+
+import 'helpers/fake_auth_repository.dart';
 
 void main() {
   setUpAll(() async {
@@ -58,7 +64,7 @@ void main() {
         amount: 120.0,
         category: 'Food',
         splitType: 'equal',
-        payerId: 'u1',
+        payerId: 'p1',
         note: 'Lunch at cafe',
         createdAt: now,
       ),
@@ -67,17 +73,46 @@ void main() {
         amount: 45.50,
         category: 'Transport',
         splitType: 'equal',
-        payerId: 'u2',
+        payerId: 'p2',
         note: 'Cab ride',
         createdAt: now.subtract(const Duration(days: 1)),
       ),
+      Expense(
+        id: 'e3',
+        amount: 900,
+        category: 'Shopping',
+        splitType: 'equal',
+        payerId: 'p2',
+        note: 'Other account purchase',
+        createdAt: now.subtract(const Duration(days: 2)),
+      ),
     ];
+    const session = AuthSession(userId: 'auth-1', accessToken: 'test-token');
+    final profile = Profile(
+      userId: 'auth-1',
+      participantId: 'p1',
+      displayName: 'Test User',
+      phoneNumber: '+911234567890',
+      createdAt: now,
+    );
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          expenseRepositoryProvider
-              .overrideWithValue(_FakeExpenseRepository(expenses: expenses)),
+          authStateProvider.overrideWith((ref) => Stream.value(session)),
+          profileRepositoryProvider.overrideWithValue(
+            _FakeProfileRepository(profile),
+          ),
+          authServiceProvider.overrideWithValue(AuthService(
+            authRepository: FakeAuthRepository(),
+            profileRepository: _FakeProfileRepository(profile),
+          )),
+          expenseRepositoryProvider.overrideWithValue(_FakeExpenseRepository(
+            expenses: expenses,
+            splitParticipants: const {
+              'e2': {'p1'}
+            },
+          )),
         ],
         child: const SettlApp(),
       ),
@@ -88,6 +123,36 @@ void main() {
     expect(find.text('Cab ride'), findsOneWidget);
     expect(find.text('\u20B9120.00'), findsOneWidget);
     expect(find.text('\u20B945.50'), findsOneWidget);
+    expect(find.text('Other account purchase'), findsNothing);
+  });
+
+  testWidgets('Signed-out users do not see account-specific expenses',
+      (tester) async {
+    final expense = Expense(
+      id: 'private',
+      amount: 120,
+      category: 'Food',
+      splitType: 'equal',
+      payerId: 'p1',
+      note: 'Private account expense',
+      createdAt: DateTime.now(),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authStateProvider.overrideWith((ref) => Stream.value(null)),
+          expenseRepositoryProvider.overrideWithValue(
+            _FakeExpenseRepository(expenses: [expense]),
+          ),
+        ],
+        child: const SettlApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Private account expense'), findsNothing);
+    expect(find.text('No expenses yet'), findsOneWidget);
   });
 
   testWidgets('Empty repository shows the "No expenses yet" empty state',
@@ -130,9 +195,13 @@ void main() {
 /// Deterministic fake used to drive the recent-expenses section without the
 /// Drift database (which throws [MissingPluginException] in widget tests).
 class _FakeExpenseRepository implements ExpenseRepository {
-  _FakeExpenseRepository({required this.expenses});
+  _FakeExpenseRepository({
+    required this.expenses,
+    this.splitParticipants = const {},
+  });
 
   final List<Expense> expenses;
+  final Map<String, Set<String>> splitParticipants;
 
   @override
   Future<List<Expense>> getAllExpenses() async => expenses;
@@ -147,7 +216,11 @@ class _FakeExpenseRepository implements ExpenseRepository {
 
   @override
   Future<List<Expense>> getExpensesByUser(String userId) async {
-    return expenses.where((e) => e.payerId == userId).toList();
+    return expenses
+        .where((expense) =>
+            expense.payerId == userId ||
+            splitParticipants[expense.id]?.contains(userId) == true)
+        .toList();
   }
 
   @override
@@ -157,6 +230,15 @@ class _FakeExpenseRepository implements ExpenseRepository {
 
   @override
   Future<void> createExpense(Expense expense) async {}
+
+  @override
+  Future<Expense> createPeopleExpense({
+    required String description,
+    required int amountPaise,
+    required String payerId,
+    required List<String> participantIds,
+  }) async =>
+      throw UnimplementedError();
 
   @override
   Future<void> updateExpense(Expense expense) async {}
@@ -174,4 +256,33 @@ class _FakeExpenseRepository implements ExpenseRepository {
 
   @override
   Future<void> deleteExpenseSplit(String splitId) async {}
+}
+
+class _FakeProfileRepository implements ProfileRepository {
+  _FakeProfileRepository(this.profile);
+
+  final Profile profile;
+
+  @override
+  Future<Profile?> getProfileByUserId(String userId) async =>
+      userId == profile.userId ? profile : null;
+
+  @override
+  Future<Profile?> getProfileByParticipantId(String participantId) async =>
+      participantId == profile.participantId ? profile : null;
+
+  @override
+  Future<List<Profile>> getAllProfiles() async => [profile];
+
+  @override
+  Future<void> createProfile(Profile profile) async {}
+
+  @override
+  Future<void> updateProfile(Profile profile) async {}
+
+  @override
+  Future<void> deleteProfileByUserId(String userId) async {}
+
+  @override
+  Future<Profile> ensureRemoteProfile(Profile profile) async => profile;
 }

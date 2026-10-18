@@ -21,8 +21,8 @@ import 'package:sqlite3/open.dart';
 void main() {
   if (Platform.isWindows) {
     // Host tests can't use sqlite3_flutter_libs; winsqlite3 ships with Windows.
-    open.overrideFor(OperatingSystem.windows,
-        () => DynamicLibrary.open('winsqlite3.dll'));
+    open.overrideFor(
+        OperatingSystem.windows, () => DynamicLibrary.open('winsqlite3.dll'));
   }
 
   late AppDatabase db;
@@ -74,7 +74,8 @@ void main() {
       expect(fetched.createdAt, DateTime.utc(2026, 8, 1));
     });
 
-    test('getExpensesByUser filters by payerId', () async {
+    test('getExpensesByUser includes payer and split participant expenses',
+        () async {
       await expensesDao.createExpense(expense);
       await expensesDao.createExpense(Expense(
         id: 'exp-2',
@@ -84,11 +85,30 @@ void main() {
         payerId: 'user-2',
         createdAt: DateTime.utc(2026, 8, 2),
       ));
+      await expensesDao.createExpense(Expense(
+        id: 'exp-3',
+        amount: 75,
+        category: 'food',
+        splitType: 'equal',
+        payerId: 'user-3',
+        createdAt: DateTime.utc(2026, 8, 3),
+      ));
+      await expensesDao.createExpenseSplit(const ExpenseSplit(
+        id: 'split-1',
+        expenseId: 'exp-2',
+        participantId: 'user-1',
+        shareAmount: 25,
+      ));
+      await expensesDao.createExpenseSplit(const ExpenseSplit(
+        id: 'split-2',
+        expenseId: 'exp-3',
+        participantId: 'user-4',
+        shareAmount: 75,
+      ));
 
       final mine = await expensesDao.getExpensesByUser('user-1');
 
-      expect(mine, hasLength(1));
-      expect(mine.single.id, 'exp-1');
+      expect(mine.map((expense) => expense.id), ['exp-2', 'exp-1']);
     });
 
     test('updateExpense overwrites mutable fields', () async {
@@ -240,10 +260,15 @@ void main() {
         createdBy: 'user-2',
         createdAt: DateTime.utc(2026, 8, 2),
       ));
+      await listsDao.addMemberToCollection(CollectionMember(
+        collectionId: 'list-2',
+        participantId: 'user-1',
+        addedAt: DateTime.utc(2026, 8, 2),
+      ));
 
       final mine = await listsDao.getCollectionsByUser('user-1');
 
-      expect(mine.map((l) => l.id), ['list-1']);
+      expect(mine.map((l) => l.id), ['list-2', 'list-1']);
     });
 
     test('removeMemberFromCollection', () async {
@@ -287,10 +312,9 @@ void main() {
     test('create + lookup by userId and participantId', () async {
       await profilesDao.createProfile(profile);
 
-      expect((await profilesDao.getProfileByUserId('user-1'))!.upiId,
-          'dhruv@upi');
       expect(
-          (await profilesDao.getProfileByParticipantId('p-1'))!.displayName,
+          (await profilesDao.getProfileByUserId('user-1'))!.upiId, 'dhruv@upi');
+      expect((await profilesDao.getProfileByParticipantId('p-1'))!.displayName,
           'Dhruv');
     });
 

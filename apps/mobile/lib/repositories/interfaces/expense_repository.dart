@@ -18,6 +18,13 @@ abstract class ExpenseRepository {
 
   Future<void> createExpense(Expense expense);
 
+  Future<Expense> createPeopleExpense({
+    required String description,
+    required int amountPaise,
+    required String payerId,
+    required List<String> participantIds,
+  });
+
   Future<void> updateExpense(Expense expense);
 
   /// Deletes the expense and all of its splits.

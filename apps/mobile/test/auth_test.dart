@@ -424,7 +424,7 @@ class FakeProfileRepository implements ProfileRepository {
   }
 
   @override
-  Future<void> ensureRemoteProfile(Profile profile) async {
-    // No-op: auth tests exercise the local profile path only.
+  Future<Profile> ensureRemoteProfile(Profile profile) async {
+    return profile;
   }
 }

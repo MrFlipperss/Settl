@@ -135,11 +135,18 @@ class AuthService {
           email: trimmedEmail,
           password: password,
         );
-        // Email/password sessions may not have a phone number.
-        // Create the profile here only when a phone number is available.
-        if (session.phoneNumber != null &&
-            session.phoneNumber!.trim().isNotEmpty) {
-          await _bootstrapProfile(session);
+        final existing =
+            await _profileRepository.getProfileByUserId(session.userId);
+
+        final hasSessionPhone = session.phoneNumber?.trim().isNotEmpty ?? false;
+        final hasExistingPhone =
+            existing?.phoneNumber.trim().isNotEmpty ?? false;
+
+        if (hasSessionPhone || hasExistingPhone) {
+          await _bootstrapProfile(
+            session,
+            existingProfile: existing,
+          );
         }
         return AsyncValue.data(session);
       } catch (error, stackTrace) {
@@ -251,7 +258,12 @@ class AuthService {
         await _profileRepository.updateProfile(profile);
       }
 
-      await _profileRepository.ensureRemoteProfile(profile);
+      final remoteProfile =
+          await _profileRepository.ensureRemoteProfile(profile);
+
+      if (remoteProfile.participantId != profile.participantId) {
+        await _profileRepository.updateProfile(remoteProfile);
+      }
       return const AsyncValue.data(null);
     } catch (error, stackTrace) {
       return AsyncValue.error(error, stackTrace);
@@ -307,27 +319,43 @@ class AuthService {
     AuthSession session, {
     String? phoneNumber,
     String? displayName,
+    Profile? existingProfile,
   }) async {
-    final existing =
+    final existing = existingProfile ??
         await _profileRepository.getProfileByUserId(session.userId);
-    if (existing != null) return;
 
-    final resolvedPhone = phoneNumber ?? session.phoneNumber;
+    final resolvedPhone = [
+      phoneNumber,
+      session.phoneNumber,
+      existing?.phoneNumber,
+    ].whereType<String>().firstWhere(
+          (phone) => phone.trim().isNotEmpty,
+          orElse: () => '',
+        );
 
-    if (resolvedPhone == null || resolvedPhone.trim().isEmpty) {
+    if (resolvedPhone.trim().isEmpty) {
       throw ArgumentError(
         'A phone number is required to complete your profile.',
       );
     }
 
-    await _profileRepository.createProfile(
-      Profile(
-        userId: session.userId,
-        participantId: _uuid.v4(),
-        displayName: displayName ?? session.email?.split('@').first ?? 'User',
-        phoneNumber: resolvedPhone,
-        createdAt: DateTime.now(),
-      ),
-    );
+    final profile = existing ??
+        Profile(
+          userId: session.userId,
+          participantId: _uuid.v4(),
+          displayName: displayName ?? session.email?.split('@').first ?? 'User',
+          phoneNumber: resolvedPhone,
+          createdAt: DateTime.now(),
+        );
+
+    if (existing == null) {
+      await _profileRepository.createProfile(profile);
+    }
+
+    final remoteProfile = await _profileRepository.ensureRemoteProfile(profile);
+
+    if (remoteProfile.participantId != profile.participantId) {
+      await _profileRepository.updateProfile(remoteProfile);
+    }
   }
 }

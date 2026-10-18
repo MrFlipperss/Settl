@@ -97,6 +97,8 @@ class PullWorker {
       } else {
         await _listsLocal.updateCollection(local);
       }
+      final members = await _collectionsApi.listMembers(api.id);
+      await _listsLocal.replaceMembersOfCollection(api.id, members);
     }
   }
 }

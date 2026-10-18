@@ -26,6 +26,7 @@ class SyncQueue {
   static const entityExpense = 'expense';
   static const entityContact = 'contact';
   static const entityCollection = 'collection';
+  static const entityCollectionMember = 'collection_member';
   static const entityProfile = 'profile';
 
   Future<void> enqueueExpense({
@@ -92,6 +93,22 @@ class SyncQueue {
       entityId: entityId,
       operation: operation,
       payload: payloadRequest.toJson(),
+    );
+  }
+
+  Future<void> enqueueCollectionMember({
+    required SyncOperation operation,
+    required String collectionId,
+    required String participantId,
+  }) async {
+    await _enqueue(
+      entityType: entityCollectionMember,
+      entityId: '$collectionId:$participantId',
+      operation: operation,
+      payload: {
+        'group_id': collectionId,
+        'user_id': participantId,
+      },
     );
   }
 

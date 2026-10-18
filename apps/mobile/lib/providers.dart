@@ -97,7 +97,10 @@ final pendingSyncDaoProvider = Provider<PendingSyncDao>((ref) {
 /// DAO provider; remote (HTTP) implementations will be swapped in later
 /// phases behind the same interfaces.
 final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
-  return ExpenseRepositoryImpl(ref.watch(expensesDaoProvider));
+  return ExpenseRepositoryImpl(
+    ref.watch(expensesDaoProvider),
+    ref.watch(syncQueueProvider),
+  );
 });
 
 final contactRepositoryProvider = Provider<ContactRepository>((ref) {
@@ -108,7 +111,10 @@ final contactRepositoryProvider = Provider<ContactRepository>((ref) {
 });
 
 final collectionRepositoryProvider = Provider<CollectionRepository>((ref) {
-  return CollectionRepositoryImpl(ref.watch(listsDaoProvider));
+  return CollectionRepositoryImpl(
+    ref.watch(listsDaoProvider),
+    ref.watch(syncQueueProvider),
+  );
 });
 
 final balanceRepositoryProvider = Provider<BalanceRepository>((ref) {

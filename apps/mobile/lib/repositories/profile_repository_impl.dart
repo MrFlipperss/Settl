@@ -36,11 +36,13 @@ class ProfileRepositoryImpl implements ProfileRepository {
       _dao.deleteProfileByUserId(userId);
 
   @override
-  Future<void> ensureRemoteProfile(Profile profile) async {
-    await _api.createProfile(ApiCreateProfileRequest(
+  Future<Profile> ensureRemoteProfile(Profile profile) async {
+    final remote = await _api.createProfile(ApiCreateProfileRequest(
       displayName: profile.displayName,
       phoneNumber: profile.phoneNumber,
       upiId: profile.upiId,
     ));
+
+    return profile.copyWith(participantId: remote.participantId);
   }
 }

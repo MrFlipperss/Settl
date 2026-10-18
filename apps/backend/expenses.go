@@ -339,6 +339,13 @@ func createExpenseHandler(q *DBQueries) http.HandlerFunc {
 				return
 			}
 		}
+		for _, split := range req.Splits {
+			allowed, err := q.CanUseParticipant(r.Context(), callerPID, split.UserID)
+			if err != nil || !allowed {
+				writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "participant is not available to this account"})
+				return
+			}
+		}
 
 		splits, err := resolveSplits(req)
 		if err != nil {

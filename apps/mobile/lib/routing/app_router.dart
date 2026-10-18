@@ -8,6 +8,8 @@ import '../features/auth/login_screen.dart';
 import '../features/auth/signup_screen.dart';
 import '../features/destinations/feature_destination_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/groups/groups_screen.dart';
+import '../features/expenses/add_expense_screen.dart';
 import '../features/navigation/shell.dart';
 import '../features/profile/profile_screen.dart';
 
@@ -73,11 +75,11 @@ final GoRouter appRouter = GoRouter(
     // the three primary tabs. Back returns the user to Home.
     GoRoute(
       path: '/groups',
-      builder: (context, state) => const FeatureDestinationScreen(
-        title: 'Groups',
-        icon: Icons.groups_2_outlined,
-        description: 'Shared groups and their expenses will live here.',
-      ),
+      builder: (context, state) => const GroupsScreen(),
+    ),
+    GoRoute(
+      path: '/expenses/new',
+      builder: (context, state) => const AddExpenseScreen(),
     ),
     GoRoute(
       path: '/budget',

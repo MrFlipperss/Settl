@@ -20,8 +20,13 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<List<Expense>> getExpensesByUser(String userId) async {
+    final splitsForUser = selectOnly(expenseSplits)
+      ..addColumns([expenseSplits.expenseId])
+      ..where(expenseSplits.participantId.equals(userId));
     final rows = await (select(expenses)
-          ..where((tbl) => tbl.payerId.equals(userId))
+          ..where((tbl) =>
+              tbl.payerId.equals(userId) |
+              tbl.expenseId.isInQuery(splitsForUser))
           ..orderBy([(tbl) => OrderingTerm.desc(tbl.createdAt)]))
         .get();
     return rows.map(_expenseFromRow).toList();

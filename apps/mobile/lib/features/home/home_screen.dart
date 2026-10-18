@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/expense.dart';
 import '../../providers.dart';
-import '../../repositories/interfaces/expense_repository.dart';
 import '../../sync/sync_service.dart';
 
 /// T9 — Home screen.
@@ -203,7 +202,8 @@ class _SpotlightSearchBarState extends State<_SpotlightSearchBar> {
           borderRadius: BorderRadius.circular(28),
           borderSide: BorderSide.none,
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       ),
       onChanged: (_) => setState(() {}),
     );
@@ -225,7 +225,7 @@ class _QuickActions extends StatelessWidget {
           child: _QuickActionTile(
             icon: Icons.add_circle_outline,
             label: 'Add expense',
-            onTap: _showAddExpenseHint,
+            onTap: _goAddExpense,
           ),
         ),
         SizedBox(width: 12),
@@ -256,14 +256,8 @@ class _QuickActions extends StatelessWidget {
     );
   }
 
-  static void _showAddExpenseHint(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Expense creation coming up in Phase 11!'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
+  static void _goAddExpense(BuildContext context) =>
+      context.push('/expenses/new');
 
   static void _showAddPersonHint(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -318,43 +312,74 @@ class _QuickActionTile extends StatelessWidget {
   }
 }
 
-/// T9.3 — Recent expenses section.
-///
-/// Reads the local repository and shows up to 5 most recent expenses. Handles
-/// loading, empty, and error states gracefully — the repository chain may
-/// throw [MissingPluginException] in the widget-test environment.
 class _RecentExpenses extends ConsumerWidget {
   const _RecentExpenses();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Best-effort: the repository provider chain reaches the Drift database,
-    // which throws [MissingPluginException] in the widget-test environment.
-    // Degrade to the empty state instead of crashing the build.
-    final ExpenseRepository repository;
-    try {
-      repository = ref.watch(expenseRepositoryProvider);
-    } catch (_) {
-      return const _EmptyState();
-    }
+    final authState = ref.watch(authStateProvider);
 
-    return FutureBuilder<List<Expense>>(
-      future: repository.getAllExpenses(),
+    return authState.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const _EmptyState(),
+      data: (session) {
+        if (session == null) {
+          return const _EmptyState();
+        }
+
+        final profileRepository = ref.watch(profileRepositoryProvider);
+
+        return FutureBuilder(
+          future: profileRepository.getProfileByUserId(session.userId),
+          builder: (context, profileSnapshot) {
+            if (profileSnapshot.connectionState != ConnectionState.done) {
+              return const SizedBox.shrink();
+            }
+
+            final profile = profileSnapshot.data;
+            if (profile == null || profile.participantId.trim().isEmpty) {
+              return const _EmptyState();
+            }
+
+            return _RecentExpensesForParticipant(
+              participantId: profile.participantId,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _RecentExpensesForParticipant extends ConsumerWidget {
+  const _RecentExpensesForParticipant({
+    required this.participantId,
+  });
+
+  final String participantId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repository = ref.watch(expenseRepositoryProvider);
+
+    return FutureBuilder(
+      future: repository.getExpensesByUser(participantId),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const SizedBox.shrink();
         }
 
-        // Graceful degradation: on error or empty data, show the empty state.
         final expenses = snapshot.data;
         if (expenses == null || expenses.isEmpty) {
           return const _EmptyState();
         }
 
-        final recent = expenses.take(5).toList();
+        final recent = [...expenses]
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
         return Column(
           children: [
-            for (final expense in recent) _ExpenseRow(expense: expense),
+            for (final expense in recent.take(5)) _ExpenseRow(expense: expense),
           ],
         );
       },
@@ -487,8 +512,18 @@ class _ExpenseRow extends StatelessWidget {
     if (diff == 1) return 'Yesterday';
 
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final day = date.day.toString().padLeft(2, '0');
     return '$day ${months[date.month - 1]}';

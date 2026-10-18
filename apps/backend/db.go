@@ -58,3 +58,22 @@ func (q *DBQueries) IsUserInGroup(ctx context.Context, groupID, participantID st
 	return exists, nil
 }
 
+// CanUseParticipant prevents a caller from inventing participant ids in an
+// expense split. A caller may always include themselves, or contacts they
+// created or have claimed into their account.
+func (q *DBQueries) CanUseParticipant(ctx context.Context, callerID, participantID string) (bool, error) {
+	if callerID == participantID {
+		return true, nil
+	}
+	var exists bool
+	err := q.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM public.participants p
+			LEFT JOIN public.contacts c ON c.participant_id = p.id
+			WHERE p.id = $1 AND (c.created_by = $2 OR c.claimed_by_participant_id = $2)
+		)`, participantID, callerID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check participant access failed: %w", err)
+	}
+	return exists, nil
+}

@@ -68,7 +68,8 @@ class AuthRepositoryImpl implements AuthRepository {
       );
       final session = response.session;
       if (session == null) {
-        throw StateError('Email sign in successful but no session was returned.');
+        throw StateError(
+            'Email sign in successful but no session was returned.');
       }
       return _toSession(session)!;
     } on AuthException catch (e) {
@@ -145,16 +146,20 @@ class AuthRepositoryImpl implements AuthRepository {
   AuthSession? _toSession(Session? session) {
     if (session == null) return null;
     final user = session.user;
+    final metadataPhone = user.userMetadata?['phone_number'];
     return AuthSession(
       userId: user.id,
       email: user.email,
-      phoneNumber: user.phone,
+      phoneNumber:
+          user.phone ?? (metadataPhone is String ? metadataPhone : null),
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
       expiresAt: session.expiresAt == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(
-              session.expiresAt! * 1000, isUtc: true),
+              session.expiresAt! * 1000,
+              isUtc: true,
+            ),
     );
   }
 
