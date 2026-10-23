@@ -1,6 +1,7 @@
 import 'api_client.dart';
 import 'models/api_collection.dart';
 import 'models/api_requests.dart';
+import '../models/collection_member.dart';
 
 /// T7.3 — Collections (groups) API.
 ///
@@ -41,5 +42,17 @@ class CollectionsApi {
       'v1/groups/$groupId/members',
       body: ApiAddMemberRequest(userId: participantId).toJson(),
     );
+  }
+
+  /// Removes [participantId] from [groupId].
+  Future<void> removeMember(String groupId, String participantId) async {
+    await _client.delete('v1/groups/$groupId/members/$participantId');
+  }
+
+  Future<List<CollectionMember>> listMembers(String groupId) async {
+    final json = await _client.get('v1/groups/$groupId/members');
+    return (json as List)
+        .map((item) => CollectionMember.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 }

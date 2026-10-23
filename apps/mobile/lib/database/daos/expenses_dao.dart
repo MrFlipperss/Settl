@@ -20,11 +20,37 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<List<Expense>> getExpensesByUser(String userId) async {
+    final splitsForUser = selectOnly(expenseSplits)
+      ..addColumns([expenseSplits.expenseId])
+      ..where(expenseSplits.participantId.equals(userId));
     final rows = await (select(expenses)
-          ..where((tbl) => tbl.payerId.equals(userId))
+          ..where((tbl) =>
+              tbl.payerId.equals(userId) |
+              tbl.expenseId.isInQuery(splitsForUser))
           ..orderBy([(tbl) => OrderingTerm.desc(tbl.createdAt)]))
         .get();
     return rows.map(_expenseFromRow).toList();
+  }
+
+  Stream<List<Expense>> watchExpensesByUser(String userId) {
+    final query = select(expenses).join([
+      leftOuterJoin(
+        expenseSplits,
+        expenseSplits.expenseId.equalsExp(expenses.expenseId),
+      ),
+    ])
+      ..where(expenses.payerId.equals(userId) |
+          expenseSplits.participantId.equals(userId))
+      ..orderBy([OrderingTerm.desc(expenses.createdAt)]);
+
+    return query.watch().map((rows) {
+      final result = <String, Expense>{};
+      for (final row in rows) {
+        final expense = row.readTable(expenses);
+        result.putIfAbsent(expense.expenseId, () => _expenseFromRow(expense));
+      }
+      return result.values.toList();
+    });
   }
 
   Future<List<Expense>> getExpensesByList(String listId) async {
@@ -68,6 +94,21 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
       note: Value(expense.note),
       version: Value(expense.version),
     ));
+  }
+
+  Future<void> replaceExpenseWithSplits(
+    Expense expense,
+    List<ExpenseSplit> splits,
+  ) async {
+    await transaction(() async {
+      await updateExpense(expense);
+      await (delete(expenseSplits)
+            ..where((tbl) => tbl.expenseId.equals(expense.id)))
+          .go();
+      for (final split in splits) {
+        await createExpenseSplit(split);
+      }
+    });
   }
 
   Future<void> deleteExpense(String expenseId) async {

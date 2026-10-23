@@ -36,7 +36,8 @@ const _retryPolicy = RetryPolicy(
   maxDelay: Duration(milliseconds: 100),
 );
 
-Map<String, dynamic> expenseJson({required String id, int amountPaise = 1250}) =>
+Map<String, dynamic> expenseJson(
+        {required String id, int amountPaise = 1250}) =>
     {
       'id': id,
       'group_id': 'g1',
@@ -77,8 +78,7 @@ class FakeConnectivityGateway implements ConnectivityGateway {
   FakeConnectivityGateway(this.online);
 
   bool online;
-  final StreamController<bool> _controller =
-      StreamController<bool>.broadcast();
+  final StreamController<bool> _controller = StreamController<bool>.broadcast();
 
   @override
   Stream<bool> get onlineStream => _controller.stream;
@@ -96,8 +96,8 @@ class FakeConnectivityGateway implements ConnectivityGateway {
 
 void main() {
   if (Platform.isWindows) {
-    open.overrideFor(OperatingSystem.windows,
-        () => DynamicLibrary.open('winsqlite3.dll'));
+    open.overrideFor(
+        OperatingSystem.windows, () => DynamicLibrary.open('winsqlite3.dll'));
   }
 
   late AppDatabase db;
@@ -148,8 +148,8 @@ void main() {
     });
 
     test('ApiCreateContactRequest fromJson round-trips', () {
-      const request =
-          ApiCreateContactRequest(id: 'p1', displayName: 'Rahul', phoneNumber: '+919876543210');
+      const request = ApiCreateContactRequest(
+          id: 'p1', displayName: 'Rahul', phoneNumber: '+919876543210');
       expect(ApiCreateContactRequest.fromJson(request.toJson()), request);
     });
 
@@ -290,14 +290,13 @@ void main() {
   group('PushWorker', () {
     PushWorker pushWorkerWith(http.Client client) => PushWorker(
           dao: pendingSyncDao,
-          expensesApi: ExpensesApi(
-              ApiClient(client: client, baseUrl: _baseUrl)),
-          contactsApi: ContactsApi(
-              ApiClient(client: client, baseUrl: _baseUrl)),
-          collectionsApi: CollectionsApi(
-              ApiClient(client: client, baseUrl: _baseUrl)),
-          profileApi:
-              ProfileApi(ApiClient(client: client, baseUrl: _baseUrl)),
+          expensesApi:
+              ExpensesApi(ApiClient(client: client, baseUrl: _baseUrl)),
+          contactsApi:
+              ContactsApi(ApiClient(client: client, baseUrl: _baseUrl)),
+          collectionsApi:
+              CollectionsApi(ApiClient(client: client, baseUrl: _baseUrl)),
+          profileApi: ProfileApi(ApiClient(client: client, baseUrl: _baseUrl)),
           retryPolicy: _retryPolicy,
           conflictResolver: conflictResolver,
         );
@@ -387,8 +386,8 @@ void main() {
         () async {
       final events = <ConflictResolutionEvent>[];
       final sub = conflictResolver.conflicts.listen(events.add);
-      final client = MockClient(
-          (request) async => http.Response('{"error": "version mismatch"}', 409));
+      final client = MockClient((request) async =>
+          http.Response('{"error": "version mismatch"}', 409));
 
       await queue.enqueueExpense(
         operation: SyncOperation.insert,
@@ -413,8 +412,8 @@ void main() {
 
     test('409 with keep-local preserves the operation as failed', () async {
       conflictResolver.policy = ConflictResolution.keepLocal;
-      final client = MockClient(
-          (request) async => http.Response('{"error": "version mismatch"}', 409));
+      final client = MockClient((request) async =>
+          http.Response('{"error": "version mismatch"}', 409));
 
       await queue.enqueueExpense(
         operation: SyncOperation.insert,
@@ -508,6 +507,11 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
+        if (request.url.path == '/api/v1/groups/g1/members' &&
+            request.method == 'GET') {
+          return http.Response('[]', 200,
+              headers: {'content-type': 'application/json'});
+        }
         return http.Response('not found', 404);
       });
 
@@ -587,7 +591,8 @@ void main() {
         });
 
     test('start online runs the initial sync', () async {
-      final service = serviceWith(happyBackend(), FakeConnectivityGateway(true));
+      final service =
+          serviceWith(happyBackend(), FakeConnectivityGateway(true));
       final statuses = <SyncStatus>[];
       final sub = service.statusStream.listen(statuses.add);
 
@@ -630,7 +635,8 @@ void main() {
     });
 
     test('requestSync transitions idle → syncing → idle', () async {
-      final service = serviceWith(happyBackend(), FakeConnectivityGateway(true));
+      final service =
+          serviceWith(happyBackend(), FakeConnectivityGateway(true));
       final statuses = <SyncStatus>[];
       final sub = service.statusStream.listen(statuses.add);
 
@@ -647,52 +653,52 @@ void main() {
       await service.stop();
     });
     test('a failed sync schedules a backoff retry that recovers to idle',
-      () async {
+        () async {
       // GET /v1/expenses/ returns 500 on the first call, then behaves like
       // happyBackend() from the second call onward — simulating a transient
       // server hiccup that resolves itself before the retry fires.
       var expenseListCalls = 0;
       final flakyClient = MockClient((request) async {
-      if (request.method == 'GET' &&
+        if (request.method == 'GET' &&
             request.url.path == '/api/v1/expenses/') {
-              expenseListCalls++;
-              if (expenseListCalls == 1) {
-                return http.Response('server error', 500);
-              }
-              return http.Response(
-                jsonEncode([expenseJson(id: 'exp-1')]),
-                200,
-                headers: {'content-type': 'application/json'},
-              );
-            }
-            if (request.method == 'GET' && request.url.path == '/api/v1/groups/') {
-              return http.Response('[]', 200,
-                  headers: {'content-type': 'application/json'});
-            }
-            return http.Response('not found', 404);
-          });
+          expenseListCalls++;
+          if (expenseListCalls == 1) {
+            return http.Response('server error', 500);
+          }
+          return http.Response(
+            jsonEncode([expenseJson(id: 'exp-1')]),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/api/v1/groups/') {
+          return http.Response('[]', 200,
+              headers: {'content-type': 'application/json'});
+        }
+        return http.Response('not found', 404);
+      });
 
-          final service = serviceWith(flakyClient, FakeConnectivityGateway(true));
-          final statuses = <SyncStatus>[];
-          final sub = service.statusStream.listen(statuses.add);
+      final service = serviceWith(flakyClient, FakeConnectivityGateway(true));
+      final statuses = <SyncStatus>[];
+      final sub = service.statusStream.listen(statuses.add);
 
-          // start() runs the initial sync, which fails on the flaky first call.
-          await service.start();
-          expect(service.status, SyncStatus.error);
-          expect(await expensesDao.getAllExpenses(), isEmpty);
+      // start() runs the initial sync, which fails on the flaky first call.
+      await service.start();
+      expect(service.status, SyncStatus.error);
+      expect(await expensesDao.getAllExpenses(), isEmpty);
 
-          // The scheduled backoff retry (baseDelay = 10ms in _retryPolicy) fires
-          // on its own and this time the backend is healthy.
-          await Future<void>.delayed(const Duration(milliseconds: 60));
+      // The scheduled backoff retry (baseDelay = 10ms in _retryPolicy) fires
+      // on its own and this time the backend is healthy.
+      await Future<void>.delayed(const Duration(milliseconds: 60));
 
-          expect(service.status, SyncStatus.idle);
-          expect(expenseListCalls, greaterThanOrEqualTo(2));
-          expect(await expensesDao.getAllExpenses(), hasLength(1));
-          expect(statuses, contains(SyncStatus.error));
-          expect(statuses.last, SyncStatus.idle);
+      expect(service.status, SyncStatus.idle);
+      expect(expenseListCalls, greaterThanOrEqualTo(2));
+      expect(await expensesDao.getAllExpenses(), hasLength(1));
+      expect(statuses, contains(SyncStatus.error));
+      expect(statuses.last, SyncStatus.idle);
 
-          await sub.cancel();
-          await service.stop();
-        });
+      await sub.cancel();
+      await service.stop();
+    });
   });
 }

@@ -129,6 +129,8 @@ class PushWorker {
         await _dispatchContact(op, payload);
       case SyncQueue.entityCollection:
         await _dispatchCollection(op, payload);
+      case SyncQueue.entityCollectionMember:
+        await _dispatchCollectionMember(op, payload);
       case SyncQueue.entityProfile:
         await _dispatchProfile(op, payload);
       default:
@@ -183,6 +185,22 @@ class PushWorker {
     }
   }
 
+  Future<void> _dispatchCollectionMember(
+    PendingSyncOperation op,
+    Map<String, dynamic> payload,
+  ) async {
+    final groupId = payload['group_id'] as String;
+    final participantId = payload['user_id'] as String;
+    switch (op.operation) {
+      case SyncOperation.insert:
+        await _collectionsApi.addMember(groupId, participantId);
+      case SyncOperation.delete:
+        await _collectionsApi.removeMember(groupId, participantId);
+      case SyncOperation.update:
+        throw UnsupportedError('Collection membership cannot be updated');
+    }
+  }
+
   Future<void> _dispatchProfile(
     PendingSyncOperation op,
     Map<String, dynamic> payload,
@@ -191,7 +209,8 @@ class PushWorker {
       case SyncOperation.insert:
       case SyncOperation.update:
         // POST /v1/profile is an idempotent upsert keyed by the caller.
-        await _profileApi.createProfile(ApiCreateProfileRequest.fromJson(payload));
+        await _profileApi
+            .createProfile(ApiCreateProfileRequest.fromJson(payload));
       case SyncOperation.delete:
         throw UnsupportedError('No backend endpoint for profile delete');
     }

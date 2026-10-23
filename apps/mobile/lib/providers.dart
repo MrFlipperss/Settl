@@ -44,6 +44,9 @@ import '../sync/sync_service.dart';
 /// Profile settings screen.
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 
+/// Enables the Liquid Glass visual theme.
+final liquidGlassEnabledProvider = StateProvider<bool>((ref) => false);
+
 /// Provider for the selected accent preset index (see [accentPresets]).
 /// Defaults to the first preset (Violet).
 final accentIndexProvider = StateProvider<int>((ref) => 0);
@@ -94,18 +97,25 @@ final pendingSyncDaoProvider = Provider<PendingSyncDao>((ref) {
 /// DAO provider; remote (HTTP) implementations will be swapped in later
 /// phases behind the same interfaces.
 final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
-  return ExpenseRepositoryImpl(ref.watch(expensesDaoProvider));
+  return ExpenseRepositoryImpl(
+    ref.watch(expensesDaoProvider),
+    ref.watch(syncQueueProvider),
+  );
 });
 
 final contactRepositoryProvider = Provider<ContactRepository>((ref) {
   return ContactRepositoryImpl(
     ref.watch(contactsDaoProvider),
     ref.watch(contactsApiProvider),
+      ref.watch(syncQueueProvider),
   );
 });
 
 final collectionRepositoryProvider = Provider<CollectionRepository>((ref) {
-  return CollectionRepositoryImpl(ref.watch(listsDaoProvider));
+  return CollectionRepositoryImpl(
+    ref.watch(listsDaoProvider),
+    ref.watch(syncQueueProvider),
+  );
 });
 
 final balanceRepositoryProvider = Provider<BalanceRepository>((ref) {

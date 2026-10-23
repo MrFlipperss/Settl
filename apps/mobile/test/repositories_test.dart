@@ -13,6 +13,7 @@ import 'package:settl/database/daos/contacts_dao.dart';
 import 'package:settl/database/daos/expenses_dao.dart';
 import 'package:settl/database/daos/lists_dao.dart';
 import 'package:settl/database/daos/profiles_dao.dart';
+import 'package:settl/database/daos/pending_sync_dao.dart';
 import 'package:settl/models/balance.dart';
 import 'package:settl/models/collection.dart';
 import 'package:settl/models/collection_member.dart';
@@ -25,6 +26,8 @@ import 'package:settl/repositories/collection_repository_impl.dart';
 import 'package:settl/repositories/contact_repository_impl.dart';
 import 'package:settl/repositories/expense_repository_impl.dart';
 import 'package:settl/repositories/profile_repository_impl.dart';
+import 'package:settl/sync/sync_queue.dart';
+import 'package:settl/models/pending_sync_operation.dart';
 import 'package:sqlite3/open.dart';
 
 /// Never-invoked HTTP stub for the remote seams of repository impls; the
@@ -37,8 +40,8 @@ final _stubApiClient = ApiClient(
 void main() {
   if (Platform.isWindows) {
     // Host tests can't use sqlite3_flutter_libs; winsqlite3 ships with Windows.
-    open.overrideFor(OperatingSystem.windows,
-        () => DynamicLibrary.open('winsqlite3.dll'));
+    open.overrideFor(
+        OperatingSystem.windows, () => DynamicLibrary.open('winsqlite3.dll'));
   }
 
   late AppDatabase db;
@@ -50,12 +53,21 @@ void main() {
 
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
-    expenseRepo = ExpenseRepositoryImpl(ExpensesDao(db));
+    var queueId = 0;
+    expenseRepo = ExpenseRepositoryImpl(
+      ExpensesDao(db),
+      SyncQueue(PendingSyncDao(db),
+          idGenerator: () => 'expense-queue-${queueId++}'),
+    );
     contactRepo = ContactRepositoryImpl(
       ContactsDao(db),
       ContactsApi(_stubApiClient),
     );
-    collectionRepo = CollectionRepositoryImpl(ListsDao(db));
+    queueId = 0;
+    collectionRepo = CollectionRepositoryImpl(
+      ListsDao(db),
+      SyncQueue(PendingSyncDao(db), idGenerator: () => 'queue-${queueId++}'),
+    );
     balanceRepo = BalanceRepositoryImpl(expenseRepo);
     profileRepo = ProfileRepositoryImpl(
       ProfilesDao(db),
@@ -68,6 +80,26 @@ void main() {
   });
 
   group('ExpenseRepositoryImpl', () {
+    test('createPeopleExpense persists exact paise shares and queues sync',
+        () async {
+      final created = await expenseRepo.createPeopleExpense(
+        description: '  Dinner  ',
+        amountPaise: 1001,
+        payerId: 'alice',
+        participantIds: ['alice', 'bob', 'carol'],
+      );
+
+      expect(created.amount, 10.01);
+      final splits = await expenseRepo.getSplitsForExpense(created.id);
+      expect(splits.map((split) => split.shareAmount), [3.34, 3.34, 3.33]);
+      expect(
+        splits.fold<double>(0, (sum, split) => sum + split.shareAmount),
+        closeTo(10.01, 0.0001),
+      );
+      expect((await PendingSyncDao(db).getPending()).single.entityType,
+          SyncQueue.entityExpense);
+    });
+
     final expense = Expense(
       id: 'exp-1',
       amount: 1200.50,
@@ -85,6 +117,31 @@ void main() {
 
       final fetched = await expenseRepo.getExpenseById('exp-1');
       expect(fetched, expense);
+    });
+
+    test('updatePeopleExpense replaces splits and queues an update', () async {
+      await expenseRepo.createExpense(expense);
+      await expenseRepo.createExpenseSplit(const ExpenseSplit(
+        id: 'old-split',
+        expenseId: 'exp-1',
+        participantId: 'user-1',
+        shareAmount: 1200.50,
+      ));
+      await expenseRepo.updatePeopleExpense(
+        expenseId: 'exp-1',
+        description: 'Updated',
+        amountPaise: 1001,
+        payerId: 'user-1',
+        participantIds: ['user-1', 'user-2'],
+        expectedVersion: 1,
+      );
+      expect((await expenseRepo.getExpenseById('exp-1'))!.note, 'Updated');
+      expect(
+          (await expenseRepo.getSplitsForExpense('exp-1'))
+              .map((s) => s.shareAmount),
+          [5.01, 5.0]);
+      expect((await PendingSyncDao(db).getPending()).last.operation,
+          SyncOperation.update);
     });
 
     test('getExpensesByList filters by listId', () async {
@@ -152,8 +209,8 @@ void main() {
 
     test('updateContact persists changes', () async {
       await contactRepo.createContact(contact);
-      await contactRepo.updateContact(
-          contact.copyWith(displayName: 'Alice Updated'));
+      await contactRepo
+          .updateContact(contact.copyWith(displayName: 'Alice Updated'));
 
       expect((await contactRepo.getContactById('part-1'))!.displayName,
           'Alice Updated');
@@ -184,6 +241,26 @@ void main() {
           ['list-1']);
     });
 
+    test('createForParticipant persists creator membership and queues sync',
+        () async {
+      final created = await collectionRepo.createCollectionForParticipant(
+        name: '  Shared budget  ',
+        participantId: 'part-1',
+      );
+
+      expect(created.name, 'Shared budget');
+      expect(created.createdBy, 'part-1');
+      expect(
+        (await collectionRepo.getMembersOfCollection(created.id))
+            .single
+            .participantId,
+        'part-1',
+      );
+      final pending = await PendingSyncDao(db).getPending();
+      expect(pending.single.entityType, SyncQueue.entityCollection);
+      expect(pending.single.entityId, created.id);
+    });
+
     test('members roundtrip and removal', () async {
       await collectionRepo.createCollection(collection);
       await collectionRepo.addMemberToCollection(CollectionMember(
@@ -192,8 +269,10 @@ void main() {
         addedAt: DateTime.utc(2026, 8, 1),
       ));
 
-      expect((await collectionRepo.getMembersOfCollection('list-1'))
-          .map((m) => m.participantId), ['part-1']);
+      expect(
+          (await collectionRepo.getMembersOfCollection('list-1'))
+              .map((m) => m.participantId),
+          ['part-1']);
 
       await collectionRepo.removeMemberFromCollection('list-1', 'part-1');
       expect(await collectionRepo.getMembersOfCollection('list-1'), isEmpty);
@@ -233,7 +312,8 @@ void main() {
 
     test('updateProfile persists changes', () async {
       await profileRepo.createProfile(profile);
-      await profileRepo.updateProfile(profile.copyWith(displayName: 'New Name'));
+      await profileRepo
+          .updateProfile(profile.copyWith(displayName: 'New Name'));
 
       expect((await profileRepo.getProfileByUserId('user-1'))!.displayName,
           'New Name');
@@ -356,14 +436,18 @@ void main() {
       final balances = await balanceRepo.getAllBalances();
 
       expect(balances, hasLength(2));
-      expect(balances.any((b) =>
-          b.fromParticipantId == 'bob' &&
-          b.toParticipantId == 'alice' &&
-          b.amountOwed == 100.0), isTrue);
-      expect(balances.any((b) =>
-          b.fromParticipantId == 'carol' &&
-          b.toParticipantId == 'alice' &&
-          b.amountOwed == 100.0), isTrue);
+      expect(
+          balances.any((b) =>
+              b.fromParticipantId == 'bob' &&
+              b.toParticipantId == 'alice' &&
+              b.amountOwed == 100.0),
+          isTrue);
+      expect(
+          balances.any((b) =>
+              b.fromParticipantId == 'carol' &&
+              b.toParticipantId == 'alice' &&
+              b.amountOwed == 100.0),
+          isTrue);
     });
   });
 }

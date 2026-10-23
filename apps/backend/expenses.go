@@ -339,6 +339,13 @@ func createExpenseHandler(q *DBQueries) http.HandlerFunc {
 				return
 			}
 		}
+		for _, split := range req.Splits {
+			allowed, err := q.CanUseParticipant(r.Context(), callerPID, split.UserID)
+			if err != nil || !allowed {
+				writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "participant is not available to this account"})
+				return
+			}
+		}
 
 		splits, err := resolveSplits(req)
 		if err != nil {
@@ -439,6 +446,17 @@ func updateExpenseHandler(q *DBQueries) http.HandlerFunc {
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 			return
+		}
+		for _, split := range splits {
+			allowed, authErr := q.CanUseParticipant(r.Context(), callerPID, split.ParticipantID)
+			if authErr != nil {
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "participant authorization failed"})
+				return
+			}
+			if !allowed {
+				writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "split participant is not authorized"})
+				return
+			}
 		}
 
 		updated, err := q.UpdateExpense(r.Context(), id, req, splits, 0)

@@ -19,3 +19,14 @@ Thumbs.db
 # Environment / secret files
 .env
 .env.*
+
+# Tooling and temporary directories
+.omo/
+.opencode/
+.superpowers/
+docs/superpowers/
+*.backup.gz
+build/
+**/build/
+.gradle/
+**/.gradle/

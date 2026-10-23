@@ -1,9 +1,8 @@
 import '../../models/auth_session.dart';
 
-/// Contract for authentication with the Supabase backend (phone OTP flow).
+/// Contract for authentication with the Supabase backend.
 ///
-/// The UI and services depend on this interface only — never on Supabase or
-/// gotrue types directly.
+/// Supports both phone OTP and email/password authentication flows.
 abstract class AuthRepository {
   /// The current session, or null when signed out.
   AuthSession? get currentSession;
@@ -21,6 +20,22 @@ abstract class AuthRepository {
     required String phone,
     required String token,
   });
+
+  /// Signs in with email and password.
+  Future<AuthSession> signInWithEmail({
+    required String email,
+    required String password,
+  });
+
+  /// Signs up with email and password.
+  Future<AuthSession> signUpWithEmail({
+    required String email,
+    required String password,
+    required Map<String, dynamic> data,
+  });
+
+  /// Sends a password reset email to [email].
+  Future<void> sendPasswordResetEmail(String email);
 
   /// Restores a persisted session (e.g. on app start). Returns null when the
   /// user is signed out.

@@ -125,6 +125,34 @@ func (q *DBQueries) AddListMember(ctx context.Context, listID, participantID str
 	return nil
 }
 
+func (q *DBQueries) RemoveListMember(ctx context.Context, listID, participantID string) error {
+	_, err := q.pool.Exec(ctx,
+		`DELETE FROM public.list_members WHERE list_id = $1 AND participant_id = $2`,
+		listID, participantID)
+	if err != nil {
+		return fmt.Errorf("remove list member: %w", err)
+	}
+	return nil
+}
+
+func (q *DBQueries) ListListMembers(ctx context.Context, listID string) ([]ListMember, error) {
+	rows, err := q.pool.Query(ctx,
+		`SELECT list_id, participant_id, added_at FROM public.list_members WHERE list_id = $1 ORDER BY added_at`, listID)
+	if err != nil {
+		return nil, fmt.Errorf("list members: %w", err)
+	}
+	defer rows.Close()
+	var members []ListMember
+	for rows.Next() {
+		var member ListMember
+		if err := rows.Scan(&member.ListID, &member.ParticipantID, &member.AddedAt); err != nil {
+			return nil, fmt.Errorf("scan list member: %w", err)
+		}
+		members = append(members, member)
+	}
+	return members, rows.Err()
+}
+
 func createListHandler(q *DBQueries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req CreateGroupRequest
@@ -146,6 +174,16 @@ func createListHandler(q *DBQueries) http.HandlerFunc {
 
 		list, err := q.CreateList(r.Context(), req, createdBy)
 		if err != nil {
+			// Client-generated ids make queued creates idempotent. If a retry
+			// reaches the server after the first attempt committed, return the
+			// existing row instead of creating a duplicate or exhausting retries.
+			if req.ID != nil && *req.ID != "" {
+				existing, lookupErr := q.GetList(r.Context(), *req.ID)
+				if lookupErr == nil && existing != nil && existing.CreatedBy == createdBy {
+					writeJSON(w, http.StatusOK, existing)
+					return
+				}
+			}
 			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 			return
 		}
@@ -223,6 +261,22 @@ func addListMemberHandler(q *DBQueries) http.HandlerFunc {
 			return
 		}
 
+		caller := participantIDFromCtx(r.Context())
+		inGroup, err := q.IsUserInGroup(r.Context(), listID, caller)
+		if err != nil || !inGroup {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "access denied: not a member of group"})
+			return
+		}
+		allowed, err := q.CanUseParticipant(r.Context(), caller, req.UserID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "participant authorization failed"})
+			return
+		}
+		if !allowed {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "participant is not an authorized contact"})
+			return
+		}
+
 		// user_id in AddMemberRequest refers to participant_id
 		if err := q.AddListMember(r.Context(), listID, req.UserID); err != nil {
 			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
@@ -230,5 +284,48 @@ func addListMemberHandler(q *DBQueries) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusCreated)
+	}
+}
+
+func removeListMemberHandler(q *DBQueries) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		listID := chi.URLParam(r, "groupID")
+		participantID := chi.URLParam(r, "participantID")
+		caller := participantIDFromCtx(r.Context())
+		if listID == "" || participantID == "" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "groupID and participantID are required"})
+			return
+		}
+		inGroup, err := q.IsUserInGroup(r.Context(), listID, caller)
+		if err != nil || !inGroup {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "access denied: not a member of group"})
+			return
+		}
+		if err := q.RemoveListMember(r.Context(), listID, participantID); err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func listMembersHandler(q *DBQueries) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		listID := chi.URLParam(r, "groupID")
+		caller := participantIDFromCtx(r.Context())
+		inGroup, err := q.IsUserInGroup(r.Context(), listID, caller)
+		if err != nil || !inGroup {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "access denied: not a member of group"})
+			return
+		}
+		members, err := q.ListListMembers(r.Context(), listID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+			return
+		}
+		if members == nil {
+			members = []ListMember{}
+		}
+		writeJSON(w, http.StatusOK, members)
 	}
 }

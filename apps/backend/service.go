@@ -17,6 +17,9 @@ func NewService(repo *DBQueries) *Service {
 
 // CreateExpense handles validation, authorization, dynamic split calculation, and DB persistence.
 func (s *Service) CreateExpense(ctx context.Context, callerPID string, req CreateExpenseRequest) (*Expense, error) {
+	if callerPID != "" && req.PayerID != callerPID {
+		return nil, errors.New("payer must match authenticated participant")
+	}
 	if req.PayerID == "" || req.Amount <= 0 || len(req.Splits) == 0 {
 		return nil, errors.New("payer_id, amount, and splits are required")
 	}

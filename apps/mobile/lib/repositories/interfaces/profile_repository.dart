@@ -23,5 +23,5 @@ abstract class ProfileRepository {
   /// Used at app bootstrap (T8.5) so the signed-in user has a remote profile
   /// row for other participants to find. Best-effort: callers decide how to
   /// treat failures (offline / backend unreachable defer to the next sync).
-  Future<void> ensureRemoteProfile(Profile profile);
+  Future<Profile> ensureRemoteProfile(Profile profile);
 }

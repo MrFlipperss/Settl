@@ -83,6 +83,7 @@ class PullWorker {
 
   Future<void> _refreshCollections() async {
     final remote = await _collectionsApi.listCollections();
+    await _listsLocal.removeCollectionsOutside(remote.map((e) => e.id).toSet());
     for (final api in remote) {
       final local = Collection(
         id: api.id,
@@ -97,6 +98,8 @@ class PullWorker {
       } else {
         await _listsLocal.updateCollection(local);
       }
+      final members = await _collectionsApi.listMembers(api.id);
+      await _listsLocal.replaceMembersOfCollection(api.id, members);
     }
   }
 }

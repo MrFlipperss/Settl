@@ -15,6 +15,12 @@ abstract class CollectionRepository {
 
   Future<void> createCollection(Collection collection);
 
+  /// Creates a local group, adds [participantId], and queues its API create.
+  Future<Collection> createCollectionForParticipant({
+    required String name,
+    required String participantId,
+  });
+
   Future<void> updateCollection(Collection collection);
 
   /// Deletes the collection and all of its memberships.

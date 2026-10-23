@@ -11,6 +11,8 @@ abstract class ExpenseRepository {
 
   Future<List<Expense>> getExpensesByUser(String userId);
 
+  Stream<List<Expense>> watchExpensesByUser(String userId);
+
   /// All expenses recorded inside [listId].
   Future<List<Expense>> getExpensesByList(String listId);
 
@@ -18,7 +20,23 @@ abstract class ExpenseRepository {
 
   Future<void> createExpense(Expense expense);
 
+  Future<Expense> createPeopleExpense({
+    required String description,
+    required int amountPaise,
+    required String payerId,
+    required List<String> participantIds,
+  });
+
   Future<void> updateExpense(Expense expense);
+
+  Future<void> updatePeopleExpense({
+    required String expenseId,
+    required String description,
+    required int amountPaise,
+    required String payerId,
+    required List<String> participantIds,
+    required int expectedVersion,
+  });
 
   /// Deletes the expense and all of its splits.
   Future<void> deleteExpense(String expenseId);

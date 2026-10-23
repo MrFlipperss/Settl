@@ -13,14 +13,20 @@ class ListsDao extends DatabaseAccessor<AppDatabase> with _$ListsDaoMixin {
   ListsDao(super.db);
 
   Future<Collection?> getCollectionById(String collectionId) async {
-    final row = await (select(lists)..where((tbl) => tbl.listId.equals(collectionId)))
+    final row = await (select(lists)
+          ..where((tbl) => tbl.listId.equals(collectionId)))
         .getSingleOrNull();
     return row == null ? null : _collectionFromRow(row);
   }
 
   Future<List<Collection>> getCollectionsByUser(String userId) async {
+    final membershipsForUser = selectOnly(listMembers)
+      ..addColumns([listMembers.listId])
+      ..where(listMembers.participantId.equals(userId));
     final rows = await (select(lists)
-          ..where((tbl) => tbl.createdBy.equals(userId))
+          ..where((tbl) =>
+              tbl.createdBy.equals(userId) |
+              tbl.listId.isInQuery(membershipsForUser))
           ..orderBy([(tbl) => OrderingTerm.desc(tbl.createdAt)]))
         .get();
     return rows.map(_collectionFromRow).toList();
@@ -31,6 +37,18 @@ class ListsDao extends DatabaseAccessor<AppDatabase> with _$ListsDaoMixin {
           ..orderBy([(tbl) => OrderingTerm.desc(tbl.createdAt)]))
         .get();
     return rows.map(_collectionFromRow).toList();
+  }
+
+  /// Reconciles the server's authenticated group view. Local pending creates
+  /// are retained so an offline group is not lost before its first push.
+  Future<void> removeCollectionsOutside(Set<String> remoteIds) async {
+    final rows = await select(lists).get();
+    for (final row in rows) {
+      if (remoteIds.contains(row.listId) || row.accountNumber == 'PENDING') {
+        continue;
+      }
+      await deleteCollection(row.listId);
+    }
   }
 
   Future<void> createCollection(Collection collection) async {
@@ -53,8 +71,7 @@ class ListsDao extends DatabaseAccessor<AppDatabase> with _$ListsDaoMixin {
 
   Future<void> deleteCollection(String collectionId) async {
     await (delete(lists)..where((tbl) => tbl.listId.equals(collectionId))).go();
-    await (delete(listMembers)
-          ..where((tbl) => tbl.listId.equals(collectionId)))
+    await (delete(listMembers)..where((tbl) => tbl.listId.equals(collectionId)))
         .go();
   }
 
@@ -83,6 +100,15 @@ class ListsDao extends DatabaseAccessor<AppDatabase> with _$ListsDaoMixin {
               tbl.listId.equals(collectionId) &
               tbl.participantId.equals(participantId)))
         .go();
+  }
+
+  Future<void> replaceMembersOfCollection(
+      String collectionId, List<CollectionMember> members) async {
+    await (delete(listMembers)..where((tbl) => tbl.listId.equals(collectionId)))
+        .go();
+    for (final member in members) {
+      await addMemberToCollection(member);
+    }
   }
 
   // -- Mappers --------------------------------------------------------------
