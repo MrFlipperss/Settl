@@ -8,61 +8,61 @@ type Participant struct {
 }
 
 type Profile struct {
-	ParticipantID string    `json:"participant_id"`
-	UserID        string    `json:"user_id"`
-	DisplayName   string    `json:"display_name"`
-	PhoneNumber   string    `json:"phone_number"`
-	UPIID         *string   `json:"upi_id"`
-	CreatedAt     time.Time `json:"created_at"`
+	ParticipantID string     `json:"participant_id"`
+	UserID        string     `json:"user_id"`
+	DisplayName   string     `json:"display_name"`
+	PhoneNumber   string     `json:"phone_number"`
+	UPIID         *string    `json:"upi_id"`
+	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
 	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 }
 
 type Contact struct {
-	ParticipantID          string    `json:"participant_id"`
-	DisplayName            string    `json:"display_name"`
-	PhoneNumber            string    `json:"phone_number"`
-	CreatedBy              string    `json:"created_by"`
-	ClaimedByParticipantID *string   `json:"claimed_by_participant_id"`
-	CreatedAt              time.Time `json:"created_at"`
+	ParticipantID          string     `json:"participant_id"`
+	DisplayName            string     `json:"display_name"`
+	PhoneNumber            string     `json:"phone_number"`
+	CreatedBy              string     `json:"created_by"`
+	ClaimedByParticipantID *string    `json:"claimed_by_participant_id"`
+	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              *time.Time `json:"updated_at,omitempty"`
 	DeletedAt              *time.Time `json:"deleted_at,omitempty"`
-	Version                int       `json:"version"`
+	Version                int        `json:"version"`
 }
 
 type List struct {
-	ID            string    `json:"id"`
-	AccountNumber string    `json:"account_number"`
-	Name          string    `json:"name"`
-	CreatedBy     string    `json:"created_by"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            string     `json:"id"`
+	AccountNumber string     `json:"account_number"`
+	Name          string     `json:"name"`
+	CreatedBy     string     `json:"created_by"`
+	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
 	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
-	Version       int       `json:"version"`
-	MemberCount   int       `json:"member_count"`
+	Version       int        `json:"version"`
+	MemberCount   int        `json:"member_count"`
 }
 
 type ListMember struct {
-	ListID        string    `json:"list_id"`
-	ParticipantID string    `json:"participant_id"`
-	AddedAt       time.Time `json:"added_at"`
+	ListID        string     `json:"list_id"`
+	ParticipantID string     `json:"participant_id"`
+	AddedAt       time.Time  `json:"added_at"`
 	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
 	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 }
 
 type Expense struct {
-	ID        string    `json:"id"`
-	ListID    *string   `json:"group_id"`
-	PayerID   string    `json:"payer_id"`
-	Amount    int64     `json:"amount_paise"`
-	Category  string    `json:"category"`
-	Note      *string   `json:"note,omitempty"`
-	SplitType string    `json:"split_type"`
-	Version   int       `json:"version"`
-	CreatedAt time.Time `json:"timestamp"`
+	ID        string     `json:"id"`
+	ListID    *string    `json:"group_id"`
+	PayerID   string     `json:"payer_id"`
+	Amount    int64      `json:"amount_paise"`
+	Category  string     `json:"category"`
+	Note      *string    `json:"note,omitempty"`
+	SplitType string     `json:"split_type"`
+	Version   int        `json:"version"`
+	CreatedAt time.Time  `json:"timestamp"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
-	Splits    []Split   `json:"splits"`
+	Splits    []Split    `json:"splits"`
 }
 
 type Split struct {
@@ -77,13 +77,13 @@ type Split struct {
 }
 
 type ReceiptDetail struct {
-	ExpenseID string    `json:"expense_id"`
-	Merchant  *string   `json:"merchant"`
-	OCRTotal  *int64    `json:"ocr_total_paise,omitempty"`
-	OCRDate   *string   `json:"ocr_date"`
-	LineItems []string  `json:"line_items"`
-	CreatedBy string    `json:"created_by"`
-	CreatedAt time.Time `json:"created_at"`
+	ExpenseID string     `json:"expense_id"`
+	Merchant  *string    `json:"merchant"`
+	OCRTotal  *int64     `json:"ocr_total_paise,omitempty"`
+	OCRDate   *string    `json:"ocr_date"`
+	LineItems []string   `json:"line_items"`
+	CreatedBy string     `json:"created_by"`
+	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
@@ -91,6 +91,7 @@ type ReceiptDetail struct {
 type BalanceEntry struct {
 	UserID    string  `json:"user_id"`
 	UserName  string  `json:"user_name"`
+	Direction string  `json:"direction"`
 	GroupID   *string `json:"group_id,omitempty"`
 	GroupName *string `json:"group_name,omitempty"`
 	Amount    int64   `json:"amount_paise"`

@@ -144,10 +144,11 @@ func getBalancesHandler(q *DBQueries) http.HandlerFunc {
 				totalOwing += amount
 			}
 			breakdown = append(breakdown, BalanceEntry{
-				UserID:   e.userID,
-				UserName: e.userName,
-				Amount:   amount,
-				Currency: "INR",
+				UserID:    e.userID,
+				UserName:  e.userName,
+				Direction: map[bool]string{true: "owed_to_me", false: "i_owe"}[e.netPaise > 0],
+				Amount:    amount,
+				Currency:  "INR",
 			})
 		}
 

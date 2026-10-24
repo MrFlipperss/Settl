@@ -1,16 +1,29 @@
-# React + Vite
+# Settl Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Settl is a people-first shared expense app. This React/Vite client connects to the Settl Go API and Supabase Auth. It does not ship with fixture accounts or sample ledger data.
 
-Currently, two official plugins are available:
+## Local setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Copy `.env.example` to `.env.local`.
+2. Add the Supabase project URL and anon key from your Supabase project settings.
+3. Set `VITE_API_URL` to the Settl API origin if you are not using the default.
+4. Install dependencies with `npm install` and run `npm run dev`.
 
-## React Compiler
+The public Supabase anon key belongs in browser configuration. Never put a service role key or other server secret in this app.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Connected workflows
 
-## Expanding the Oxlint configuration
+- Supabase email/password sign in and account creation.
+- Settl profile bootstrap, including a required display name and phone.
+- People search and contact creation.
+- Expense logging with equal, exact, percentage, and shares splits.
+- Collections, recent expense activity, and balance summaries.
+- Editable plain-language expense drafts on the overview page.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+Budgets, recurring subscriptions, receipt OCR, ticket storage, and verified UPI settlement are not connected to persistent backend services. The interface does not represent them as saved features.
+
+## Commands
+
+- `npm run dev` — start Vite locally.
+- `npm run lint` — lint the web source.
+- `npm run build` — produce the Vercel-ready bundle in `dist/`.

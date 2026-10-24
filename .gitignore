@@ -19,6 +19,7 @@ Thumbs.db
 # Environment / secret files
 .env
 .env.*
+!apps/web/.env.example
 
 # Tooling and temporary directories
 .omo/
