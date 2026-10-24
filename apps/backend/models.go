@@ -93,6 +93,7 @@ type ReceiptDetail struct {
 type BalanceEntry struct {
 	UserID    string  `json:"user_id"`
 	UserName  string  `json:"user_name"`
+	UPIID     string  `json:"upi_id,omitempty"`
 	Direction string  `json:"direction"`
 	GroupID   *string `json:"group_id,omitempty"`
 	GroupName *string `json:"group_name,omitempty"`

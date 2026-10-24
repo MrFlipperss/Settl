@@ -96,6 +96,11 @@ func main() {
 		})
 
 		r.Get("/balances", getBalancesHandler(db))
+		r.Route("/settlements", func(r chi.Router) {
+			r.Get("/", listSettlementsHandler(db))
+			r.Post("/", createSettlementHandler(db))
+			r.Patch("/{settlementID}", updateSettlementHandler(db))
+		})
 		r.Get("/notifications", listNotificationsHandler(db))
 		r.Patch("/notifications/read-all", markAllNotificationsReadHandler(db))
 		r.Patch("/notifications/{notificationID}/read", markNotificationReadHandler(db))

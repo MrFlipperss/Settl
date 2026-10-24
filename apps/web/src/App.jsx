@@ -52,6 +52,7 @@ export default function App() {
   const [dark, setDark] = useState(localStorage.getItem('settl-theme') === 'dark')
   const [busy, setBusy] = useState(false)
   const [notifications, setNotifications] = useState([])
+  const [settlements, setSettlements] = useState([])
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationsLoading, setNotificationsLoading] = useState(false)
@@ -71,7 +72,7 @@ export default function App() {
   useEffect(() => {
     let alive = true
     async function load() {
-      if (!session?.access_token) { setProfile(null); setData({ expenses: [], groups: [], contacts: [], balances: null }); setKnownPeople([]); return }
+      if (!session?.access_token) { setProfile(null); setData({ expenses: [], groups: [], contacts: [], balances: null }); setKnownPeople([]); setSettlements([]); return }
       setLoading(true); setNotice(null)
       try {
         const saved = JSON.parse(sessionStorage.getItem(`settl-profile:${session.user.id}`) || 'null')
@@ -82,13 +83,17 @@ export default function App() {
         }
         if (!currentProfile) { if (alive) setProfile(null); return }
         if (alive) setProfile(currentProfile)
-        const [expenses, groups, balances, contacts] = await Promise.all([
+        const [expenses, groups, balances, contacts, savedSettlements] = await Promise.all([
           request('/api/v1/expenses/', session.access_token),
           request('/api/v1/groups/', session.access_token),
           request('/api/v1/balances', session.access_token),
           request('/api/v1/contacts', session.access_token),
+          request('/api/v1/settlements/', session.access_token),
         ])
-        if (alive) setData((prev) => ({ ...prev, expenses: Array.isArray(expenses) ? expenses : [], groups: Array.isArray(groups) ? groups : [], contacts: Array.isArray(contacts) ? contacts : [], balances }))
+        if (alive) {
+          setData((prev) => ({ ...prev, expenses: Array.isArray(expenses) ? expenses : [], groups: Array.isArray(groups) ? groups : [], contacts: Array.isArray(contacts) ? contacts : [], balances }))
+          setSettlements(Array.isArray(savedSettlements) ? savedSettlements : [])
+        }
       } catch (error) { if (alive) setNotice(error.message) }
       finally { if (alive) setLoading(false) }
     }
@@ -103,11 +108,18 @@ export default function App() {
       return
     }
     let alive = true
-    const refresh = () => request('/api/v1/notifications', session.access_token).then((response) => {
-      if (!alive) return
-      setNotifications(Array.isArray(response.notifications) ? response.notifications : [])
-      setUnreadNotifications(Number(response.unread_count || 0))
-    }).catch(() => {})
+    const refresh = async () => {
+      try {
+        const [response, currentSettlements] = await Promise.all([
+          request('/api/v1/notifications', session.access_token),
+          request('/api/v1/settlements/', session.access_token),
+        ])
+        if (!alive) return
+        setNotifications(Array.isArray(response.notifications) ? response.notifications : [])
+        setUnreadNotifications(Number(response.unread_count || 0))
+        setSettlements(Array.isArray(currentSettlements) ? currentSettlements : [])
+      } catch { /* Show fresh updates the next time the user opens the app. */ }
+    }
     refresh()
     const interval = setInterval(refresh, 30_000)
     return () => { alive = false; clearInterval(interval) }
@@ -128,10 +140,11 @@ export default function App() {
     if (!session?.access_token) return
     setLoading(true)
     try {
-      const [expenses, groups, balances, contacts] = await Promise.all([
-        request('/api/v1/expenses/', session.access_token), request('/api/v1/groups/', session.access_token), request('/api/v1/balances', session.access_token), request('/api/v1/contacts', session.access_token),
+      const [expenses, groups, balances, contacts, savedSettlements] = await Promise.all([
+        request('/api/v1/expenses/', session.access_token), request('/api/v1/groups/', session.access_token), request('/api/v1/balances', session.access_token), request('/api/v1/contacts', session.access_token), request('/api/v1/settlements/', session.access_token),
       ])
       setData((prev) => ({ ...prev, expenses: Array.isArray(expenses) ? expenses : [], groups: Array.isArray(groups) ? groups : [], contacts: Array.isArray(contacts) ? contacts : [], balances }))
+      setSettlements(Array.isArray(savedSettlements) ? savedSettlements : [])
     } catch (error) { setNotice(error.message) } finally { setLoading(false) }
   }
 
@@ -251,6 +264,38 @@ export default function App() {
     finally { setBusy(false) }
   }
 
+  async function recordSettlement(input) {
+    setBusy(true); setNotice(null)
+    try {
+      const settlement = await request('/api/v1/settlements/', session.access_token, { method: 'POST', body: JSON.stringify(input) })
+      setModal(null); await refresh()
+      setNotice(settlement.status === 'confirmed' ? 'Payment recorded and balance updated.' : 'Payment recorded. The other person needs to confirm it before the balance changes.')
+    } catch (error) { setNotice(error.message); throw error }
+    finally { setBusy(false) }
+  }
+
+  async function respondToSettlement(settlementID, status) {
+    setBusy(true)
+    try {
+      await request(`/api/v1/settlements/${settlementID}`, session.access_token, { method: 'PATCH', body: JSON.stringify({ status }) })
+      await refresh()
+      setNotice(status === 'confirmed' ? 'Payment confirmed and balance updated.' : 'Payment request declined.')
+    } catch (error) { setNotice(error.message) }
+    finally { setBusy(false) }
+  }
+
+  async function updateUPI(upiID) {
+    setBusy(true)
+    try {
+      const updated = await request('/api/v1/profile', session.access_token, { method: 'POST', body: JSON.stringify({ display_name: profile.display_name, phone_number: profile.phone_number, upi_id: upiID.trim() }) })
+      setProfile(updated)
+      sessionStorage.setItem(`settl-profile:${session.user.id}`, JSON.stringify(updated))
+      void supabase.auth.updateUser({ data: { settl_profile: updated } })
+      setModal(null); await refresh(); setNotice('UPI details updated.')
+    } catch (error) { setNotice(error.message); throw error }
+    finally { setBusy(false) }
+  }
+
   async function createCollection(name, participantIDs = []) {
     setBusy(true)
     let groupCreated = false
@@ -318,7 +363,7 @@ export default function App() {
 
   if (authLoading) return <div className="loading-screen"><div className="brand-mark">s</div><span>Opening your Settl…</span></div>
   if (!supabase) return <SetupScreen />
-  if (!session) return <AuthScreen onNotice={setNotice} />
+  if (!session) return <AuthScreen onNotice={setNotice} notice={notice} />
   if (!profile) return <ProfileScreen session={session} onComplete={(value) => { sessionStorage.setItem(`settl-profile:${session.user.id}`, JSON.stringify(value)); supabase.auth.updateUser({ data: { settl_profile: value } }); setProfile(value); }} onLogout={logout} />
 
   return <div className="app-shell">
@@ -327,7 +372,7 @@ export default function App() {
       <div className="brand"><span className="brand-mark">s</span><span className="brand-name">settl<span className="brand-period">.</span></span></div>
       <button className="workspace-switch"><span className="workspace-badge">{initials(profile.display_name)}</span><span className="workspace-copy"><b>{profile.display_name}</b><small>Personal space</small></span><ChevronDown size={15} /></button>
       <nav className="nav-list" aria-label="Main navigation">
-        {navItems.map((item) => <div key={item.id}>{item.section && <div className="nav-section">{item.section}</div>}<button className={`nav-item ${screen === item.id ? 'active' : ''}`} onClick={() => setScreen(item.id)}><item.icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === 'activity' && data.expenses.length > 0 && <span className="nav-count">{data.expenses.length}</span>}</button></div>)}
+        {navItems.map((item) => <div key={item.id}>{item.section && <div className="nav-section">{item.section}</div>}<button className={`nav-item ${screen === item.id ? 'active' : ''}`} onClick={() => setScreen(item.id)}><item.icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.id === 'activity' && data.expenses.length > 0 && <span className="nav-count">{data.expenses.length}</span>}{item.id === 'balances' && settlements.some((settlement) => settlement.payee_id === profile.participant_id && settlement.status === 'pending') && <span className="nav-count">{settlements.filter((settlement) => settlement.payee_id === profile.participant_id && settlement.status === 'pending').length}</span>}</button></div>)}
       </nav>
       <div className="sidebar-bottom">
         <div className="upgrade-card"><div className="upgrade-icon"><Sparkles size={16} /></div><b>Money, made lighter.</b><p>Keep shared spending clear, calm, and together.</p><button onClick={() => setModal({ type: 'about' })}>How Settl works <ArrowRight size={14} /></button></div>
@@ -341,13 +386,13 @@ export default function App() {
       <div className="page-wrap"><Notice kind={notice?.includes('saved') || notice?.includes('created') || notice?.includes('added') || notice?.includes('updated') ? 'success' : 'error'} onClose={() => setNotice(null)}>{notice}</Notice>
         {screen === 'home' && <Overview profile={profile} data={data} people={people} loading={loading} onExpense={() => setModal({ type: 'expense' })} onNavigate={setScreen} onSearch={startFromSpotlight} />}
         {screen === 'activity' && <ActivityPage data={data} people={people} profile={profile} loading={loading} query={query} onQuery={setQuery} onExpense={() => setModal({ type: 'expense' })} onEditExpense={openExpenseForEditing} />}
-        {screen === 'balances' && <BalancesPage balances={data.balances} loading={loading} people={people} onNavigate={setScreen} />}
+        {screen === 'balances' && <BalancesPage balances={data.balances} settlements={settlements} profile={profile} loading={loading} busy={busy} people={people} onNavigate={setScreen} onSettle={(entry) => setModal({ type: 'settlement', entry })} onSettlementResponse={respondToSettlement} />}
         {screen === 'people' && <PeoplePage data={data} query={query} onQuery={setQuery} onAdd={() => setModal({ type: 'person' })} />}
         {screen === 'collections' && <CollectionsPage data={data} loading={loading} onCreate={() => setModal({ type: 'collection' })} onOpen={openCollection} />}
       </div>
     </main>
     <button className="mobile-add" aria-label="Add expense" onClick={() => setModal({ type: 'expense' })}><Plus size={24} /></button>
-    {modal && <ModalHost modal={modal} close={() => setModal(null)} profile={profile} people={people} groups={data.groups} expenses={data.expenses} busy={busy} onExpense={saveExpense} onUpdateExpense={updateExpense} onCollection={createCollection} onPerson={addPerson} onOpenPerson={() => setModal({ type: 'person' })} onLoadGroupMembers={loadGroupMembers} onAddMember={addCollectionMember} onRemoveMember={removeCollectionMember} onAddCollectionExpense={startCollectionExpense} onTheme={() => setDark(!dark)} dark={dark} />}
+    {modal && <ModalHost modal={modal} close={() => setModal(null)} profile={profile} people={people} groups={data.groups} expenses={data.expenses} busy={busy} onExpense={saveExpense} onUpdateExpense={updateExpense} onSettlement={recordSettlement} onUpdateUPI={updateUPI} onEditUPI={() => setModal({ type: 'upi' })} onCollection={createCollection} onPerson={addPerson} onOpenPerson={() => setModal({ type: 'person' })} onLoadGroupMembers={loadGroupMembers} onAddMember={addCollectionMember} onRemoveMember={removeCollectionMember} onAddCollectionExpense={startCollectionExpense} onTheme={() => setDark(!dark)} dark={dark} />}
   </div>
 }
 
@@ -355,17 +400,22 @@ function SetupScreen() {
   return <div className="setup-screen"><div className="setup-card"><div className="brand"><span className="brand-mark">s</span><span className="brand-name">settl<span className="brand-period">.</span></span></div><div className="eyebrow">A calmer way to split costs</div><h1>Your shared money,<br /><em>all settled.</em></h1><p>Settl brings your people, expenses, and balances into one clear space. To connect this web app, add your Supabase project URL and anonymous key to the web environment.</p><div className="setup-steps"><div><span>01</span><b>Connect Supabase Auth</b><small>Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.</small></div><div><span>02</span><b>Connect the Settl API</b><small>Set VITE_API_URL if you use a different backend.</small></div></div><div className="setup-note"><ShieldCheck size={17} /><span>Credentials stay in your local environment. This build never falls back to sample financial data.</span></div></div><div className="setup-aside"><div className="abstract-orbit orbit-one"/><div className="abstract-orbit orbit-two"/><div className="floating-card balance-float"><span>THIS MONTH</span><strong>₹ 8,240<span>.00</span></strong><small><i/> Everyone’s in sync</small></div><div className="floating-card people-float"><div className="stacked-avatars"><Avatar name="A" tone="peach"/><Avatar name="M" tone="blue"/><Avatar name="R" tone="mint"/></div><span>Good company.<br />Clear numbers.</span></div><div className="floating-caption">Shared costs, without the awkward math.</div></div></div>
 }
 
-function AuthScreen({ onNotice }) {
+function AuthScreen({ onNotice, notice }) {
   const [mode, setMode] = useState('signin'); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [busy, setBusy] = useState(false)
   async function submit(event) {
     event.preventDefault(); if (!email || password.length < 6) return onNotice('Enter a valid email and a password with at least 6 characters.')
     setBusy(true); onNotice(null)
-    const result = mode === 'signin' ? await supabase.auth.signInWithPassword({ email, password }) : await supabase.auth.signUp({ email, password })
-    setBusy(false)
-    if (result.error) onNotice(result.error.message)
-    else if (mode === 'signup' && !result.data.session) onNotice('Check your email to confirm your account, then sign in.')
+    try {
+      const result = mode === 'signin'
+        ? await supabase.auth.signInWithPassword({ email, password })
+        : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } })
+      if (result.error) onNotice(result.error.message)
+      else if (mode === 'signup' && !result.data.session && result.data.user?.identities?.length === 0) onNotice('An account may already exist for this email. Switch to sign in.')
+      else if (mode === 'signup' && !result.data.session) onNotice('Account created. Check your email for the confirmation link, then return here to finish setup.')
+    } catch (error) { onNotice(error.message || 'Could not reach the authentication service. Check your connection and try again.') }
+    finally { setBusy(false) }
   }
-  return <div className="auth-screen"><div className="auth-brand"><span className="brand-mark">s</span><span className="brand-name">settl<span className="brand-period">.</span></span></div><div className="auth-card"><div className="eyebrow">Welcome to Settl</div><h1>{mode === 'signin' ? 'Good to see you.' : 'Let’s get you started.'}</h1><p>{mode === 'signin' ? 'Sign in to pick up right where you left off.' : 'Create an account to start sharing the load.'}</p><form onSubmit={submit}><label>Email address<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /></label><label>Password<input type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 6 characters" required minLength={6} /></label><button className="button button-primary full-button" disabled={busy}>{busy ? 'One moment…' : mode === 'signin' ? 'Sign in' : 'Create account'}<ArrowRight size={16}/></button></form><div className="auth-divider"><span/>or<span/></div><button className="button button-secondary full-button" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>{mode === 'signin' ? 'Create a new account' : 'I already have an account'}</button><small className="auth-footnote"><ShieldCheck size={14}/> Your account is protected by Supabase authentication.</small></div><p className="auth-legal">By continuing, you agree to use Settl to keep shared expenses transparent and fair.</p></div>
+  return <div className="auth-screen"><div className="auth-brand"><span className="brand-mark">s</span><span className="brand-name">settl<span className="brand-period">.</span></span></div><div className="auth-card"><div className="eyebrow">Welcome to Settl</div><h1>{mode === 'signin' ? 'Good to see you.' : 'Let’s get you started.'}</h1><p>{mode === 'signin' ? 'Sign in to pick up right where you left off.' : 'Create an account to start sharing the load.'}</p>{notice && <Notice kind={notice.startsWith('Account created.') ? 'success' : 'error'}>{notice}</Notice>}<form onSubmit={submit}><label>Email address<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /></label><label>Password<input type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 6 characters" required minLength={6} /></label><button className="button button-primary full-button" disabled={busy}>{busy ? 'One moment…' : mode === 'signin' ? 'Sign in' : 'Create account'}<ArrowRight size={16}/></button></form><div className="auth-divider"><span/>or<span/></div><button className="button button-secondary full-button" onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); onNotice(null) }}>{mode === 'signin' ? 'Create a new account' : 'I already have an account'}</button><small className="auth-footnote"><ShieldCheck size={14}/> Your account is protected by Supabase authentication.</small></div><p className="auth-legal">By continuing, you agree to use Settl to keep shared expenses transparent and fair.</p></div>
 }
 
 function ProfileScreen({ session, onComplete, onLogout }) {
@@ -421,14 +471,47 @@ function ActivityPage({ data, people, profile, loading, query, onQuery, onExpens
   return <><PageHeader eyebrow="Your ledger" title="Activity" copy="Every shared cost, in one place." action={<button className="button button-primary" onClick={onExpense}><Plus size={16}/> Add an expense</button>}/><section className="content-card page-card"><div className="toolbar"><label className="inline-search"><Search size={16}/><input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Search expenses"/></label><label className="select-filter"><Filter size={15}/><select value={filter} onChange={(event) => setFilter(event.target.value)}><option>All activity</option><option>Collections</option></select><ChevronDown size={14}/></label></div>{loading ? <div className="skeleton-list">{[0, 1, 2, 3].map((x) => <div className="skeleton-row" key={x}/>)}</div> : expenses.length ? <><div className="table-meta">{expenses.length} {expenses.length === 1 ? 'expense' : 'expenses'} in your ledger</div><div className="activity-list full-activity">{expenses.map((expense) => <ExpenseRow key={expense.id} expense={expense} people={people} onEdit={expense.payer_id === profile.participant_id ? onEditExpense : undefined}/>)}</div></> : <Empty title={query ? 'No matches' : 'Nothing here yet'} copy={query ? 'Try another search term.' : 'Once you log a shared cost, it will show up here.'} action={!query && <button className="button button-secondary" onClick={onExpense}><Plus size={15}/> Add an expense</button>}/>}</section></>
 }
 
-function BalancesPage({ balances, loading, people, onNavigate }) {
+function BalancesPage({ balances, settlements, profile, loading, busy, people, onNavigate, onSettle, onSettlementResponse }) {
   const list = balances?.breakdown || []
-  return <><PageHeader eyebrow="Keep things even" title="Balances" copy="See where you stand with everyone."/><div className="balance-summary"><div className="balance-total-card positive"><span>People owe you</span><b>{amount(balances?.total_owed_paise)}</b><small><ArrowDownLeft size={13}/> Incoming</small></div><div className="balance-total-card negative"><span>You owe</span><b>{amount(balances?.total_owing_paise)}</b><small><ArrowUpRight size={13}/> Outgoing</small></div><div className="balance-total-card net"><span>Your net balance</span><b>{amount(balances?.net_paise)}</b><small><Activity size={13}/> Across all connections</small></div></div><section className="content-card page-card"><div className="card-heading"><div><h3>Between you and them</h3><p>Payments happen in your UPI app; Settl doesn’t mark a payment as complete.</p></div></div>{loading ? <div className="skeleton-list"><div className="skeleton-row"/><div className="skeleton-row"/></div> : list.length ? <div className="balance-list">{list.map((entry) => <BalanceRow key={entry.user_id} entry={entry} owesYou={entry.direction === 'owed_to_me' ? true : entry.direction === 'i_owe' ? false : null} people={people}/> )}</div> : <Empty icon={Wallet} title="You’re all square" copy="Nothing outstanding between you and your people. Shared expenses will settle in here." action={<button className="button button-secondary" onClick={() => onNavigate('activity')}><ReceiptText size={15}/> View activity</button>}/>}</section><div className="info-note"><ShieldCheck size={17}/><span>{list.length && list.some((entry) => !entry.direction) ? 'Your API needs the latest balance-direction update before person-by-person directions can be shown. ' : ''}Balances come from the Settl ledger. A payment QR or UPI intent would only start a payment; it can’t confirm one.</span></div></>
+  const incoming = settlements.filter((item) => item.payee_id === profile.participant_id && item.status === 'pending')
+  const outgoing = settlements.filter((item) => item.payer_id === profile.participant_id && item.status === 'pending')
+  const pendingPayees = new Set(outgoing.map((item) => item.payee_id))
+  return <><PageHeader eyebrow="Keep things even" title="Balances" copy="See where you stand with everyone."/><div className="balance-summary"><div className="balance-total-card positive"><span>People owe you</span><b>{amount(balances?.total_owed_paise)}</b><small><ArrowDownLeft size={13}/> Incoming</small></div><div className="balance-total-card negative"><span>You owe</span><b>{amount(balances?.total_owing_paise)}</b><small><ArrowUpRight size={13}/> Outgoing</small></div><div className="balance-total-card net"><span>Your net balance</span><b>{amount(balances?.net_paise)}</b><small><Activity size={13}/> Across all connections</small></div></div>{(incoming.length > 0 || outgoing.length > 0) && <section className="content-card settlement-requests"><div className="card-heading"><div><h3>Payment confirmations</h3><p>Payments only affect balances once confirmed.</p></div></div>{incoming.map((item) => <div className="settlement-request" key={item.id}><div><b>{item.payer_name} says they paid {amount(item.amount_paise)}</b><small>Confirm only after the payment reaches you.</small></div><button className="button button-secondary button-small" onClick={() => onSettlementResponse(item.id, 'declined')} disabled={busy}>Decline</button><button className="button button-primary button-small" onClick={() => onSettlementResponse(item.id, 'confirmed')} disabled={busy}>Confirm received</button></div>)}{outgoing.map((item) => <div className="settlement-request" key={item.id}><div><b>{amount(item.amount_paise)} sent to {item.payee_name}</b><small>Waiting for them to confirm receipt.</small></div><span className="settlement-pending">Pending</span></div>)}</section>}<section className="content-card page-card"><div className="card-heading"><div><h3>Between you and them</h3><p>Choose “Settle up” to pay and record a confirmation request.</p></div></div>{loading ? <div className="skeleton-list"><div className="skeleton-row"/><div className="skeleton-row"/></div> : list.length ? <div className="balance-list">{list.map((entry) => <BalanceRow key={entry.user_id} entry={entry} owesYou={entry.direction === 'owed_to_me' ? true : entry.direction === 'i_owe' ? false : null} people={people} pending={pendingPayees.has(entry.user_id)} onSettle={onSettle}/> )}</div> : <Empty icon={Wallet} title="You’re all square" copy="Nothing outstanding between you and your people. Shared expenses will settle in here." action={<button className="button button-secondary" onClick={() => onNavigate('activity')}><ReceiptText size={15}/> View activity</button>}/>}</section><div className="info-note"><ShieldCheck size={17}/><span>UPI opens your payment app. Settl never marks a transfer paid automatically; the recipient confirms in-app so both balances stay accurate.</span></div></>
 }
 
-function BalanceRow({ entry, owesYou, people }) {
+function BalanceRow({ entry, owesYou, people, pending, onSettle }) {
   const person = people.find((item) => item.participant_id === entry.user_id); const display = entry.user_name || person?.display_name || 'Settl person'
-  return <div className="balance-row"><Avatar name={display} tone="blue"/><div className="balance-person"><b>{display}</b><small>{owesYou === null ? 'Direction unavailable' : owesYou ? 'Owes you' : 'You owe'}</small></div><span className={`balance-indicator ${owesYou === null ? 'neutral' : owesYou ? 'incoming' : 'outgoing'}`}>{owesYou === null ? <Activity size={14}/> : owesYou ? <ArrowDownLeft size={14}/> : <ArrowUpRight size={14}/>}</span><div className={`balance-value ${owesYou === null ? 'is-neutral' : owesYou ? 'is-incoming' : 'is-outgoing'}`}><b>{amount(entry.amount_paise)}</b><small>{owesYou === null ? 'per API response' : owesYou ? 'to receive' : 'to settle'}</small></div></div>
+  return <div className="balance-row"><Avatar name={display} tone="blue"/><div className="balance-person"><b>{display}</b><small>{owesYou === null ? 'Direction unavailable' : owesYou ? 'Owes you' : 'You owe'}</small></div><span className={`balance-indicator ${owesYou === null ? 'neutral' : owesYou ? 'incoming' : 'outgoing'}`}>{owesYou === null ? <Activity size={14}/> : owesYou ? <ArrowDownLeft size={14}/> : <ArrowUpRight size={14}/>}</span><div className={`balance-value ${owesYou === null ? 'is-neutral' : owesYou ? 'is-incoming' : 'is-outgoing'}`}><b>{amount(entry.amount_paise)}</b><small>{owesYou === null ? 'per API response' : owesYou ? 'to receive' : 'to settle'}</small></div>{owesYou === false && (pending ? <span className="settlement-pending">Payment pending</span> : <button className="button button-secondary button-small settle-up-button" onClick={() => onSettle(entry)}>Settle up</button>)}</div>
+}
+
+function SettlementForm({ entry, busy, onSave, close }) {
+  const [value, setValue] = useState((Number(entry.amount_paise || 0) / 100).toFixed(2))
+  const [error, setError] = useState('')
+  const maxAmount = Number(entry.amount_paise || 0) / 100
+  const payableAmount = Number(value)
+  const valid = Number.isFinite(payableAmount) && payableAmount > 0 && payableAmount <= maxAmount
+  const upiLink = entry.upi_id && valid
+    ? `upi://pay?${new URLSearchParams({ pa: entry.upi_id, pn: entry.user_name || 'Settl person', am: payableAmount.toFixed(2), cu: 'INR', tn: 'Settl balance settlement' })}`
+    : ''
+  function submit(event) {
+    event.preventDefault()
+    if (!valid) return setError(`Enter an amount up to ${amount(entry.amount_paise)}.`)
+    setError('')
+    onSave({ payee_id: entry.user_id, amount: payableAmount }).catch((issue) => setError(issue.message))
+  }
+  return <form className="modal-content settlement-form" onSubmit={submit}><p className="modal-description">You owe <b>{entry.user_name}</b> {amount(entry.amount_paise)}. Pay them, then record the payment here.</p><label>Amount to pay<input type="number" min="0.01" max={maxAmount} step="0.01" inputMode="decimal" value={value} onChange={(event) => setValue(event.target.value)} required/></label>{entry.upi_id ? <div className="upi-pay-details"><span>UPI ID</span><b>{entry.upi_id}</b><a className="button button-secondary" href={upiLink}>Pay {amount(Math.round(payableAmount * 100))} via UPI<ArrowUpRight size={15}/></a></div> : <div className="settlement-no-upi">{entry.user_name} hasn’t added a UPI ID. Arrange payment with them, then record it for confirmation.</div>}{error && <Notice>{error}</Notice>}<p className="settlement-confirm-hint">After you pay, choose “I’ve paid”. The other person must confirm before Settl reduces the balance.</p><div className="modal-footer"><button type="button" className="text-button" onClick={close}>Cancel</button><button className="button button-primary" disabled={!valid || busy}>{busy ? 'Recording…' : 'I’ve paid this amount'}<ArrowRight size={15}/></button></div></form>
+}
+
+function UPIForm({ profile, busy, onSave, close }) {
+  const [value, setValue] = useState(profile.upi_id || '')
+  const [error, setError] = useState('')
+  function submit(event) {
+    event.preventDefault()
+    if (value.trim() && !/^[^@\s]+@[^@\s]+$/.test(value.trim())) return setError('Enter a valid UPI ID, such as name@bank.')
+    setError('')
+    onSave(value).catch((issue) => setError(issue.message))
+  }
+  return <form className="modal-content" onSubmit={submit}><p className="modal-description">Add your UPI ID so people who owe you can pay you from their UPI app. Settl never stores bank credentials.</p><label>UPI ID<input value={value} onChange={(event) => setValue(event.target.value)} placeholder="name@bank" autoComplete="off" autoFocus/></label>{error && <Notice>{error}</Notice>}<div className="modal-footer"><button type="button" className="text-button" onClick={close}>Cancel</button><button className="button button-primary" disabled={busy}>{busy ? 'Saving…' : 'Save UPI ID'}<ArrowRight size={15}/></button></div></form>
 }
 
 function PeoplePage({ data, query, onQuery, onAdd }) {
@@ -447,8 +530,8 @@ function NotificationsPopover({ items, unreadCount, loading, onClose, onReadAll,
   return <section className="notifications-popover" role="dialog" aria-label="Notifications"><header><div><b>Notifications</b><small>{unreadCount ? `${unreadCount} unread` : 'You’re up to date'}</small></div><div className="notification-actions">{unreadCount > 0 && <button onClick={onReadAll}>Mark all read</button>}<button className="icon-button" aria-label="Close notifications" onClick={onClose}><X size={15}/></button></div></header>{loading ? <div className="notification-empty">Loading your notifications…</div> : items.length ? <div className="notification-list">{items.map((item) => <button key={item.id} className={`notification-item ${item.read_at ? 'read' : 'unread'}`} onClick={() => onSelect(item)}><span className="notification-avatar"><ReceiptText size={15}/></span><span className="notification-copy"><b>{item.title}</b><span>{item.actor_display_name} · {item.body}</span><small>{new Date(item.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</small></span>{!item.read_at && <i aria-label="Unread"/>}</button>)}</div> : <div className="notification-empty"><span className="empty-icon"><Bell size={17}/></span><b>No notifications yet</b><p>When someone adds you to a shared expense, it’ll show up here.</p></div>}<footer><span>Notifications are in-app. Unregistered contacts can see them after they join Settl.</span></footer></section>
 }
 
-function ModalHost({ modal, close, profile, people, groups, expenses, busy, onExpense, onUpdateExpense, onCollection, onPerson, onOpenPerson, onLoadGroupMembers, onAddMember, onRemoveMember, onAddCollectionExpense, dark, onTheme }) {
-  const titles = { expense: 'Add an expense', editExpense: 'Edit expense', collection: 'New collection', person: 'Add a person', invite: 'Invite to Settl', settings: 'Settings', about: 'A little more about Settl' }
+function ModalHost({ modal, close, profile, people, groups, expenses, busy, onExpense, onUpdateExpense, onSettlement, onUpdateUPI, onEditUPI, onCollection, onPerson, onOpenPerson, onLoadGroupMembers, onAddMember, onRemoveMember, onAddCollectionExpense, dark, onTheme }) {
+  const titles = { expense: 'Add an expense', editExpense: 'Edit expense', settlement: 'Settle up', upi: 'Payment details', collection: 'New collection', person: 'Add a person', invite: 'Invite to Settl', settings: 'Settings', about: 'A little more about Settl' }
   const isDetail = modal.type === 'collectionDetail'
   const editingExpense = modal.type === 'editExpense' ? modal.expense : null
   const savedSplits = editingExpense?.splits || []
@@ -462,7 +545,7 @@ function ModalHost({ modal, close, profile, people, groups, expenses, busy, onEx
     raw: Object.fromEntries(savedSplits.map((split) => [split.user_id, (Number(split.share_amount_paise || 0) / 100).toFixed(2)])),
   } : undefined
   const heading = isDetail ? modal.group.name : titles[modal.type]
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><section className={`modal ${modal.type === 'expense' || modal.type === 'editExpense' || isDetail ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby="modal-title"><header className="modal-header"><div><div className="eyebrow">{isDetail ? `Collection · ${modal.group.account_number || 'Shared space'}` : modal.type === 'expense' || modal.type === 'editExpense' ? 'Shared spending' : 'Your Settl space'}</div><h2 id="modal-title">{heading}</h2></div><button className="icon-button modal-close" aria-label="Close dialog" onClick={close}><X size={18}/></button></header>{(modal.type === 'expense' || editingExpense) && <ExpenseForm profile={profile} people={people} groups={groups} busy={busy} prefill={editingExpense ? expensePrefill : modal.prefill} editingExpense={editingExpense} onLoadGroupMembers={onLoadGroupMembers} onSave={onExpense} onUpdateExpense={onUpdateExpense} close={close}/ >}{isDetail && <CollectionDetail group={modal.group} members={modal.members} expenses={expenses} people={people} profile={profile} busy={busy} onAddMember={onAddMember} onRemoveMember={onRemoveMember} onAddExpense={onAddCollectionExpense} onOpenPerson={onOpenPerson}/ >}{modal.type === 'person' && <PersonForm busy={busy} onSave={onPerson} close={close}/ >}{modal.type === 'invite' && <InvitePerson person={modal.person} close={close}/ >}{modal.type === 'collection' && <CollectionForm people={people} busy={busy} onSave={onCollection} close={close}/ >}{modal.type === 'settings' && <div className="modal-content"><div className="setting-row"><span className="setting-icon"><Moon size={17}/></span><div><b>Appearance</b><small>Choose a comfortable theme</small></div><button className="button button-small button-secondary" onClick={onTheme}>{dark ? 'Dark' : 'Light'}<ChevronDown size={13}/></button></div><div className="setting-row"><span className="setting-icon"><ShieldCheck size={17}/></span><div><b>Account</b><small>{profile.display_name} · {profile.phone_number}</small></div></div><div className="setting-row"><span className="setting-icon"><CreditCard size={17}/></span><div><b>Payments</b><small>{profile.upi_id || 'UPI details not added'}</small></div></div><div className="setup-note"><ShieldCheck size={16}/><span>Ledger data comes from your Settl account. This browser stores only your theme preference and the active auth session.</span></div></div>}{modal.type === 'about' && <div className="modal-content about-copy"><p>Settl helps people keep shared expenses clear. Log what happened, pick the people involved, and review the split before saving.</p><div className="about-feature"><span><Zap size={16}/></span><div><b>Fast capture</b><small>One expense, the right people, a clear split.</small></div></div><div className="about-feature"><span><Users size={16}/></span><div><b>People first</b><small>Collections make recurring groups easier, but they’re optional.</small></div></div><div className="about-feature"><span><ShieldCheck size={16}/></span><div><b>Honest money</b><small>Only confirmed backend responses appear in your ledger.</small></div></div><div className="future-note"><Sparkles size={15}/> Budgets, recurring payments, ticket storage, and receipt scanning are not connected yet.</div></div>}</section></div>
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><section className={`modal ${modal.type === 'expense' || modal.type === 'editExpense' || isDetail ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby="modal-title"><header className="modal-header"><div><div className="eyebrow">{isDetail ? `Collection · ${modal.group.account_number || 'Shared space'}` : modal.type === 'expense' || modal.type === 'editExpense' ? 'Shared spending' : 'Your Settl space'}</div><h2 id="modal-title">{heading}</h2></div><button className="icon-button modal-close" aria-label="Close dialog" onClick={close}><X size={18}/></button></header>{(modal.type === 'expense' || editingExpense) && <ExpenseForm profile={profile} people={people} groups={groups} busy={busy} prefill={editingExpense ? expensePrefill : modal.prefill} editingExpense={editingExpense} onLoadGroupMembers={onLoadGroupMembers} onSave={onExpense} onUpdateExpense={onUpdateExpense} close={close}/ >}{modal.type === 'settlement' && <SettlementForm entry={modal.entry} busy={busy} onSave={onSettlement} close={close}/ >}{modal.type === 'upi' && <UPIForm profile={profile} busy={busy} onSave={onUpdateUPI} close={close}/ >}{isDetail && <CollectionDetail group={modal.group} members={modal.members} expenses={expenses} people={people} profile={profile} busy={busy} onAddMember={onAddMember} onRemoveMember={onRemoveMember} onAddExpense={onAddCollectionExpense} onOpenPerson={onOpenPerson}/ >}{modal.type === 'person' && <PersonForm busy={busy} onSave={onPerson} close={close}/ >}{modal.type === 'invite' && <InvitePerson person={modal.person} close={close}/ >}{modal.type === 'collection' && <CollectionForm people={people} busy={busy} onSave={onCollection} close={close}/ >}{modal.type === 'settings' && <div className="modal-content"><div className="setting-row"><span className="setting-icon"><Moon size={17}/></span><div><b>Appearance</b><small>Choose a comfortable theme</small></div><button className="button button-small button-secondary" onClick={onTheme}>{dark ? 'Dark' : 'Light'}<ChevronDown size={13}/></button></div><div className="setting-row"><span className="setting-icon"><ShieldCheck size={17}/></span><div><b>Account</b><small>{profile.display_name} · {profile.phone_number}</small></div></div><div className="setting-row"><span className="setting-icon"><CreditCard size={17}/></span><div><b>Payments</b><small>{profile.upi_id || 'UPI details not added'}</small></div><button className="button button-small button-secondary" onClick={onEditUPI}>{profile.upi_id ? 'Update' : 'Add UPI'}</button></div><div className="setup-note"><ShieldCheck size={16}/><span>Ledger data comes from your Settl account. This browser stores only your theme preference and the active auth session.</span></div></div>}{modal.type === 'about' && <div className="modal-content about-copy"><p>Settl helps people keep shared expenses clear. Log what happened, pick the people involved, and review the split before saving.</p><div className="about-feature"><span><Zap size={16}/></span><div><b>Fast capture</b><small>One expense, the right people, a clear split.</small></div></div><div className="about-feature"><span><Users size={16}/></span><div><b>People first</b><small>Collections make recurring groups easier, but they’re optional.</small></div></div><div className="about-feature"><span><ShieldCheck size={16}/></span><div><b>Honest money</b><small>Only confirmed backend responses appear in your ledger.</small></div></div><div className="future-note"><Sparkles size={15}/> Budgets, recurring payments, ticket storage, and receipt scanning are not connected yet.</div></div>}</section></div>
 }
 
 function InvitePerson({ person, close }) {

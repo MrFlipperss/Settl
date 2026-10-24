@@ -9,8 +9,10 @@ import (
 type pairwiseBalanceRow struct {
 	FromParticipant string
 	FromDisplayName string
+	FromUPIID       string
 	ToParticipant   string
 	ToDisplayName   string
+	ToUPIID         string
 	AmountOwedPaise int64
 }
 
@@ -23,7 +25,9 @@ func safeUUIDDisplay(id string) string {
 
 func (q *DBQueries) GetPairwiseBalances(ctx context.Context, personID *string) ([]pairwiseBalanceRow, error) {
 	query := `SELECT b.from_participant, COALESCE(NULLIF(pf.display_name, ''), NULLIF(cf.display_name, ''), ''),
+	                 COALESCE(NULLIF(pf.upi_id, ''), ''),
 	                 b.to_participant, COALESCE(NULLIF(pt.display_name, ''), NULLIF(ct.display_name, ''), ''),
+	                 COALESCE(NULLIF(pt.upi_id, ''), ''),
 	                 CAST(b.amount_owed * 100 AS BIGINT)
 		FROM public.pairwise_balances b
 		LEFT JOIN public.profiles pf ON pf.participant_id = b.from_participant
@@ -46,7 +50,7 @@ func (q *DBQueries) GetPairwiseBalances(ctx context.Context, personID *string) (
 	var balances []pairwiseBalanceRow
 	for rows.Next() {
 		var b pairwiseBalanceRow
-		if err := rows.Scan(&b.FromParticipant, &b.FromDisplayName, &b.ToParticipant, &b.ToDisplayName, &b.AmountOwedPaise); err != nil {
+		if err := rows.Scan(&b.FromParticipant, &b.FromDisplayName, &b.FromUPIID, &b.ToParticipant, &b.ToDisplayName, &b.ToUPIID, &b.AmountOwedPaise); err != nil {
 			return nil, fmt.Errorf("scan balance: %w", err)
 		}
 		if b.FromDisplayName == "" {
@@ -92,17 +96,21 @@ func getBalancesHandler(q *DBQueries) http.HandlerFunc {
 		type netEntry struct {
 			userID   string
 			userName string
+			upiID    string
 			netPaise int64
 		}
 		order := []string{}
 		nets := make(map[string]*netEntry)
 
-		addNet := func(counterpartyID, counterpartyName string, signedPaise int64) {
+		addNet := func(counterpartyID, counterpartyName, counterpartyUPI string, signedPaise int64) {
 			e, ok := nets[counterpartyID]
 			if !ok {
-				e = &netEntry{userID: counterpartyID, userName: counterpartyName}
+				e = &netEntry{userID: counterpartyID, userName: counterpartyName, upiID: counterpartyUPI}
 				nets[counterpartyID] = e
 				order = append(order, counterpartyID)
+			}
+			if e.upiID == "" {
+				e.upiID = counterpartyUPI
 			}
 			e.netPaise += signedPaise
 		}
@@ -118,14 +126,53 @@ func getBalancesHandler(q *DBQueries) http.HandlerFunc {
 				continue
 			case b.FromParticipant == reference:
 				// reference owes b.ToParticipant
-				addNet(b.ToParticipant, b.ToDisplayName, -b.AmountOwedPaise)
+				addNet(b.ToParticipant, b.ToDisplayName, b.ToUPIID, -b.AmountOwedPaise)
 			case b.ToParticipant == reference:
 				// b.FromParticipant owes reference
-				addNet(b.FromParticipant, b.FromDisplayName, b.AmountOwedPaise)
+				addNet(b.FromParticipant, b.FromDisplayName, b.FromUPIID, b.AmountOwedPaise)
 			default:
 				continue
 			}
 		}
+
+		settlementRows, err := q.pool.Query(r.Context(),
+			`SELECT s.payer_participant_id,
+		        COALESCE(NULLIF(pp.display_name, ''), NULLIF(pc.display_name, ''), LEFT(s.payer_participant_id::text, 8)),
+	        COALESCE(NULLIF(pp.upi_id, ''), ''),
+	        s.payee_participant_id,
+	        COALESCE(NULLIF(rp.display_name, ''), NULLIF(rc.display_name, ''), LEFT(s.payee_participant_id::text, 8)),
+	        COALESCE(NULLIF(rp.upi_id, ''), ''), CAST(s.amount * 100 AS BIGINT)
+		 FROM public.settlements s
+		 LEFT JOIN public.profiles pp ON pp.participant_id = s.payer_participant_id
+		 LEFT JOIN public.contacts pc ON pc.participant_id = s.payer_participant_id AND pc.deleted_at IS NULL
+		 LEFT JOIN public.profiles rp ON rp.participant_id = s.payee_participant_id
+		 LEFT JOIN public.contacts rc ON rc.participant_id = s.payee_participant_id AND rc.deleted_at IS NULL
+		 WHERE s.status = 'confirmed' AND (s.payer_participant_id = $1 OR s.payee_participant_id = $1)`, reference,
+		)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "could not load confirmed settlements"})
+			return
+		}
+		for settlementRows.Next() {
+			var payerID, payerName, payerUPI, payeeID, payeeName, payeeUPI string
+			var amountPaise int64
+			if err := settlementRows.Scan(&payerID, &payerName, &payerUPI, &payeeID, &payeeName, &payeeUPI, &amountPaise); err != nil {
+				settlementRows.Close()
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "could not read confirmed settlements"})
+				return
+			}
+			if payerID == reference {
+				addNet(payeeID, payeeName, payeeUPI, amountPaise)
+			} else {
+				addNet(payerID, payerName, payerUPI, -amountPaise)
+			}
+		}
+		if err := settlementRows.Err(); err != nil {
+			settlementRows.Close()
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "could not read confirmed settlements"})
+			return
+		}
+		settlementRows.Close()
 
 		var totalOwed, totalOwing int64
 		breakdown := make([]BalanceEntry, 0, len(order))
@@ -148,6 +195,7 @@ func getBalancesHandler(q *DBQueries) http.HandlerFunc {
 			breakdown = append(breakdown, BalanceEntry{
 				UserID:    e.userID,
 				UserName:  e.userName,
+				UPIID:     e.upiID,
 				Direction: map[bool]string{true: "owed_to_me", false: "i_owe"}[e.netPaise > 0],
 				Amount:    amount,
 				Currency:  "INR",
