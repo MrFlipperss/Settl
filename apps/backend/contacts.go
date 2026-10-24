@@ -161,7 +161,36 @@ func (q *DBQueries) GetContact(ctx context.Context, participantID string) (*Cont
 	return &c, nil
 }
 
-func (q *DBQueries) SearchContacts(ctx context.Context, query string, limit int) ([]ContactSearchResult, error) {
+func (q *DBQueries) ListContacts(ctx context.Context, createdBy string) ([]Contact, error) {
+	rows, err := q.pool.Query(ctx,
+		`SELECT c.participant_id, COALESCE(NULLIF(p.display_name, ''), c.display_name),
+		        c.phone_number, c.claimed_by_participant_id IS NOT NULL, c.created_by,
+		        c.claimed_by_participant_id, c.created_at, c.updated_at, c.deleted_at, c.version
+		 FROM public.contacts c
+	 LEFT JOIN public.profiles p ON p.participant_id = c.claimed_by_participant_id
+	 WHERE c.created_by = $1 AND c.deleted_at IS NULL
+	 ORDER BY c.display_name ASC, c.created_at DESC`,
+		createdBy,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list contacts: %w", err)
+	}
+	defer rows.Close()
+
+	contacts := make([]Contact, 0)
+	for rows.Next() {
+		var contact Contact
+		if err := rows.Scan(&contact.ParticipantID, &contact.DisplayName, &contact.PhoneNumber,
+			&contact.IsRegistered, &contact.CreatedBy, &contact.ClaimedByParticipantID,
+			&contact.CreatedAt, &contact.UpdatedAt, &contact.DeletedAt, &contact.Version); err != nil {
+			return nil, fmt.Errorf("scan contact: %w", err)
+		}
+		contacts = append(contacts, contact)
+	}
+	return contacts, rows.Err()
+}
+
+func (q *DBQueries) SearchContacts(ctx context.Context, query string, limit int, createdBy string) ([]ContactSearchResult, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
@@ -174,11 +203,11 @@ func (q *DBQueries) SearchContacts(ctx context.Context, query string, limit int)
 		        c.claimed_by_participant_id IS NOT NULL
 		 FROM public.contacts c
 		 LEFT JOIN public.profiles p ON p.participant_id = c.claimed_by_participant_id
-		 WHERE c.deleted_at IS NULL
-		   AND (c.display_name ILIKE $1 OR c.phone_number ILIKE $1)
+		 WHERE c.created_by = $2 AND c.deleted_at IS NULL
+		   AND (COALESCE(NULLIF(p.display_name, ''), c.display_name) ILIKE $1 OR c.phone_number ILIKE $1)
 		 ORDER BY c.display_name ASC
-		 LIMIT $2`,
-		searchPattern, limit,
+		 LIMIT $3`,
+		searchPattern, createdBy, limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("search contacts: %w", err)
@@ -196,6 +225,22 @@ func (q *DBQueries) SearchContacts(ctx context.Context, query string, limit int)
 	return results, nil
 }
 
+func listContactsHandler(q *DBQueries) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		participantID := participantIDFromCtx(r.Context())
+		if participantID == "" {
+			writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+			return
+		}
+		contacts, err := q.ListContacts(r.Context(), participantID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "could not load contacts"})
+			return
+		}
+		writeJSON(w, http.StatusOK, contacts)
+	}
+}
+
 func searchContactsHandler(q *DBQueries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		qp := r.URL.Query().Get("q")
@@ -204,7 +249,7 @@ func searchContactsHandler(q *DBQueries) http.HandlerFunc {
 			return
 		}
 
-		results, err := q.SearchContacts(r.Context(), qp, 20)
+		results, err := q.SearchContacts(r.Context(), qp, 20, participantIDFromCtx(r.Context()))
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 			return

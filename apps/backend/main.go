@@ -101,6 +101,7 @@ func main() {
 		r.Patch("/notifications/{notificationID}/read", markNotificationReadHandler(db))
 
 		r.Post("/contacts", createContactHandler(db))
+		r.Get("/contacts", listContactsHandler(db))
 		r.Get("/contacts/search", searchContactsHandler(db))
 		r.Post("/contacts/claim", claimContactsHandler(db))
 		r.Get("/changes", getChangesHandler(db))
