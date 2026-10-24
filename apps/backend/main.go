@@ -24,7 +24,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, Idempotency-Key, X-CSRF-Token")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
@@ -96,6 +96,9 @@ func main() {
 		})
 
 		r.Get("/balances", getBalancesHandler(db))
+		r.Get("/notifications", listNotificationsHandler(db))
+		r.Patch("/notifications/read-all", markAllNotificationsReadHandler(db))
+		r.Patch("/notifications/{notificationID}/read", markNotificationReadHandler(db))
 
 		r.Post("/contacts", createContactHandler(db))
 		r.Get("/contacts/search", searchContactsHandler(db))

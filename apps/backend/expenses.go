@@ -102,6 +102,34 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 		}
 	}
 
+	// Persist an in-app notification for each other participant in the same
+	// transaction as the expense. The unique key keeps retries idempotent.
+	notificationTitle := fmt.Sprintf("New shared expense · ₹%.2f", amountRupees)
+	notificationBody := category
+	if req.Note != nil && *req.Note != "" {
+		notificationBody = *req.Note
+	}
+	notified := make(map[string]struct{}, len(splits))
+	for _, s := range splits {
+		if s.ParticipantID == req.PayerID {
+			continue
+		}
+		if _, exists := notified[s.ParticipantID]; exists {
+			continue
+		}
+		notified[s.ParticipantID] = struct{}{}
+		_, err = tx.Exec(ctx,
+			`INSERT INTO public.notifications
+				(recipient_participant_id, actor_participant_id, expense_id, type, title, body)
+			 VALUES ($1, $2, $3, 'expense_created', $4, $5)
+			 ON CONFLICT (recipient_participant_id, expense_id, type) WHERE expense_id IS NOT NULL DO NOTHING`,
+			s.ParticipantID, req.PayerID, expenseID, notificationTitle, notificationBody,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("insert expense notification: %w", err)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit tx: %w", err)
 	}

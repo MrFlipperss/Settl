@@ -22,6 +22,7 @@ type Contact struct {
 	ParticipantID          string     `json:"participant_id"`
 	DisplayName            string     `json:"display_name"`
 	PhoneNumber            string     `json:"phone_number"`
+	IsRegistered           bool       `json:"is_registered"`
 	CreatedBy              string     `json:"created_by"`
 	ClaimedByParticipantID *string    `json:"claimed_by_participant_id"`
 	CreatedAt              time.Time  `json:"created_at"`
@@ -45,6 +46,7 @@ type List struct {
 type ListMember struct {
 	ListID        string     `json:"list_id"`
 	ParticipantID string     `json:"participant_id"`
+	DisplayName   string     `json:"display_name"`
 	AddedAt       time.Time  `json:"added_at"`
 	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
 	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
@@ -165,6 +167,7 @@ type ContactSearchResult struct {
 	ParticipantID string `json:"participant_id"`
 	DisplayName   string `json:"display_name"`
 	PhoneNumber   string `json:"phone_number"`
+	IsRegistered  bool   `json:"is_registered"`
 }
 
 type ChangesRequest struct {

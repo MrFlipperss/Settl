@@ -17,7 +17,8 @@ The public Supabase anon key belongs in browser configuration. Never put a servi
 - Settl profile bootstrap, including a required display name and phone.
 - People search and contact creation.
 - Expense logging with equal, exact, percentage, and shares splits.
-- Collections, recent expense activity, and balance summaries.
+- Collections with member management, member-prefilled expense drafts, recent activity, and balance summaries.
+- Persistent in-app notifications for participants when a shared expense is added.
 - Editable plain-language expense drafts on the overview page.
 
 Budgets, recurring subscriptions, receipt OCR, ticket storage, and verified UPI settlement are not connected to persistent backend services. The interface does not represent them as saved features.

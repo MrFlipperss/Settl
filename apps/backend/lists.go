@@ -137,7 +137,14 @@ func (q *DBQueries) RemoveListMember(ctx context.Context, listID, participantID 
 
 func (q *DBQueries) ListListMembers(ctx context.Context, listID string) ([]ListMember, error) {
 	rows, err := q.pool.Query(ctx,
-		`SELECT list_id, participant_id, added_at FROM public.list_members WHERE list_id = $1 ORDER BY added_at`, listID)
+		`SELECT lm.list_id, lm.participant_id,
+		        COALESCE(NULLIF(p.display_name, ''), NULLIF(c.display_name, ''), LEFT(lm.participant_id::text, 8)),
+		        lm.added_at
+		 FROM public.list_members lm
+		 LEFT JOIN public.profiles p ON p.participant_id = lm.participant_id
+		 LEFT JOIN public.contacts c ON c.participant_id = lm.participant_id AND c.deleted_at IS NULL
+		 WHERE lm.list_id = $1
+		 ORDER BY lm.added_at`, listID)
 	if err != nil {
 		return nil, fmt.Errorf("list members: %w", err)
 	}
@@ -145,7 +152,7 @@ func (q *DBQueries) ListListMembers(ctx context.Context, listID string) ([]ListM
 	var members []ListMember
 	for rows.Next() {
 		var member ListMember
-		if err := rows.Scan(&member.ListID, &member.ParticipantID, &member.AddedAt); err != nil {
+		if err := rows.Scan(&member.ListID, &member.ParticipantID, &member.DisplayName, &member.AddedAt); err != nil {
 			return nil, fmt.Errorf("scan list member: %w", err)
 		}
 		members = append(members, member)

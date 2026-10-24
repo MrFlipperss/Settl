@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func NormalizePhoneNumber(phone string) string {
@@ -38,6 +40,18 @@ func (q *DBQueries) CreateContact(ctx context.Context, req CreateContactRequest,
 
 	normPhone := NormalizePhoneNumber(req.PhoneNumber)
 	now := time.Now()
+	var registeredParticipantID *string
+	var registeredName string
+	err = tx.QueryRow(ctx,
+		`SELECT participant_id, display_name FROM public.profiles WHERE phone_number = $1`, normPhone,
+	).Scan(&registeredParticipantID, &registeredName)
+	if err != nil && err != pgx.ErrNoRows {
+		return nil, fmt.Errorf("check registered contact: %w", err)
+	}
+	if err == pgx.ErrNoRows {
+		registeredParticipantID = nil
+		registeredName = ""
+	}
 
 	var participantID string
 	hasID := req.ID != nil && *req.ID != ""
@@ -59,6 +73,7 @@ func (q *DBQueries) CreateContact(ctx context.Context, req CreateContactRequest,
 		ParticipantID: participantID,
 		DisplayName:   req.DisplayName,
 		PhoneNumber:   normPhone,
+		IsRegistered:  registeredParticipantID != nil,
 		CreatedBy:     createdBy,
 		CreatedAt:     now,
 		UpdatedAt:     &now,
@@ -66,12 +81,34 @@ func (q *DBQueries) CreateContact(ctx context.Context, req CreateContactRequest,
 	}
 
 	_, err = tx.Exec(ctx,
-		`INSERT INTO public.contacts (participant_id, display_name, phone_number, created_by, created_at, updated_at, version)
-		 VALUES ($1, $2, $3, $4, $5, $5, 1)`,
-		participantID, req.DisplayName, normPhone, createdBy, now,
+		`INSERT INTO public.contacts (participant_id, display_name, phone_number, created_by, claimed_by_participant_id, created_at, updated_at, version)
+		 VALUES ($1, $2, $3, $4, $5, $6, $6, 1)`,
+		participantID, req.DisplayName, normPhone, createdBy, registeredParticipantID, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert contact: %w", err)
+	}
+
+	if registeredParticipantID == nil || *registeredParticipantID != createdBy {
+		var actorName string
+		if err := tx.QueryRow(ctx, `SELECT display_name FROM public.profiles WHERE participant_id = $1`, createdBy).Scan(&actorName); err != nil {
+			return nil, fmt.Errorf("load notification actor: %w", err)
+		}
+		_, err = tx.Exec(ctx,
+			`INSERT INTO public.notifications
+				(recipient_participant_id, actor_participant_id, contact_id, type, title, body)
+			 VALUES ($1, $2, $3, 'contact_added', $4, $5)
+			 ON CONFLICT (recipient_participant_id, contact_id, type) WHERE contact_id IS NOT NULL DO NOTHING`,
+			participantID, createdBy, participantID,
+			contactNotificationTitle(actorName, registeredParticipantID != nil),
+			contactNotificationBody(actorName, registeredParticipantID != nil),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("insert contact notification: %w", err)
+		}
+		if registeredParticipantID != nil {
+			contact.DisplayName = registeredName
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -79,6 +116,20 @@ func (q *DBQueries) CreateContact(ctx context.Context, req CreateContactRequest,
 	}
 
 	return contact, nil
+}
+
+func contactNotificationTitle(actorName string, registered bool) string {
+	if registered {
+		return fmt.Sprintf("%s added you on Settl", actorName)
+	}
+	return fmt.Sprintf("%s invited you to Settl", actorName)
+}
+
+func contactNotificationBody(actorName string, registered bool) string {
+	if registered {
+		return fmt.Sprintf("%s added you as a contact for shared expenses.", actorName)
+	}
+	return fmt.Sprintf("%s added you as a contact. Join Settl to see shared expenses and connect.", actorName)
 }
 
 func (q *DBQueries) ClaimContacts(ctx context.Context, phoneNumber, newParticipantID string) (int, error) {
@@ -98,11 +149,12 @@ func (q *DBQueries) ClaimContacts(ctx context.Context, phoneNumber, newParticipa
 
 func (q *DBQueries) GetContact(ctx context.Context, participantID string) (*Contact, error) {
 	row := q.pool.QueryRow(ctx,
-		`SELECT participant_id, display_name, phone_number, created_by, claimed_by_participant_id, created_at, updated_at, deleted_at, version
+		`SELECT participant_id, display_name, phone_number, created_by, claimed_by_participant_id,
+		        claimed_by_participant_id IS NOT NULL, created_at, updated_at, deleted_at, version
 		 FROM public.contacts WHERE participant_id = $1`, participantID)
 
 	var c Contact
-	err := row.Scan(&c.ParticipantID, &c.DisplayName, &c.PhoneNumber, &c.CreatedBy, &c.ClaimedByParticipantID, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt, &c.Version)
+	err := row.Scan(&c.ParticipantID, &c.DisplayName, &c.PhoneNumber, &c.CreatedBy, &c.ClaimedByParticipantID, &c.IsRegistered, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt, &c.Version)
 	if err != nil {
 		return nil, fmt.Errorf("get contact: %w", err)
 	}
@@ -118,7 +170,8 @@ func (q *DBQueries) SearchContacts(ctx context.Context, query string, limit int)
 	rows, err := q.pool.Query(ctx,
 		`SELECT c.participant_id,
 		        COALESCE(p.display_name, c.display_name) AS display_name,
-		        c.phone_number
+		        c.phone_number,
+		        c.claimed_by_participant_id IS NOT NULL
 		 FROM public.contacts c
 		 LEFT JOIN public.profiles p ON p.participant_id = c.claimed_by_participant_id
 		 WHERE c.deleted_at IS NULL
@@ -135,7 +188,7 @@ func (q *DBQueries) SearchContacts(ctx context.Context, query string, limit int)
 	var results []ContactSearchResult
 	for rows.Next() {
 		var r ContactSearchResult
-		if err := rows.Scan(&r.ParticipantID, &r.DisplayName, &r.PhoneNumber); err != nil {
+		if err := rows.Scan(&r.ParticipantID, &r.DisplayName, &r.PhoneNumber, &r.IsRegistered); err != nil {
 			return nil, fmt.Errorf("scan search result: %w", err)
 		}
 		results = append(results, r)

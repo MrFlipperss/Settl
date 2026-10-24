@@ -22,12 +22,14 @@ func safeUUIDDisplay(id string) string {
 }
 
 func (q *DBQueries) GetPairwiseBalances(ctx context.Context, personID *string) ([]pairwiseBalanceRow, error) {
-	query := `SELECT b.from_participant, COALESCE(pf.display_name, ''),
-	                 b.to_participant, COALESCE(pt.display_name, ''),
+	query := `SELECT b.from_participant, COALESCE(NULLIF(pf.display_name, ''), NULLIF(cf.display_name, ''), ''),
+	                 b.to_participant, COALESCE(NULLIF(pt.display_name, ''), NULLIF(ct.display_name, ''), ''),
 	                 CAST(b.amount_owed * 100 AS BIGINT)
 		FROM public.pairwise_balances b
 		LEFT JOIN public.profiles pf ON pf.participant_id = b.from_participant
-		LEFT JOIN public.profiles pt ON pt.participant_id = b.to_participant`
+		LEFT JOIN public.contacts cf ON cf.participant_id = b.from_participant AND cf.deleted_at IS NULL
+		LEFT JOIN public.profiles pt ON pt.participant_id = b.to_participant
+		LEFT JOIN public.contacts ct ON ct.participant_id = b.to_participant AND ct.deleted_at IS NULL`
 	args := []interface{}{}
 
 	if personID != nil {
