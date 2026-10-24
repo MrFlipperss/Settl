@@ -32,6 +32,7 @@ class SyncService {
   SyncStatus _status = SyncStatus.idle;
   bool _online = false;
   bool _draining = false;
+  bool _syncRequestedWhileDraining = false;
   Timer? _retryTimer;
   StreamSubscription<bool>? _connectivitySub;
 
@@ -64,10 +65,14 @@ class SyncService {
     if (_online) await requestSync();
   }
 
-  /// Drains the queue then pulls remote state. No-op while a sync is already
-  /// running; re-attempts (with backoff) when the push or pull fails.
+  /// Drains the queue then pulls remote state. Requests made during an active
+  /// drain are coalesced into one more pass so newly queued writes are not
+  /// stranded behind the current queue snapshot.
   Future<void> requestSync() async {
-    if (_draining) return;
+    if (_draining) {
+      _syncRequestedWhileDraining = true;
+      return;
+    }
     _draining = true;
     _setStatus(SyncStatus.syncing);
     try {
@@ -79,6 +84,10 @@ class SyncService {
       _scheduleRetry();
     } finally {
       _draining = false;
+      if (_syncRequestedWhileDraining && _online) {
+        _syncRequestedWhileDraining = false;
+        unawaited(requestSync());
+      }
     }
   }
 

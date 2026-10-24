@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../features/activity/activity_screen.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/complete_profile_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/signup_screen.dart';
-import '../features/destinations/feature_destination_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/budgets/budget_screen.dart';
 import '../features/groups/groups_screen.dart';
 import '../features/expenses/add_expense_screen.dart';
 import '../features/expenses/expense_detail_screen.dart';
@@ -54,9 +53,9 @@ final GoRouter appRouter = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/activity',
+              path: '/budgets',
               pageBuilder: (context, state) => const NoTransitionPage(
-                child: ActivityScreen(),
+                child: BudgetScreen(),
               ),
             ),
           ],
@@ -93,13 +92,6 @@ final GoRouter appRouter = GoRouter(
       path: '/contacts',
       builder: (context, state) => const ContactsScreen(),
     ),
-    GoRoute(
-      path: '/budget',
-      builder: (context, state) => const FeatureDestinationScreen(
-        title: 'Budgets',
-        icon: Icons.account_balance_wallet_outlined,
-        description: 'Create budgets and track spending by category here.',
-      ),
-    ),
+    GoRoute(path: '/budget', redirect: (context, state) => '/budgets'),
   ],
 );

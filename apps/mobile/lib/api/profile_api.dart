@@ -4,9 +4,8 @@ import 'models/api_requests.dart';
 
 /// T7.1 — Profile API.
 ///
-/// The backend `POST /api/v1/profile` is idempotent: it returns the existing
-/// profile (200) when one already exists for the authenticated user, or
-/// creates and returns a new one (201). It is deliberately NOT behind
+/// The backend `POST /api/v1/profile` upserts editable fields: it updates the
+/// existing profile (200) or creates one (201). It is deliberately NOT behind
 /// AuthMiddleware (a brand-new signup has no profile row yet) but still
 /// requires a valid Supabase access token.
 class ProfileApi {

@@ -8,7 +8,15 @@ pluginManagement {
             flutterSdkPath
         }
 
-    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+    // Flutter is installed through Scoop's `current` junction. Android Studio
+    // caches the canonical SDK path, so use that same real path for the
+    // composite build to avoid duplicate/missing ExternalProject entries.
+    val flutterGradleBuild =
+        file("$flutterSdkPath/packages/flutter_tools/gradle")
+            .toPath()
+            .toRealPath()
+            .toString()
+    includeBuild(flutterGradleBuild)
 
     repositories {
         google()
@@ -19,8 +27,8 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    id("com.android.application") version "8.7.0" apply false
-    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+    id("com.android.application") version "9.4.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
 }
 
 include(":app")

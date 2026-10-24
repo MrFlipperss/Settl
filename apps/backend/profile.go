@@ -89,15 +89,30 @@ func (q *DBQueries) CreateProfile(ctx context.Context, userID string, req Create
 	return q.GetProfileByUserID(ctx, userID)
 }
 
+// UpdateProfile changes the editable fields on the authenticated user's
+// existing profile while preserving its participant identity and history.
+func (q *DBQueries) UpdateProfile(ctx context.Context, userID string, req CreateProfileRequest) (*Profile, error) {
+	_, err := q.pool.Exec(ctx,
+		`UPDATE public.profiles
+		 SET display_name = $2, phone_number = $3, upi_id = COALESCE($4, upi_id), updated_at = $5
+		 WHERE user_id = $1`,
+		userID, req.DisplayName, NormalizePhoneNumber(req.PhoneNumber), req.UPIID, time.Now(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("update profile: %w", err)
+	}
+
+	return q.GetProfileByUserID(ctx, userID)
+}
+
 // createProfileHandler is deliberately NOT mounted behind AuthMiddleware,
 // since that middleware 401s any user without an existing profile — exactly
 // the state every brand-new signup is in. It does its own JWT verification
 // (via the shared verifyJWT helper) so it still requires a valid Supabase
 // session, just without the "profile must already exist" requirement.
 //
-// Idempotent: if a profile already exists for this user, it's returned as-is
-// (200) rather than erroring, so callers can safely invoke this after every
-// login without checking first.
+// Upserts editable profile fields: creates a profile on first use and updates
+// display name and contact details on subsequent calls.
 func createProfileHandler(cfg Config, q *DBQueries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tokenStr := extractBearerToken(r)
@@ -118,16 +133,6 @@ func createProfileHandler(cfg Config, q *DBQueries) http.HandlerFunc {
 			userID, _ = claims["sub"].(string)
 		}
 
-		existing, err := q.GetProfileByUserID(r.Context(), userID)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
-			return
-		}
-		if existing != nil {
-			writeJSON(w, http.StatusOK, existing)
-			return
-		}
-
 		var req CreateProfileRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
@@ -138,6 +143,20 @@ func createProfileHandler(cfg Config, q *DBQueries) http.HandlerFunc {
 			return
 		}
 
+		existing, err := q.GetProfileByUserID(r.Context(), userID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+			return
+		}
+		if existing != nil {
+			profile, err := q.UpdateProfile(r.Context(), userID, req)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, profile)
+			return
+		}
 		profile, err := q.CreateProfile(r.Context(), userID, req)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})

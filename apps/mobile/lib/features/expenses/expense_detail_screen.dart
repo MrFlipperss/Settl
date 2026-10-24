@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/contact.dart';
 import '../../models/expense.dart';
 import '../../models/expense_split.dart';
+import '../../models/pending_sync_operation.dart';
 import '../../providers.dart';
+import '../../sync/sync_service.dart';
 
 class ExpenseDetailScreen extends ConsumerStatefulWidget {
   const ExpenseDetailScreen({required this.expenseId, super.key});
@@ -16,12 +20,30 @@ class ExpenseDetailScreen extends ConsumerStatefulWidget {
 
 class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
   late Future<_ExpenseData> _future;
+  StreamSubscription<SyncStatus>? _syncStatusSub;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    _syncStatusSub =
+        ref.read(syncServiceProvider).statusStream.listen((status) {
+      if (status == SyncStatus.idle || status == SyncStatus.error) {
+        _refresh();
+      }
+    });
+  }
+
+  void _refresh() {
+    if (!mounted) return;
+    setState(() => _future = _load());
+  }
+
+  @override
+  void dispose() {
+    _syncStatusSub?.cancel();
+    super.dispose();
   }
 
   Future<_ExpenseData> _load() async {
@@ -45,10 +67,16 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
     final contacts = await ref
         .read(contactRepositoryProvider)
         .getContactsByUser(profile.participantId);
-    final pending = (await ref.read(pendingSyncDaoProvider).getPending())
-        .any((op) => op.entityId == expense.id && op.syncedAt == null);
+    PendingSyncOperation? pendingOperation;
+    for (final operation
+        in await ref.read(pendingSyncDaoProvider).getPending()) {
+      if (operation.entityId == expense.id && operation.syncedAt == null) {
+        pendingOperation = operation;
+        break;
+      }
+    }
     return _ExpenseData(expense, splits, profile.participantId,
-        profile.displayName, contacts, pending);
+        profile.displayName, contacts, pendingOperation);
   }
 
   Future<void> _edit(_ExpenseData data) async {
@@ -69,6 +97,8 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
             participantIds: result.participantIds,
             expectedVersion: data.expense.version,
           );
+      final sync = ref.read(syncServiceProvider);
+      unawaited(sync.requestSync());
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -111,11 +141,30 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
                   trailing: Text('₹${data.expense.amount.toStringAsFixed(2)}',
                       style: Theme.of(context).textTheme.titleLarge)),
               const SizedBox(height: 12),
-              Text(data.pending ? 'Pending sync' : 'Synced',
+              Text(
+                  data.syncError != null
+                      ? 'Sync failed: ${data.syncError}'
+                      : data.pending
+                          ? 'Pending sync'
+                          : 'Synced',
                   style: TextStyle(
-                      color: data.pending
-                          ? Theme.of(context).colorScheme.tertiary
-                          : Theme.of(context).colorScheme.primary)),
+                      color: data.syncError != null
+                          ? Theme.of(context).colorScheme.error
+                          : data.pending
+                              ? Theme.of(context).colorScheme.tertiary
+                              : Theme.of(context).colorScheme.primary)),
+              if (data.pending)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      await ref.read(syncServiceProvider).requestSync();
+                      _refresh();
+                    },
+                    icon: const Icon(Icons.sync),
+                    label: const Text('Retry sync now'),
+                  ),
+                ),
               const Divider(),
               Text(
                   'Paid by: ${canEdit ? data.profileName : data.expense.payerId}'),
@@ -143,13 +192,15 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
 
 class _ExpenseData {
   _ExpenseData(this.expense, this.splits, this.profileParticipantId,
-      this.profileName, this.contacts, this.pending);
+      this.profileName, this.contacts, this.pendingOperation);
   final Expense expense;
   final List<ExpenseSplit> splits;
   final String profileParticipantId;
   final String profileName;
   final List<Contact> contacts;
-  final bool pending;
+  final PendingSyncOperation? pendingOperation;
+  bool get pending => pendingOperation != null;
+  String? get syncError => pendingOperation?.lastError;
   String nameFor(String id) {
     for (final contact in contacts) {
       if (contact.participantId == id) return contact.displayName;

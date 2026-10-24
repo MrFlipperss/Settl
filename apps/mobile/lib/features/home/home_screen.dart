@@ -1,10 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/expense.dart';
+import '../../models/profile.dart';
 import '../../providers.dart';
 import '../../sync/sync_service.dart';
+import 'spotlight_parser.dart';
 
 /// T9 — Home screen.
 ///
@@ -22,7 +28,13 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settl'),
-        // actions: const [_SyncIndicator()],
+        actions: [
+          IconButton(
+            tooltip: 'Add expense',
+            onPressed: () => context.push('/expenses/new'),
+            icon: const Icon(Icons.add),
+          ),
+        ],
       ),
       body: SafeArea(
         child: ListView(
@@ -30,8 +42,7 @@ class HomeScreen extends ConsumerWidget {
           children: [
             const _SpotlightSearchBar(),
             const SizedBox(height: 20),
-            const _QuickActions(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 4),
             Text('Recent', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             const _RecentExpenses(),
@@ -160,151 +171,578 @@ class _SyncIndicatorState extends ConsumerState<_SyncIndicator> {
   }
 }
 
-/// T9.2 — The primary search bar affordance with inline search input.
-class _SpotlightSearchBar extends StatefulWidget {
+/// Spotlight parses natural-language commands into an editable draft. Every
+/// write is made only after the user taps Confirm in the preview card.
+class _SpotlightSearchBar extends ConsumerStatefulWidget {
   const _SpotlightSearchBar();
 
   @override
-  State<_SpotlightSearchBar> createState() => _SpotlightSearchBarState();
+  ConsumerState<_SpotlightSearchBar> createState() =>
+      _SpotlightSearchBarState();
 }
 
-class _SpotlightSearchBarState extends State<_SpotlightSearchBar> {
-  final TextEditingController _controller = TextEditingController();
+class _SpotlightSearchBarState extends ConsumerState<_SpotlightSearchBar> {
+  static const _parser = SpotlightParser();
+  static const _budgetPrefix = 'spotlight.budget.';
+  static const _subscriptionsKey = 'spotlight.subscriptions';
+
+  final _queryController = TextEditingController();
+  final _amountController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _personController = TextEditingController();
+  final _subscriptionController = TextEditingController();
+  final _upiController = TextEditingController();
+  late Future<_SpotlightData> _dataFuture;
+  _SpotlightData? _data;
+  SpotlightAction? _action;
+  final Set<String> _selectedParticipants = {};
+  List<String> _savedSubscriptions = [];
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _dataFuture = _loadData();
+    _loadSavedActions();
+  }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _queryController.dispose();
+    _amountController.dispose();
+    _descriptionController.dispose();
+    _personController.dispose();
+    _subscriptionController.dispose();
+    _upiController.dispose();
     super.dispose();
+  }
+
+  Future<_SpotlightData> _loadData() async {
+    final session = ref.read(authStateProvider).value ??
+        await ref.read(authStateProvider.future).catchError((_) => null);
+    if (session == null) return const _SpotlightData();
+
+    final profile = await ref
+        .read(profileRepositoryProvider)
+        .getProfileByUserId(session.userId);
+    if (profile == null) return const _SpotlightData();
+
+    var contacts = <SpotlightPerson>[];
+    var groups = <SpotlightGroup>[];
+    try {
+      final storedContacts = await ref
+          .read(contactRepositoryProvider)
+          .getContactsByUser(profile.participantId);
+      contacts = [
+        SpotlightPerson(id: profile.participantId, name: profile.displayName),
+        for (final contact in storedContacts)
+          if (contact.participantId != profile.participantId)
+            SpotlightPerson(
+              id: contact.participantId,
+              name: contact.displayName,
+            ),
+      ];
+    } catch (_) {
+      contacts = [
+        SpotlightPerson(id: profile.participantId, name: profile.displayName),
+      ];
+    }
+    try {
+      final repository = ref.read(collectionRepositoryProvider);
+      final collections =
+          await repository.getCollectionsByUser(profile.participantId);
+      groups = [
+        for (final collection in collections)
+          SpotlightGroup(
+            id: collection.id,
+            name: collection.name,
+            memberIds: (await repository.getMembersOfCollection(collection.id))
+                .map((member) => member.participantId)
+                .toList(),
+          ),
+      ];
+    } catch (_) {
+      // Search remains useful with contacts if group membership is unavailable.
+    }
+    return _SpotlightData(
+      profile: profile,
+      people: contacts,
+      groups: groups,
+    );
+  }
+
+  Future<void> _loadSavedActions() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _savedSubscriptions = prefs.getStringList(_subscriptionsKey) ?? [];
+    });
+  }
+
+  void _parse(String value) {
+    final data = _data;
+    if (data == null) return;
+    final action = _parser.parse(
+      value,
+      currentParticipantId: data.profile?.participantId ?? '',
+      people: data.people,
+      groups: data.groups,
+      currentUpiId: data.profile?.upiId ?? '',
+    );
+    setState(() {
+      _action = action;
+      _selectedParticipants
+        ..clear()
+        ..addAll(action?.participantIds ?? const []);
+      _amountController.text =
+          action == null ? '' : _formatEditableAmount(action.amount);
+      _descriptionController.text = action?.description ?? '';
+      _personController.text = action?.personName ?? '';
+      _subscriptionController.text = action?.subscriptionName ?? '';
+      _upiController.text = action?.upiId ?? '';
+    });
+  }
+
+  Future<void> _confirm() async {
+    final action = _action;
+    if (action == null || _saving) return;
+    final amount = double.tryParse(_amountController.text.trim());
+    if (amount == null || amount <= 0) {
+      _message('Enter an amount greater than zero.');
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      switch (action.type) {
+        case SpotlightActionType.expense:
+          final data = _data;
+          final profile = data?.profile;
+          if (profile == null) {
+            throw StateError('Sign in to save an expense.');
+          }
+          final participantIds = _selectedParticipants.toList();
+          if (!participantIds.contains(profile.participantId)) {
+            participantIds.insert(0, profile.participantId);
+          }
+          await ref.read(expenseRepositoryProvider).createPeopleExpense(
+                description: _descriptionController.text.trim(),
+                amountPaise: (amount * 100).round(),
+                payerId: profile.participantId,
+                participantIds: participantIds,
+                category: action.category,
+                groupId: action.groupId,
+              );
+          final sync = ref.read(syncServiceProvider);
+          unawaited(sync.requestSync());
+          break;
+        case SpotlightActionType.budget:
+          final category = action.category.trim();
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt(
+              '$_budgetPrefix${_slug(category)}', amount.round());
+          ref.read(budgetLimitsProvider.notifier).state = {
+            ...ref.read(budgetLimitsProvider),
+            _slug(category): amount.round(),
+          };
+          break;
+        case SpotlightActionType.subscription:
+          final name = _subscriptionController.text.trim();
+          if (name.isEmpty) throw StateError('Enter a subscription name.');
+          final cycle = action.billingCycle ?? 'Monthly';
+          final value = '$name • ₹${amount.toStringAsFixed(0)} $cycle';
+          final prefs = await SharedPreferences.getInstance();
+          _savedSubscriptions = [
+            ...?prefs.getStringList(_subscriptionsKey),
+            value,
+          ];
+          await prefs.setStringList(_subscriptionsKey, _savedSubscriptions);
+          break;
+        case SpotlightActionType.request:
+          final upiId = _upiController.text.trim();
+          if (!_validUpiId(upiId)) {
+            throw StateError('Add a valid UPI ID to generate the request QR.');
+          }
+          final data = _data;
+          final person = _personController.text.trim();
+          final qrData = Uri(
+            scheme: 'upi',
+            host: 'pay',
+            queryParameters: {
+              'pa': upiId,
+              'pn': data?.profile?.displayName ?? 'Settl user',
+              'am': amount.toStringAsFixed(2),
+              'cu': 'INR',
+              'tn': 'Request from ${person.isEmpty ? 'friend' : person}',
+            },
+          ).toString();
+          if (!mounted) return;
+          setState(() => _saving = false);
+          await _showRequestQr(qrData, amount, person);
+          return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _action = null;
+        _queryController.clear();
+      });
+      await _loadSavedActions();
+      _message(switch (action.type) {
+        SpotlightActionType.expense => 'Expense saved and queued to sync.',
+        SpotlightActionType.budget => '${action.category} budget updated.',
+        SpotlightActionType.subscription => 'Subscription saved.',
+        SpotlightActionType.request => 'Request QR generated.',
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      _message(
+          error is StateError ? error.message : 'Could not save. Try again.');
+    }
+  }
+
+  Future<void> _showRequestQr(String data, double amount, String person) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+            'Request ₹${amount.toStringAsFixed(0)}${person.isEmpty ? '' : ' from $person'}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            QrImageView(data: data, size: 220),
+            const SizedBox(height: 8),
+            const Text('Ask them to scan this with any UPI app.'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _action = null;
+      _queryController.clear();
+    });
+  }
+
+  void _message(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-
-    return TextField(
-      controller: _controller,
-      decoration: InputDecoration(
-        hintText: 'Search people or add an expense',
-        prefixIcon: const Icon(Icons.search, size: 22),
-        suffixIcon: _controller.text.isNotEmpty
-            ? IconButton(
-                icon: const Icon(Icons.clear, size: 20),
-                onPressed: () {
-                  setState(() {
-                    _controller.clear();
-                  });
-                },
-              )
-            : const Icon(Icons.keyboard_arrow_right, size: 22),
-        filled: true,
-        fillColor: colorScheme.surfaceContainerHighest,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      ),
-      onChanged: (_) => setState(() {}),
+    return FutureBuilder<_SpotlightData>(
+      future: _dataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasData && _data != snapshot.data) {
+          _data = snapshot.data;
+          if (_queryController.text.isNotEmpty && _action == null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _parse(_queryController.text);
+            });
+          }
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _queryController,
+              textInputAction: TextInputAction.search,
+              onChanged: _parse,
+              decoration: InputDecoration(
+                hintText: 'Try “₹100 dinner with Sarah”',
+                prefixIcon: const Icon(Icons.auto_awesome_outlined, size: 22),
+                suffixIcon: _queryController.text.isNotEmpty
+                    ? IconButton(
+                        tooltip: 'Clear',
+                        icon: const Icon(Icons.clear, size: 20),
+                        onPressed: () {
+                          _queryController.clear();
+                          setState(() => _action = null);
+                        },
+                      )
+                    : const Icon(Icons.keyboard_arrow_right, size: 22),
+                filled: true,
+                fillColor: colorScheme.surfaceContainerHighest,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(28),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              ),
+            ),
+            if (_action != null) ...[
+              const SizedBox(height: 12),
+              _buildPreview(colorScheme),
+            ],
+            if (_savedSubscriptions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final subscription in _savedSubscriptions)
+                    Chip(
+                      avatar: const Icon(Icons.repeat, size: 16),
+                      label: Text(subscription),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
+
+  Widget _buildPreview(ColorScheme colorScheme) {
+    final action = _action!;
+    final people = _data?.people ?? const <SpotlightPerson>[];
+    return Card(
+      elevation: 0,
+      color: colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              children: [
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  avatar: Icon(_actionIcon(action.type), size: 16),
+                  label: Text('${_actionLabel(action.type)} draft'),
+                ),
+                if (action.personName?.isNotEmpty == true)
+                  Chip(
+                    visualDensity: VisualDensity.compact,
+                    avatar: const Icon(Icons.person_outline, size: 16),
+                    label: Text(action.personName!),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _amountController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Amount',
+                prefixText: '₹ ',
+                isDense: true,
+              ),
+            ),
+            if (action.type == SpotlightActionType.expense) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _descriptionController,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: action.category,
+                decoration: const InputDecoration(
+                  labelText: 'Category',
+                  isDense: true,
+                ),
+                items: KeywordExpenseCategorizer.categories
+                    .map((category) => DropdownMenuItem(
+                          value: category,
+                          child: Text(category),
+                        ))
+                    .toList(),
+                onChanged: (category) {
+                  if (category != null) {
+                    setState(
+                        () => _action = action.copyWith(category: category));
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              Text('Split equally with',
+                  style: Theme.of(context).textTheme.labelLarge),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final person in people)
+                    FilterChip(
+                      label: Text(person.id == _data?.profile?.participantId
+                          ? 'You'
+                          : person.name),
+                      selected: _selectedParticipants.contains(person.id),
+                      onSelected: (selected) => setState(() {
+                        if (selected) {
+                          _selectedParticipants.add(person.id);
+                        } else if (person.id != _data?.profile?.participantId) {
+                          _selectedParticipants.remove(person.id);
+                        }
+                      }),
+                    ),
+                ],
+              ),
+              if (action.groupId != null)
+                Text('Group expense: ${action.personName}',
+                    style: Theme.of(context).textTheme.bodySmall),
+            ],
+            if (action.type == SpotlightActionType.budget) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: action.category,
+                decoration: const InputDecoration(
+                  labelText: 'Budget category',
+                  isDense: true,
+                ),
+                items: [
+                  ...KeywordExpenseCategorizer.categories,
+                  if (!KeywordExpenseCategorizer.categories
+                      .contains(action.category))
+                    action.category,
+                ]
+                    .toSet()
+                    .map((category) => DropdownMenuItem(
+                          value: category,
+                          child: Text(category),
+                        ))
+                    .toList(),
+                onChanged: (category) {
+                  if (category != null) {
+                    setState(
+                        () => _action = action.copyWith(category: category));
+                  }
+                },
+              ),
+            ],
+            if (action.type == SpotlightActionType.request) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _personController,
+                decoration: const InputDecoration(
+                  labelText: 'Request from',
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _upiController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Your UPI ID (QR recipient)',
+                  hintText: 'name@bank',
+                  isDense: true,
+                ),
+              ),
+            ],
+            if (action.type == SpotlightActionType.subscription) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _subscriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Subscription',
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: action.billingCycle,
+                decoration: const InputDecoration(
+                  labelText: 'Billing cycle',
+                  isDense: true,
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'Monthly', child: Text('Monthly')),
+                  DropdownMenuItem(value: 'Yearly', child: Text('Yearly')),
+                ],
+                onChanged: (cycle) {
+                  if (cycle != null) {
+                    setState(
+                        () => _action = action.copyWith(billingCycle: cycle));
+                  }
+                },
+              ),
+            ],
+            const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: _saving ? null : _confirm,
+                icon: _saving
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check),
+                label: Text(_saving ? 'Saving…' : 'Confirm'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatEditableAmount(double amount) =>
+      amount == amount.roundToDouble()
+          ? amount.toStringAsFixed(0)
+          : amount.toStringAsFixed(2);
+
+  static bool _validUpiId(String value) =>
+      RegExp(r'^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$').hasMatch(value);
+
+  static String _slug(String value) =>
+      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+
+  static String _actionLabel(SpotlightActionType type) => switch (type) {
+        SpotlightActionType.expense => 'Expense',
+        SpotlightActionType.budget => 'Budget update',
+        SpotlightActionType.request => 'UPI request',
+        SpotlightActionType.subscription => 'Subscription',
+      };
+
+  static IconData _actionIcon(SpotlightActionType type) => switch (type) {
+        SpotlightActionType.expense => Icons.receipt_long_outlined,
+        SpotlightActionType.budget => Icons.savings_outlined,
+        SpotlightActionType.request => Icons.qr_code_2_outlined,
+        SpotlightActionType.subscription => Icons.repeat,
+      };
+}
+
+class _SpotlightData {
+  const _SpotlightData({
+    this.profile,
+    this.people = const [],
+    this.groups = const [],
+  });
+
+  final Profile? profile;
+  final List<SpotlightPerson> people;
+  final List<SpotlightGroup> groups;
 }
 
 /// T9.4 — One compact row of four quick-action tiles.
 ///
 /// Every tile navigates to a real destination — no dead buttons. Styled
 /// quietly (tertiary container) so the search bar stays the focal point.
-class _QuickActions extends StatelessWidget {
-  const _QuickActions();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        Expanded(
-          child: _QuickActionTile(
-            icon: Icons.add_circle_outline,
-            label: 'Add expense',
-            onTap: _goAddExpense,
-          ),
-        ),
-        SizedBox(width: 12),
-        Expanded(
-          child: _QuickActionTile(
-            icon: Icons.person_add_outlined,
-            label: 'Add person',
-            onTap: _goContacts,
-          ),
-        ),
-        SizedBox(width: 12),
-        Expanded(
-          child: _QuickActionTile(
-            icon: Icons.group_outlined,
-            label: 'View groups',
-            onTap: _goGroups,
-          ),
-        ),
-        SizedBox(width: 12),
-        Expanded(
-          child: _QuickActionTile(
-            icon: Icons.account_balance_wallet_outlined,
-            label: 'Budgets',
-            onTap: _goBudgets,
-          ),
-        ),
-      ],
-    );
-  }
-
-  static void _goAddExpense(BuildContext context) =>
-      context.push('/expenses/new');
-
-  static void _goContacts(BuildContext context) => context.push('/contacts');
-
-  static void _goGroups(BuildContext context) => context.push('/groups');
-
-  static void _goBudgets(BuildContext context) => context.push('/budget');
-}
-
-class _QuickActionTile extends StatelessWidget {
-  const _QuickActionTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final void Function(BuildContext context) onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    return Card(
-      elevation: 0,
-      color: colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: InkWell(
-        onTap: () => onTap(context),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            children: [
-              Icon(icon, size: 24, color: colorScheme.onSurfaceVariant),
-              const SizedBox(height: 8),
-              Text(label, style: textTheme.labelMedium),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _RecentExpenses extends ConsumerWidget {
   const _RecentExpenses();
 

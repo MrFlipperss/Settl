@@ -48,6 +48,10 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     required int amountPaise,
     required String payerId,
     required List<String> participantIds,
+    String category = 'Uncategorized',
+    String? groupId,
+    String splitType = 'equal',
+    Map<String, num> splitValues = const {},
   }) async {
     final name = description.trim();
     final ids = participantIds.map((id) => id.trim()).toList();
@@ -63,19 +67,24 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     if (!ids.contains(trimmedPayer)) {
       throw ArgumentError('The payer must be included in the split.');
     }
+    final splitPaise = _resolveSplitPaise(
+      amountPaise: amountPaise,
+      participantIds: ids,
+      splitType: splitType,
+      splitValues: splitValues,
+    );
     final queue = _syncQueue;
     if (queue == null) throw StateError('Expense sync is not available.');
 
     final expenseId = _uuid.v4();
     final now = DateTime.now();
-    final base = amountPaise ~/ ids.length;
-    final remainder = amountPaise % ids.length;
     final expense = Expense(
       id: expenseId,
       amount: amountPaise / 100.0,
-      category: 'Uncategorized',
-      splitType: 'equal',
+      category: category,
+      splitType: splitType,
       payerId: trimmedPayer,
+      listId: groupId,
       note: name,
       idempotencyKey: expenseId,
       createdAt: now,
@@ -87,20 +96,34 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
           id: _uuid.v4(),
           expenseId: expenseId,
           participantId: ids[i],
-          shareAmount: (base + (i < remainder ? 1 : 0)) / 100.0,
+          shareAmount: splitPaise[i] / 100.0,
+          rawInput:
+              splitType == 'equal' ? null : splitValues[ids[i]]?.toDouble(),
         ));
       }
       await queue.enqueueExpense(
         operation: SyncOperation.insert,
         request: ApiCreateExpenseRequest(
           id: expenseId,
+          groupId: groupId,
           payerId: trimmedPayer,
           amount: amountPaise / 100.0,
-          splitType: 'equal',
+          splitType: splitType,
+          category: category,
           note: name,
           idempotencyKey: expenseId,
           splits: [
-            for (final id in ids) ApiCreateSplitItem(userId: id),
+            for (final id in ids)
+              ApiCreateSplitItem(
+                userId: id,
+                exactAmount:
+                    splitType == 'exact' ? splitValues[id]!.toDouble() : null,
+                percentage: splitType == 'percentage'
+                    ? splitValues[id]!.toDouble()
+                    : null,
+                shareCount:
+                    splitType == 'shares' ? splitValues[id]!.toInt() : null,
+              ),
           ],
         ),
       );
@@ -109,6 +132,82 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
       rethrow;
     }
     return expense;
+  }
+
+  static List<int> _resolveSplitPaise({
+    required int amountPaise,
+    required List<String> participantIds,
+    required String splitType,
+    required Map<String, num> splitValues,
+  }) {
+    if (splitType == 'equal') {
+      final base = amountPaise ~/ participantIds.length;
+      final remainder = amountPaise % participantIds.length;
+      return [
+        for (var i = 0; i < participantIds.length; i++)
+          base + (i < remainder ? 1 : 0),
+      ];
+    }
+
+    final values = participantIds.map((id) => splitValues[id]).toList();
+    if (values.any((value) => value == null || !value.isFinite)) {
+      throw ArgumentError('Enter a split value for every participant.');
+    }
+    if (splitType == 'exact') {
+      if (values.any((value) => value! < 0)) {
+        throw ArgumentError('Split amounts cannot be negative.');
+      }
+      final paise = values.map((value) => (value! * 100).round()).toList();
+      if (paise.any((value) => value < 0) ||
+          paise.fold<int>(0, (sum, value) => sum + value) != amountPaise) {
+        throw ArgumentError('Split amounts must add up to the expense total.');
+      }
+      return paise;
+    }
+    if (splitType == 'percentage') {
+      if (values.any((value) => value! < 0)) {
+        throw ArgumentError('Percentages cannot be negative.');
+      }
+      final basisPoints =
+          values.map((value) => (value! * 100).round()).toList();
+      if (basisPoints.any((value) => value < 0) ||
+          basisPoints.fold<int>(0, (sum, value) => sum + value) != 10000) {
+        throw ArgumentError('Percentages must add up to exactly 100%.');
+      }
+      var allocated = 0;
+      return [
+        for (var i = 0; i < basisPoints.length; i++)
+          if (i == basisPoints.length - 1)
+            amountPaise - allocated
+          else
+            (() {
+              final share = amountPaise * basisPoints[i] ~/ 10000;
+              allocated += share;
+              return share;
+            })(),
+      ];
+    }
+    if (splitType == 'shares') {
+      final shares = values.map((value) => value!.toInt()).toList();
+      if (values.any((value) => value != value!.toInt()) ||
+          shares.any((value) => value <= 0)) {
+        throw ArgumentError('Share counts must be positive whole numbers.');
+      }
+      final totalShares = shares.fold<int>(0, (sum, value) => sum + value);
+      var allocated = 0;
+      return [
+        for (var i = 0; i < shares.length; i++)
+          if (i == shares.length - 1)
+            amountPaise - allocated
+          else
+            (() {
+              final share = amountPaise * shares[i] ~/ totalShares;
+              allocated += share;
+              return share;
+            })(),
+      ];
+    }
+    throw ArgumentError('Unsupported split type: $splitType');
   }
 
   @override

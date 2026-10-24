@@ -3,6 +3,8 @@ import 'package:settl/api/profile_api.dart';
 import 'package:settl/database/daos/profiles_dao.dart';
 import 'package:settl/models/profile.dart';
 import 'package:settl/repositories/interfaces/profile_repository.dart';
+import 'package:settl/sync/sync_queue.dart';
+import 'package:settl/models/pending_sync_operation.dart';
 
 /// Drift-backed [ProfileRepository] with a remote mirror seam.
 ///
@@ -11,8 +13,10 @@ import 'package:settl/repositories/interfaces/profile_repository.dart';
 class ProfileRepositoryImpl implements ProfileRepository {
   final ProfilesDao _dao;
   final ProfileApi _api;
+  final SyncQueue? _syncQueue;
 
-  ProfileRepositoryImpl(this._dao, this._api);
+  ProfileRepositoryImpl(this._dao, this._api, {SyncQueue? syncQueue})
+      : _syncQueue = syncQueue;
 
   @override
   Future<Profile?> getProfileByUserId(String userId) =>
@@ -29,7 +33,18 @@ class ProfileRepositoryImpl implements ProfileRepository {
   Future<void> createProfile(Profile profile) => _dao.createProfile(profile);
 
   @override
-  Future<void> updateProfile(Profile profile) => _dao.updateProfile(profile);
+  Future<void> updateProfile(Profile profile) async {
+    await _dao.updateProfile(profile);
+    await _syncQueue?.enqueueProfile(
+      entityId: profile.participantId,
+      operation: SyncOperation.update,
+      request: ApiCreateProfileRequest(
+        displayName: profile.displayName,
+        phoneNumber: profile.phoneNumber,
+        upiId: profile.upiId,
+      ),
+    );
+  }
 
   @override
   Future<void> deleteProfileByUserId(String userId) =>

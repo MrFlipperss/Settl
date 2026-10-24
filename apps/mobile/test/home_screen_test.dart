@@ -254,6 +254,10 @@ class _FakeExpenseRepository implements ExpenseRepository {
     required int amountPaise,
     required String payerId,
     required List<String> participantIds,
+    String category = 'Uncategorized',
+    String? groupId,
+    String splitType = 'equal',
+    Map<String, num> splitValues = const {},
   }) async =>
       throw UnimplementedError();
 

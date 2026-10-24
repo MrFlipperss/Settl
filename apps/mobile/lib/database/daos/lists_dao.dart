@@ -78,11 +78,13 @@ class ListsDao extends DatabaseAccessor<AppDatabase> with _$ListsDaoMixin {
   // -- Collection members ---------------------------------------------------
 
   Future<void> addMemberToCollection(CollectionMember collectionMember) async {
-    await into(listMembers).insert(ListMembersCompanion.insert(
-      listId: collectionMember.collectionId,
-      participantId: collectionMember.participantId,
-      addedAt: collectionMember.addedAt,
-    ));
+    await into(listMembers).insertOnConflictUpdate(
+      ListMembersCompanion.insert(
+        listId: collectionMember.collectionId,
+        participantId: collectionMember.participantId,
+        addedAt: collectionMember.addedAt,
+      ),
+    );
   }
 
   Future<List<CollectionMember>> getMembersOfCollection(

@@ -25,6 +25,10 @@ abstract class ExpenseRepository {
     required int amountPaise,
     required String payerId,
     required List<String> participantIds,
+    String category = 'Uncategorized',
+    String? groupId,
+    String splitType = 'equal',
+    Map<String, num> splitValues = const {},
   });
 
   Future<void> updateExpense(Expense expense);

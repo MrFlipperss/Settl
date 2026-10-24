@@ -103,7 +103,9 @@ class SyncQueue {
   }) async {
     await _enqueue(
       entityType: entityCollectionMember,
-      entityId: '$collectionId:$participantId',
+      // Keep the indexed entity id within the database's 64-character limit.
+      // The complete membership identity is retained in the replay payload.
+      entityId: _idGenerator(),
       operation: operation,
       payload: {
         'group_id': collectionId,
@@ -112,17 +114,17 @@ class SyncQueue {
     );
   }
 
-  /// Queues a profile upsert. The backend `POST /v1/profile` is idempotent, so
-  /// [operation] is always [SyncOperation.insert] and [entityId] is the
-  /// caller's participant id.
+  /// Queues a profile upsert. The backend `POST /v1/profile` creates or updates
+  /// the authenticated caller's profile; [entityId] is its participant id.
   Future<void> enqueueProfile({
     required String entityId,
+    required SyncOperation operation,
     required ApiCreateProfileRequest request,
   }) async {
     await _enqueue(
       entityType: entityProfile,
       entityId: entityId,
-      operation: SyncOperation.insert,
+      operation: operation,
       payload: request.toJson(),
     );
   }

@@ -44,16 +44,16 @@ import '../sync/sync_service.dart';
 /// Profile settings screen.
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 
-/// Enables the Liquid Glass visual theme.
-final liquidGlassEnabledProvider = StateProvider<bool>((ref) => false);
-
 /// Provider for the selected accent preset index (see [accentPresets]).
-/// Defaults to the first preset (Violet).
+/// Defaults to the first preset (Teal).
 final accentIndexProvider = StateProvider<int>((ref) => 0);
 
 /// Provider for tracking the current selected index in the bottom navigation bar.
 /// This is now enhanced to work with our configuration system
 final selectedIndexProvider = StateProvider<int>((ref) => 0);
+
+/// Locally stored monthly budget limits keyed by normalized category.
+final budgetLimitsProvider = StateProvider<Map<String, int>>((ref) => const {});
 
 /// Provider for the HTTP client service
 final httpClientServiceProvider = Provider<HttpClientService>((ref) {
@@ -107,7 +107,7 @@ final contactRepositoryProvider = Provider<ContactRepository>((ref) {
   return ContactRepositoryImpl(
     ref.watch(contactsDaoProvider),
     ref.watch(contactsApiProvider),
-      ref.watch(syncQueueProvider),
+    ref.watch(syncQueueProvider),
   );
 });
 
@@ -126,6 +126,7 @@ final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
   return ProfileRepositoryImpl(
     ref.watch(profilesDaoProvider),
     ref.watch(profileApiProvider),
+    syncQueue: ref.watch(syncQueueProvider),
   );
 });
 

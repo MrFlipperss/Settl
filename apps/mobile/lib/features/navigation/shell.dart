@@ -15,9 +15,9 @@ class AppShell extends StatelessWidget {
       label: 'Home',
     ),
     NavigationDestination(
-      icon: Icon(Icons.receipt_long_outlined),
-      selectedIcon: Icon(Icons.receipt_long_rounded),
-      label: 'Activity',
+      icon: Icon(Icons.savings_outlined),
+      selectedIcon: Icon(Icons.savings_rounded),
+      label: 'Budgets',
     ),
     NavigationDestination(
       icon: Icon(Icons.person_outline_rounded),
@@ -33,9 +33,9 @@ class AppShell extends StatelessWidget {
       label: Text('Home'),
     ),
     NavigationRailDestination(
-      icon: Icon(Icons.receipt_long_outlined),
-      selectedIcon: Icon(Icons.receipt_long_rounded),
-      label: Text('Activity'),
+      icon: Icon(Icons.savings_outlined),
+      selectedIcon: Icon(Icons.savings_rounded),
+      label: Text('Budgets'),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.person_outline_rounded),

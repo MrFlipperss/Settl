@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:settl/config/config_provider.dart';
 import 'package:settl/theme/app_theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'providers.dart';
 import 'routing/app_router.dart';
 
@@ -17,9 +18,15 @@ class SettlApp extends ConsumerStatefulWidget {
 class _SettlAppState extends ConsumerState<SettlApp> {
   bool _syncStarted = false;
 
+  static const _accentPreferenceKey = 'theme_accent_index';
+
   @override
   void initState() {
     super.initState();
+    ref.listenManual<int>(accentIndexProvider, (_, index) {
+      unawaited(_saveAccent(index));
+    });
+    unawaited(_restoreAccent());
     // T8.5 — reconcile whenever a session appears (fresh sign-in / session
     // restore). Best-effort: where the auth stack is unavailable (e.g. widget
     // tests), registration no-ops instead of crashing the app shell.
@@ -29,6 +36,27 @@ class _SettlAppState extends ConsumerState<SettlApp> {
       });
     } catch (error) {
       debugPrint('SettlApp: session listener unavailable ($error)');
+    }
+  }
+
+  Future<void> _restoreAccent() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final index = prefs.getInt(_accentPreferenceKey);
+      if (index != null && index >= 0 && index < accentPresets.length) {
+        ref.read(accentIndexProvider.notifier).state = index;
+      }
+    } catch (_) {
+      // Keep the default accent when local preferences are unavailable.
+    }
+  }
+
+  Future<void> _saveAccent(int index) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_accentPreferenceKey, index);
+    } catch (_) {
+      // Theme changes still apply for this session if persistence is unavailable.
     }
   }
 
@@ -51,18 +79,15 @@ class _SettlAppState extends ConsumerState<SettlApp> {
         .toInt();
 
     final accent = accentPresets[accentIndex].hex;
-    final useLiquidGlass = ref.watch(liquidGlassEnabledProvider);
 
     final theme = AppTheme.build(
       accent: accent,
       isDark: false,
-      liquidGlass: useLiquidGlass,
     );
 
     final darkTheme = AppTheme.build(
       accent: accent,
       isDark: true,
-      liquidGlass: useLiquidGlass,
     );
 
     return MaterialApp.router(

@@ -1,7 +1,7 @@
 // Basic smoke tests for the Settl app shell.
 //
 // Verifies that the app boots through the GoRouter shell and that the
-// navigation switches between the three tabs: Home, Activity, Profile.
+// navigation switches between the three tabs: Home, Budgets, Profile.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:settl/app.dart';
 import 'package:settl/config/app_environment.dart';
-import 'package:settl/features/activity/activity_screen.dart';
+import 'package:settl/features/budgets/budget_screen.dart';
 import 'package:settl/features/home/home_screen.dart';
 import 'package:settl/features/profile/profile_screen.dart';
 
@@ -27,7 +27,7 @@ void main() {
     expect(find.byType(NavigationBar), findsOneWidget);
     final navigationBarFinder = find.byType(NavigationBar);
     final navigationBar = tester.widget<NavigationBar>(navigationBarFinder);
-    for (final label in ['Home', 'Activity', 'Profile']) {
+    for (final label in ['Home', 'Budgets', 'Profile']) {
       expect(
         find.descendant(
           of: navigationBarFinder,
@@ -42,14 +42,14 @@ void main() {
     expect(find.byType(HomeScreen), findsOneWidget);
   });
 
-  testWidgets('Bottom navigation switches between Home, Activity, and Profile',
+  testWidgets('Bottom navigation switches between Home, Budgets, and Profile',
       (tester) async {
     await tester.pumpWidget(const ProviderScope(child: SettlApp()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Activity'));
+    await tester.tap(find.text('Budgets'));
     await tester.pumpAndSettle();
-    expect(find.byType(ActivityScreen), findsOneWidget);
+    expect(find.byType(BudgetScreen), findsOneWidget);
     expect(
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       1,
@@ -114,11 +114,11 @@ void main() {
     // Tab switching works through the rail and follows the same order.
     await tester.tap(find.descendant(
       of: find.byType(NavigationRail),
-      matching: find.text('Activity'),
+      matching: find.text('Budgets'),
     ));
     await tester.pumpAndSettle();
 
-    expect(find.byType(ActivityScreen), findsOneWidget);
+    expect(find.byType(BudgetScreen), findsOneWidget);
     expect(
       tester.widget<NavigationRail>(find.byType(NavigationRail)).selectedIndex,
       1,

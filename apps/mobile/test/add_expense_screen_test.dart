@@ -138,15 +138,20 @@ class _FakeExpenseRepository implements ExpenseRepository {
     required int amountPaise,
     required String payerId,
     required List<String> participantIds,
+    String category = 'Uncategorized',
+    String? groupId,
+    String splitType = 'equal',
+    Map<String, num> splitValues = const {},
   }) async {
     this.amountPaise = amountPaise;
     this.participantIds = participantIds;
     return Expense(
       id: 'e1',
       amount: amountPaise / 100,
-      category: 'Uncategorized',
-      splitType: 'equal',
+      category: category,
+      splitType: splitType,
       payerId: payerId,
+      listId: groupId,
       note: description,
       createdAt: DateTime(2026),
     );
