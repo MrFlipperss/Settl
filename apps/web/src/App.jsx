@@ -330,7 +330,8 @@ export default function App() {
     const cash = normalizedText.match(/(?:₹|rs\.?|inr)\s*([\d,]+(?:\.\d{1,2})?)/i)
       || normalizedText.match(/(?:^|\s)([\d,]+(?:\.\d{1,2})?)(?=\s|$)/)
     const rawAmount = cash?.[1]?.replace(/,/g, '') || ''
-    const note = cash ? normalizedText.replace(cash[0], ' ').replace(/\s+/g, ' ').trim() : normalizedText
+    const note = (cash ? normalizedText.replace(cash[0], ' ').replace(/\s+/g, ' ').trim() : normalizedText)
+      .replace(/\s*\b(?:with|for|among)\s+.+$/i, '').trim()
     const category = /food|dinner|lunch|breakfast|coffee|chai|grocer|restaurant|snack|meal/i.test(note) ? 'Food'
       : /cab|auto|uber|metro|bus|train|fuel|taxi|rickshaw/i.test(note) ? 'Transport'
         : /trip|flight|hotel|travel|stay/i.test(note) ? 'Travel'
@@ -409,7 +410,18 @@ function AuthScreen({ onNotice, notice }) {
       const result = mode === 'signin'
         ? await supabase.auth.signInWithPassword({ email, password })
         : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } })
-      if (result.error) onNotice(result.error.message)
+      if (result.error) {
+        const msg = result.error.message || ''
+        if (/rate limit/i.test(msg) || /over_email_send_rate_limit/i.test(result.error.code || ''))
+          onNotice('Too many sign-up attempts — Supabase limits confirmation emails to a few per hour. Please wait a few minutes and try again, or use an email address you haven\'t signed up with recently.')
+        else if (/already registered/i.test(msg) || /user already registered/i.test(msg))
+          onNotice('An account already exists for this email. Switch to sign in instead.')
+        else if (/email not confirmed/i.test(msg))
+          onNotice('Please confirm your email before signing in. Check your inbox for the confirmation link.')
+        else
+          onNotice(msg || 'Something went wrong. Please try again.')
+      }
+      else if (mode === 'signup' && result.data.session) { /* email confirmation disabled — session granted immediately, onAuthStateChange handles the rest */ }
       else if (mode === 'signup' && !result.data.session && result.data.user?.identities?.length === 0) onNotice('An account may already exist for this email. Switch to sign in.')
       else if (mode === 'signup' && !result.data.session) onNotice('Account created. Check your email for the confirmation link, then return here to finish setup.')
     } catch (error) { onNotice(error.message || 'Could not reach the authentication service. Check your connection and try again.') }

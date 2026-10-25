@@ -264,10 +264,15 @@ func (q *DBQueries) GetExpense(ctx context.Context, id string) (*Expense, error)
 	for rows.Next() {
 		var s Split
 		var shareFloat float64
-		if err := rows.Scan(&s.ID, &s.ExpenseID, &s.ParticipantID, &shareFloat, &s.RawInput, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		var rawInputFloat *float64
+		if err := rows.Scan(&s.ID, &s.ExpenseID, &s.ParticipantID, &shareFloat, &rawInputFloat, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan split: %w", err)
 		}
 		s.ShareAmount = int64(math.Round(shareFloat * 100))
+		if rawInputFloat != nil {
+			v := int64(math.Round(*rawInputFloat))
+			s.RawInput = &v
+		}
 		e.Splits = append(e.Splits, s)
 	}
 
