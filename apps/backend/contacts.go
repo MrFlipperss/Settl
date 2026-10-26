@@ -40,6 +40,39 @@ func (q *DBQueries) CreateContact(ctx context.Context, req CreateContactRequest,
 
 	normPhone := NormalizePhoneNumber(req.PhoneNumber)
 	now := time.Now()
+
+	// Prevent adding oneself as a contact
+	var creatorPhone string
+	_ = tx.QueryRow(ctx, `SELECT phone_number FROM public.profiles WHERE participant_id = $1`, createdBy).Scan(&creatorPhone)
+	if creatorPhone != "" && normPhone == creatorPhone {
+		return nil, fmt.Errorf("cannot add yourself as a contact")
+	}
+
+	// Idempotency: check if an active contact with this phone already exists for createdBy
+	var existing Contact
+	var existingClaimedPID *string
+	lookupErr := tx.QueryRow(ctx,
+		`SELECT c.participant_id, COALESCE(NULLIF(p.display_name, ''), c.display_name),
+		        c.phone_number, c.claimed_by_participant_id IS NOT NULL, c.created_by,
+		        c.claimed_by_participant_id, c.created_at, c.updated_at, c.deleted_at, c.version
+		 FROM public.contacts c
+		 LEFT JOIN public.profiles p ON p.participant_id = c.claimed_by_participant_id
+		 WHERE c.created_by = $1 AND c.phone_number = $2 AND c.deleted_at IS NULL
+		 ORDER BY c.created_at DESC LIMIT 1`, createdBy, normPhone,
+	).Scan(&existing.ParticipantID, &existing.DisplayName, &existing.PhoneNumber,
+		&existing.IsRegistered, &existing.CreatedBy, &existingClaimedPID,
+		&existing.CreatedAt, &existing.UpdatedAt, &existing.DeletedAt, &existing.Version)
+	if lookupErr == nil {
+		if existingClaimedPID != nil {
+			existing.ParticipantID = *existingClaimedPID
+			existing.ClaimedByParticipantID = existingClaimedPID
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("commit tx: %w", err)
+		}
+		return &existing, nil
+	}
+
 	var registeredParticipantID *string
 	var registeredName string
 	err = tx.QueryRow(ctx,
@@ -69,15 +102,21 @@ func (q *DBQueries) CreateContact(ctx context.Context, req CreateContactRequest,
 		return nil, fmt.Errorf("insert participant: %w", err)
 	}
 
+	returnPID := participantID
+	if registeredParticipantID != nil {
+		returnPID = *registeredParticipantID
+	}
+
 	contact := &Contact{
-		ParticipantID: participantID,
-		DisplayName:   req.DisplayName,
-		PhoneNumber:   normPhone,
-		IsRegistered:  registeredParticipantID != nil,
-		CreatedBy:     createdBy,
-		CreatedAt:     now,
-		UpdatedAt:     &now,
-		Version:       1,
+		ParticipantID:          returnPID,
+		DisplayName:            req.DisplayName,
+		PhoneNumber:            normPhone,
+		IsRegistered:           registeredParticipantID != nil,
+		CreatedBy:              createdBy,
+		ClaimedByParticipantID: registeredParticipantID,
+		CreatedAt:              now,
+		UpdatedAt:              &now,
+		Version:                1,
 	}
 
 	_, err = tx.Exec(ctx,
@@ -135,23 +174,66 @@ func contactNotificationBody(actorName string, registered bool) string {
 func (q *DBQueries) ClaimContacts(ctx context.Context, phoneNumber, newParticipantID string) (int, error) {
 	normPhone := NormalizePhoneNumber(phoneNumber)
 	now := time.Now()
-	result, err := q.pool.Exec(ctx,
+
+	tx, err := q.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	result, err := tx.Exec(ctx,
 		`UPDATE public.contacts
 		 SET claimed_by_participant_id = $1, updated_at = $2
-		 WHERE phone_number = $3 AND claimed_by_participant_id IS NULL`,
+		 WHERE phone_number = $3 AND (claimed_by_participant_id IS NULL OR claimed_by_participant_id != $1)`,
 		newParticipantID, now, normPhone,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("claim contacts: %w", err)
 	}
+
+	// Reconcile list_members for any contacts that were claimed
+	_, err = tx.Exec(ctx,
+		`INSERT INTO public.list_members (list_id, participant_id, updated_at)
+		 SELECT lm.list_id, $1, $2
+		 FROM public.list_members lm
+		 JOIN public.contacts c ON c.participant_id = lm.participant_id
+		 WHERE c.claimed_by_participant_id = $1
+		 ON CONFLICT DO NOTHING`,
+		newParticipantID, now,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("reconcile list_members insert: %w", err)
+	}
+
+	_, err = tx.Exec(ctx,
+		`DELETE FROM public.list_members lm
+		 USING public.contacts c
+		 WHERE lm.participant_id = c.participant_id
+		   AND c.claimed_by_participant_id = $1`,
+		newParticipantID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("reconcile list_members delete old: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit tx: %w", err)
+	}
+
 	return int(result.RowsAffected()), nil
 }
 
 func (q *DBQueries) GetContact(ctx context.Context, participantID string) (*Contact, error) {
 	row := q.pool.QueryRow(ctx,
-		`SELECT participant_id, display_name, phone_number, created_by, claimed_by_participant_id,
-		        claimed_by_participant_id IS NOT NULL, created_at, updated_at, deleted_at, version
-		 FROM public.contacts WHERE participant_id = $1`, participantID)
+		`SELECT COALESCE(c.claimed_by_participant_id, c.participant_id),
+		        COALESCE(NULLIF(p.display_name, ''), c.display_name),
+		        c.phone_number, c.created_by, c.claimed_by_participant_id,
+		        c.claimed_by_participant_id IS NOT NULL, c.created_at, c.updated_at, c.deleted_at, c.version
+		 FROM public.contacts c
+		 LEFT JOIN public.profiles p ON p.participant_id = c.claimed_by_participant_id
+		 WHERE c.participant_id = $1 OR c.claimed_by_participant_id = $1
+		 ORDER BY c.created_at DESC
+		 LIMIT 1`, participantID)
 
 	var c Contact
 	err := row.Scan(&c.ParticipantID, &c.DisplayName, &c.PhoneNumber, &c.CreatedBy, &c.ClaimedByParticipantID, &c.IsRegistered, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt, &c.Version)
@@ -163,13 +245,29 @@ func (q *DBQueries) GetContact(ctx context.Context, participantID string) (*Cont
 
 func (q *DBQueries) ListContacts(ctx context.Context, createdBy string) ([]Contact, error) {
 	rows, err := q.pool.Query(ctx,
-		`SELECT c.participant_id, COALESCE(NULLIF(p.display_name, ''), c.display_name),
-		        c.phone_number, c.claimed_by_participant_id IS NOT NULL, c.created_by,
-		        c.claimed_by_participant_id, c.created_at, c.updated_at, c.deleted_at, c.version
-		 FROM public.contacts c
-	 LEFT JOIN public.profiles p ON p.participant_id = c.claimed_by_participant_id
-	 WHERE c.created_by = $1 AND c.deleted_at IS NULL
-	 ORDER BY c.display_name ASC, c.created_at DESC`,
+		`WITH distinct_contacts AS (
+			SELECT DISTINCT ON (COALESCE(c.claimed_by_participant_id, c.participant_id))
+			       COALESCE(c.claimed_by_participant_id, c.participant_id) AS participant_id,
+			       COALESCE(NULLIF(p.display_name, ''), c.display_name) AS display_name,
+			       c.phone_number,
+			       (c.claimed_by_participant_id IS NOT NULL) AS is_registered,
+			       c.created_by,
+			       c.claimed_by_participant_id,
+			       c.created_at,
+			       c.updated_at,
+			       c.deleted_at,
+			       c.version
+			FROM public.contacts c
+			LEFT JOIN public.profiles p ON p.participant_id = c.claimed_by_participant_id
+			WHERE c.created_by = $1
+			  AND c.deleted_at IS NULL
+			  AND (c.claimed_by_participant_id IS NULL OR c.claimed_by_participant_id != $1)
+			ORDER BY COALESCE(c.claimed_by_participant_id, c.participant_id), c.created_at DESC
+		)
+		SELECT participant_id, display_name, phone_number, is_registered, created_by,
+		       claimed_by_participant_id, created_at, updated_at, deleted_at, version
+		FROM distinct_contacts
+		ORDER BY display_name ASC, created_at DESC`,
 		createdBy,
 	)
 	if err != nil {
@@ -197,16 +295,24 @@ func (q *DBQueries) SearchContacts(ctx context.Context, query string, limit int,
 
 	searchPattern := "%" + query + "%"
 	rows, err := q.pool.Query(ctx,
-		`SELECT c.participant_id,
-		        COALESCE(p.display_name, c.display_name) AS display_name,
-		        c.phone_number,
-		        c.claimed_by_participant_id IS NOT NULL
-		 FROM public.contacts c
-		 LEFT JOIN public.profiles p ON p.participant_id = c.claimed_by_participant_id
-		 WHERE c.created_by = $2 AND c.deleted_at IS NULL
-		   AND (COALESCE(NULLIF(p.display_name, ''), c.display_name) ILIKE $1 OR c.phone_number ILIKE $1)
-		 ORDER BY c.display_name ASC
-		 LIMIT $3`,
+		`WITH distinct_contacts AS (
+			SELECT DISTINCT ON (COALESCE(c.claimed_by_participant_id, c.participant_id))
+			       COALESCE(c.claimed_by_participant_id, c.participant_id) AS participant_id,
+			       COALESCE(NULLIF(p.display_name, ''), c.display_name) AS display_name,
+			       c.phone_number,
+			       (c.claimed_by_participant_id IS NOT NULL) AS is_registered
+			FROM public.contacts c
+			LEFT JOIN public.profiles p ON p.participant_id = c.claimed_by_participant_id
+			WHERE c.created_by = $2
+			  AND c.deleted_at IS NULL
+			  AND (c.claimed_by_participant_id IS NULL OR c.claimed_by_participant_id != $2)
+			  AND (COALESCE(NULLIF(p.display_name, ''), c.display_name) ILIKE $1 OR c.phone_number ILIKE $1)
+			ORDER BY COALESCE(c.claimed_by_participant_id, c.participant_id), c.created_at DESC
+		)
+		SELECT participant_id, display_name, phone_number, is_registered
+		FROM distinct_contacts
+		ORDER BY display_name ASC
+		LIMIT $3`,
 		searchPattern, createdBy, limit,
 	)
 	if err != nil {
@@ -314,6 +420,21 @@ func claimContactsHandler(q *DBQueries) http.HandlerFunc {
 		newPID := participantIDFromCtx(r.Context())
 		if newPID == "" {
 			writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+			return
+		}
+
+		// Security: verify the authenticated user is claiming contacts for their OWN phone number
+		var callerPhone string
+		err := q.pool.QueryRow(r.Context(),
+			`SELECT phone_number FROM public.profiles WHERE participant_id = $1`, newPID,
+		).Scan(&callerPhone)
+		if err != nil {
+			writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "profile not found"})
+			return
+		}
+
+		if NormalizePhoneNumber(req.PhoneNumber) != callerPhone {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "you can only claim contacts matching your registered phone number"})
 			return
 		}
 

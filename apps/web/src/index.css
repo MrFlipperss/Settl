@@ -120,22 +120,446 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   }
 }
 
-/* Mobile Safe-Area Insets for Android/iOS PWA Standalone */
-@supports (padding: max(0px)) {
-  @media (max-width: 720px) {
-    .app-shell {
-      padding-bottom: max(68px, calc(68px + env(safe-area-inset-bottom, 0px)));
-    }
-    .sidebar {
-      height: max(68px, calc(68px + env(safe-area-inset-bottom, 0px)));
-      padding-bottom: max(5px, calc(5px + env(safe-area-inset-bottom, 0px)));
-    }
-    .new-expense {
-      bottom: max(86px, calc(86px + env(safe-area-inset-bottom, 0px)));
-    }
-    .topbar {
-      padding-top: env(safe-area-inset-top, 0px);
-      height: max(62px, calc(62px + env(safe-area-inset-top, 0px)));
-    }
+/* ==========================================================================
+   Mobile PWA Responsive Layout & Refinements (Android & iOS)
+   ========================================================================== */
+
+@media (max-width: 720px) {
+  /* Layout & Page Spacing */
+  .app-shell {
+    display: block !important;
+    min-height: 100vh;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .page-wrap {
+    padding: 20px 16px calc(120px + env(safe-area-inset-bottom, 0px)) 16px !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Topbar Navigation & Safe Areas */
+  .topbar {
+    height: calc(56px + env(safe-area-inset-top, 0px)) !important;
+    padding: env(safe-area-inset-top, 0px) 16px 0 16px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+  }
+  .breadcrumb {
+    min-width: 0 !important;
+    flex: 1 !important;
+    font-size: 12px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .breadcrumb span,
+  .breadcrumb b {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .topbar-actions {
+    gap: 6px !important;
+    flex-shrink: 0 !important;
+  }
+  .search-trigger {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    border-radius: 8px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+  .search-trigger span,
+  .search-trigger kbd {
+    display: none !important;
+  }
+  .icon-button {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    border-radius: 8px !important;
+  }
+
+  /* Bottom Navigation Bar */
+  .sidebar {
+    position: fixed !important;
+    z-index: 30 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    height: calc(60px + env(safe-area-inset-bottom, 0px)) !important;
+    border-right: 0 !important;
+    border-top: 1px solid var(--line) !important;
+    padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px)) 6px !important;
+    background: var(--surface) !important;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05) !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+  }
+  .sidebar > .brand,
+  .sidebar .workspace-switch,
+  .sidebar-bottom,
+  .nav-section,
+  .nav-count {
+    display: none !important;
+  }
+  .nav-list {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    gap: 2px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .nav-list > div {
+    flex: 1 1 0px !important;
+    min-width: 0 !important;
+    width: 20% !important;
+    display: flex !important;
+    align-items: stretch !important;
+  }
+  .nav-item {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    padding: 3px 1px !important;
+    border-radius: 8px !important;
+    border: 0 !important;
+    background: transparent !important;
+    transition: background 0.15s ease, color 0.15s ease !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+  .nav-item svg {
+    width: 19px !important;
+    height: 19px !important;
+    flex-shrink: 0 !important;
+    margin: 0 auto !important;
+  }
+  .nav-item span:first-of-type {
+    flex: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    line-height: 1.15 !important;
+    text-align: center !important;
+    display: block !important;
+    letter-spacing: -0.01em !important;
+  }
+  .nav-item.active {
+    background: var(--green-soft) !important;
+    color: var(--green-dark) !important;
+    font-weight: 700 !important;
+  }
+  :root[data-theme=dark] .nav-item.active {
+    background: var(--brand-tint-strong) !important;
+    color: var(--brand-ink) !important;
+  }
+
+  /* Typography & Header Row */
+  .welcome-row,
+  .page-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    margin-bottom: 16px !important;
+  }
+  .welcome-row h1,
+  .page-header h1 {
+    font-size: clamp(22px, 5.5vw, 26px) !important;
+    line-height: 1.2 !important;
+  }
+  .welcome-row p,
+  .page-header p {
+    font-size: 12px !important;
+    line-height: 1.45 !important;
+    max-width: 100% !important;
+    margin-top: 4px !important;
+  }
+  .eyebrow {
+    font-size: 11px !important;
+    margin-bottom: 6px !important;
+  }
+  .welcome-row .new-expense {
+    display: none !important;
+  }
+
+  /* Quick Expense (Spotlight) Component */
+  .spotlight-panel {
+    padding: 16px 14px !important;
+    margin-bottom: 18px !important;
+    border-radius: 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .spotlight-copy {
+    margin-bottom: 12px !important;
+  }
+  .spotlight-copy b {
+    font-size: 13px !important;
+  }
+  .spotlight-copy span:not(.spotlight-spark) {
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+  }
+  .spotlight-entry {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+  .spotlight-entry .spotlight-input {
+    width: 100% !important;
+    min-height: 46px !important;
+    border-radius: 9px !important;
+    padding: 0 12px !important;
+    box-sizing: border-box !important;
+  }
+  .spotlight-submit {
+    width: 100% !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    border-radius: 9px !important;
+    justify-content: center !important;
+    font-size: 13px !important;
+  }
+  .spotlight-shortcuts {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    margin-top: 12px !important;
+  }
+  .spotlight-shortcuts > span {
+    font-size: 11px !important;
+    color: var(--text-soft) !important;
+    line-height: 1.45 !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+    flex-wrap: wrap !important;
+    width: 100% !important;
+  }
+  .spotlight-shortcuts button {
+    font-size: 12px !important;
+    color: var(--brand-ink) !important;
+    padding: 4px 0 !important;
+    min-height: 32px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  /* Overview Metric Grid & Cards */
+  .section-heading {
+    margin-bottom: 10px !important;
+  }
+  .section-heading h2 {
+    font-size: 16px !important;
+  }
+  .section-heading p {
+    font-size: 11px !important;
+  }
+  .metric-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+    margin-bottom: 18px !important;
+  }
+  .metric-card:last-child {
+    grid-column: 1 / -1 !important;
+  }
+  .metric-card {
+    min-height: auto !important;
+    padding: 15px 16px !important;
+    border-radius: 12px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    position: relative !important;
+  }
+  .metric-label {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: var(--text-soft) !important;
+    margin-bottom: 4px !important;
+  }
+  .metric-number {
+    font-size: clamp(20px, 5vw, 24px) !important;
+    line-height: 1.2 !important;
+    letter-spacing: -0.04em !important;
+    min-width: 0 !important;
+    overflow-wrap: break-word !important;
+    margin: 6px 0 8px !important;
+  }
+  .metric-foot {
+    margin-bottom: 4px !important;
+    font-size: 11px !important;
+  }
+  .metric-link {
+    position: static !important;
+    align-self: flex-start !important;
+    margin-top: auto !important;
+    padding-top: 8px !important;
+    font-size: 12px !important;
+  }
+
+  /* Floating Add Expense Button */
+  .mobile-add {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    position: fixed !important;
+    z-index: 25 !important;
+    right: 16px !important;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+    height: 42px !important;
+    padding: 0 16px 0 13px !important;
+    border-radius: 999px !important;
+    background: var(--brand-fill) !important;
+    color: #fff !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    box-shadow: 0 4px 16px rgba(45, 65, 47, 0.35) !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+    transition: transform 0.15s ease, background 0.15s ease !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+  .mobile-add:hover:not(:disabled) {
+    background: var(--brand-hover) !important;
+    transform: translateY(-1px) !important;
+  }
+  .mobile-add:active:not(:disabled) {
+    transform: translateY(0) !important;
+  }
+
+  /* Recent Activity & Circle Cards */
+  .content-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .recent-card,
+  .side-card {
+    min-height: 0 !important;
+    padding: 16px !important;
+    border-radius: 12px !important;
+  }
+  .recent-card .card-heading,
+  .content-card .card-heading {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 12px !important;
+    margin-bottom: 14px !important;
+  }
+  .card-heading > div {
+    min-width: 0 !important;
+    flex: 1 !important;
+  }
+  .card-heading h3 {
+    font-size: 15px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .card-heading p {
+    font-size: 11px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .subtle-link {
+    flex-shrink: 0 !important;
+    min-height: 32px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    padding: 4px 6px !important;
+    font-size: 11px !important;
   }
 }
+
+/* ==========================================================================
+   Narrow Phone Breakpoints (320px - 420px)
+   ========================================================================== */
+
+@media (max-width: 420px) {
+  /* Overview Cards stack cleanly in 1 column on narrow phones */
+  .metric-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .metric-card:last-child {
+    grid-column: auto !important;
+  }
+
+  /* Balance summary stacks in 1 column */
+  .balance-summary {
+    grid-template-columns: 1fr !important;
+  }
+  .balance-total-card:last-child {
+    grid-column: auto !important;
+  }
+
+  /* Bottom nav typography scales comfortably */
+  .nav-item span:first-of-type {
+    font-size: 9px !important;
+    letter-spacing: -0.02em !important;
+  }
+  .nav-item svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+}
+
+/* ==========================================================================
+   Ultra-Narrow Phones (< 350px, e.g. 320px)
+   ========================================================================== */
+
+@media (max-width: 350px) {
+  .page-wrap {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .topbar {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .nav-item span:first-of-type {
+    font-size: 8.5px !important;
+  }
+  .nav-item {
+    padding: 2px 1px !important;
+  }
+  .mobile-add {
+    right: 12px !important;
+    padding: 0 12px 0 10px !important;
+    font-size: 12px !important;
+  }
+}
+

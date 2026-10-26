@@ -72,18 +72,13 @@ func (q *DBQueries) CreateProfile(ctx context.Context, userID string, req Create
 		return nil, fmt.Errorf("insert profile: %w", err)
 	}
 
-	_, err = tx.Exec(ctx,
-		`UPDATE public.contacts
-		 SET claimed_by_participant_id = $1, updated_at = $2
-		 WHERE phone_number = $3 AND claimed_by_participant_id IS NULL`,
-		participantID, now, normPhone,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("claim contacts: %w", err)
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+
+	// Claim any contacts matching this phone and reconcile memberships
+	if _, err := q.ClaimContacts(ctx, normPhone, participantID); err != nil {
+		fmt.Printf("warning: claiming contacts on create profile: %v\n", err)
 	}
 
 	return q.GetProfileByUserID(ctx, userID)
@@ -92,14 +87,24 @@ func (q *DBQueries) CreateProfile(ctx context.Context, userID string, req Create
 // UpdateProfile changes the editable fields on the authenticated user's
 // existing profile while preserving its participant identity and history.
 func (q *DBQueries) UpdateProfile(ctx context.Context, userID string, req CreateProfileRequest) (*Profile, error) {
-	_, err := q.pool.Exec(ctx,
+	normPhone := NormalizePhoneNumber(req.PhoneNumber)
+	now := time.Now()
+
+	var participantID string
+	err := q.pool.QueryRow(ctx,
 		`UPDATE public.profiles
 		 SET display_name = $2, phone_number = $3, upi_id = COALESCE($4, upi_id), updated_at = $5
-		 WHERE user_id = $1`,
-		userID, req.DisplayName, NormalizePhoneNumber(req.PhoneNumber), req.UPIID, time.Now(),
-	)
+		 WHERE user_id = $1
+		 RETURNING participant_id`,
+		userID, req.DisplayName, normPhone, req.UPIID, now,
+	).Scan(&participantID)
 	if err != nil {
 		return nil, fmt.Errorf("update profile: %w", err)
+	}
+
+	// Claim any contacts matching this updated phone and reconcile memberships
+	if _, err := q.ClaimContacts(ctx, normPhone, participantID); err != nil {
+		fmt.Printf("warning: claiming contacts on update profile: %v\n", err)
 	}
 
 	return q.GetProfileByUserID(ctx, userID)

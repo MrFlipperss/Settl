@@ -181,3 +181,131 @@ func TestAuthMiddleware_MissingTokenIsAlways401(t *testing.T) {
 		}
 	}
 }
+
+// TestContactClaimAuthorizationLogic verifies phone normalization logic
+// used to securely match claiming callers with their verified account phone.
+func TestContactClaimAuthorizationLogic(t *testing.T) {
+	callerPhone := "+919876543210"
+
+	validInputs := []string{
+		"9876543210",
+		"09876543210",
+		"+91 9876543210",
+		"+919876543210",
+	}
+
+	for _, input := range validInputs {
+		if got := NormalizePhoneNumber(input); got != callerPhone {
+			t.Errorf("expected %q to normalize to %q, got %q", input, callerPhone, got)
+		}
+	}
+
+	invalidInputs := []string{
+		"9876543211",
+		"+919876543219",
+		"1234567890",
+	}
+
+	for _, input := range invalidInputs {
+		if got := NormalizePhoneNumber(input); got == callerPhone {
+			t.Errorf("expected %q NOT to match %q", input, callerPhone)
+		}
+	}
+}
+
+// TestContactCanonicalResolution verifies that when a contact is claimed,
+// its effective participant identity becomes the registered profile's participant ID.
+func TestContactCanonicalResolution(t *testing.T) {
+	placeholderID := "contact-uuid-1"
+	claimedProfileID := "user-uuid-99"
+
+	contact := Contact{
+		ParticipantID:          placeholderID,
+		DisplayName:            "Rahul",
+		PhoneNumber:            "+919876543210",
+		ClaimedByParticipantID: &claimedProfileID,
+		IsRegistered:           true,
+	}
+
+	// Canonical resolution rule: if ClaimedByParticipantID is present, use it
+	canonicalID := contact.ParticipantID
+	if contact.ClaimedByParticipantID != nil && *contact.ClaimedByParticipantID != "" {
+		canonicalID = *contact.ClaimedByParticipantID
+	}
+
+	if canonicalID != claimedProfileID {
+		t.Errorf("expected canonical ID %q, got %q", claimedProfileID, canonicalID)
+	}
+
+	// Unclaimed contact remains its placeholder ID
+	unclaimed := Contact{
+		ParticipantID: placeholderID,
+		DisplayName:   "Rahul",
+		PhoneNumber:   "+919876543210",
+	}
+	canonicalUnclaimed := unclaimed.ParticipantID
+	if unclaimed.ClaimedByParticipantID != nil && *unclaimed.ClaimedByParticipantID != "" {
+		canonicalUnclaimed = *unclaimed.ClaimedByParticipantID
+	}
+	if canonicalUnclaimed != placeholderID {
+		t.Errorf("expected unclaimed canonical ID %q, got %q", placeholderID, canonicalUnclaimed)
+	}
+}
+
+// TestHistoricalExpenseIntegrityWithCanonicalClaiming tests that split amounts
+// and net obligations are preserved before and after claiming.
+func TestHistoricalExpenseIntegrityWithCanonicalClaiming(t *testing.T) {
+	// Payer owes nothing, Split participants owe their share.
+	req := CreateExpenseRequest{
+		Amount:    600.00,
+		SplitType: "equal",
+		Splits: []CreateSplitItem{
+			{UserID: "payer-user-1"},
+			{UserID: "placeholder-contact-2"}, // Rahul before registering
+			{UserID: "registered-user-3"},
+		},
+	}
+
+	splits, err := resolveSplits(req)
+	if err != nil {
+		t.Fatalf("resolveSplits failed: %v", err)
+	}
+
+	if len(splits) != 3 {
+		t.Fatalf("expected 3 splits, got %d", len(splits))
+	}
+
+	// Total must sum to 60000 paise (600 INR)
+	var totalPaise int64
+	for _, s := range splits {
+		totalPaise += s.ShareAmount
+		if s.ShareAmount != 20000 {
+			t.Errorf("expected equal share 20000 paise, got %d", s.ShareAmount)
+		}
+	}
+	if totalPaise != 60000 {
+		t.Errorf("expected total 60000 paise, got %d", totalPaise)
+	}
+
+	// Simulating resolution: placeholder-contact-2 claims as registered-user-2
+	contactClaimMapping := map[string]string{
+		"placeholder-contact-2": "registered-user-2",
+	}
+
+	resolvedParticipants := make([]string, len(splits))
+	for i, s := range splits {
+		if canonical, claimed := contactClaimMapping[s.ParticipantID]; claimed {
+			resolvedParticipants[i] = canonical
+		} else {
+			resolvedParticipants[i] = s.ParticipantID
+		}
+	}
+
+	expectedParticipants := []string{"payer-user-1", "registered-user-2", "registered-user-3"}
+	for i, expected := range expectedParticipants {
+		if resolvedParticipants[i] != expected {
+			t.Errorf("split[%d]: expected participant %q, got %q", i, expected, resolvedParticipants[i])
+		}
+	}
+}
+

@@ -64,7 +64,20 @@ func (q *DBQueries) ListSettlements(ctx context.Context, participantID string) (
 }
 
 func (q *DBQueries) CreateSettlement(ctx context.Context, payerID string, req CreateSettlementRequest) (*Settlement, error) {
-	if req.PayeeID == "" || req.PayeeID == payerID {
+	if req.PayeeID == "" {
+		return nil, fmt.Errorf("choose a valid person to pay")
+	}
+
+	payeeID := req.PayeeID
+	var claimedPID *string
+	err := q.pool.QueryRow(ctx,
+		`SELECT claimed_by_participant_id FROM public.contacts WHERE participant_id = $1`, req.PayeeID,
+	).Scan(&claimedPID)
+	if err == nil && claimedPID != nil && *claimedPID != "" {
+		payeeID = *claimedPID
+	}
+
+	if payeeID == payerID {
 		return nil, fmt.Errorf("choose a valid person to pay")
 	}
 	if req.Amount <= 0 || !validateMaxDecimals(req.Amount, 2) {
@@ -72,13 +85,13 @@ func (q *DBQueries) CreateSettlement(ctx context.Context, payerID string, req Cr
 	}
 	amountPaise := int64(math.Round(req.Amount * 100))
 	var outstandingPaise int64
-	err := q.pool.QueryRow(ctx,
+	err = q.pool.QueryRow(ctx,
 		`SELECT COALESCE(CAST(ROUND((
 			COALESCE((SELECT amount_owed FROM public.pairwise_balances WHERE from_participant = $1 AND to_participant = $2), 0)
 			- COALESCE((SELECT amount_owed FROM public.pairwise_balances WHERE from_participant = $2 AND to_participant = $1), 0)
 			- COALESCE((SELECT SUM(amount) FROM public.settlements WHERE payer_participant_id = $1 AND payee_participant_id = $2 AND status IN ('pending', 'confirmed')), 0)
 			+ COALESCE((SELECT SUM(amount) FROM public.settlements WHERE payer_participant_id = $2 AND payee_participant_id = $1 AND status IN ('pending', 'confirmed')), 0)
-		) * 100) AS BIGINT), 0)`, payerID, req.PayeeID,
+		) * 100) AS BIGINT), 0)`, payerID, payeeID,
 	).Scan(&outstandingPaise)
 	if err != nil {
 		return nil, fmt.Errorf("check outstanding balance: %w", err)
@@ -92,7 +105,7 @@ func (q *DBQueries) CreateSettlement(ctx context.Context, payerID string, req Cr
 
 	status := "pending"
 	var payeeHasAccount bool
-	if err := q.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.profiles WHERE participant_id = $1)`, req.PayeeID).Scan(&payeeHasAccount); err != nil {
+	if err := q.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.profiles WHERE participant_id = $1)`, payeeID).Scan(&payeeHasAccount); err != nil {
 		return nil, fmt.Errorf("check payee account: %w", err)
 	}
 	if !payeeHasAccount {
@@ -105,7 +118,7 @@ func (q *DBQueries) CreateSettlement(ctx context.Context, payerID string, req Cr
 	err = q.pool.QueryRow(ctx,
 		`INSERT INTO public.settlements (payer_participant_id, payee_participant_id, amount, status)
 		 VALUES ($1, $2, $3, $4) RETURNING id`,
-		payerID, req.PayeeID, float64(amountPaise)/100, status,
+		payerID, payeeID, float64(amountPaise)/100, status,
 	).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("create settlement: %w", err)

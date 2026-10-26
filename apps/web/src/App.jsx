@@ -187,14 +187,36 @@ export default function App() {
   }, [profile?.participant_id, session?.access_token])
 
   const people = useMemo(() => {
-    const all = new Map()
-    if (profile?.participant_id) all.set(profile.participant_id, { participant_id: profile.participant_id, display_name: profile.display_name, kind: 'self' })
-    data.contacts.forEach((person) => all.set(person.participant_id, person))
-    knownPeople.forEach((person) => { if (!all.has(person.participant_id)) all.set(person.participant_id, person) })
-    data.balances?.breakdown?.forEach((person) => {
-      if (person.user_id && !all.has(person.user_id)) all.set(person.user_id, { participant_id: person.user_id, display_name: person.user_name || 'Settl person', kind: 'balance' })
+    const byCanonicalId = new Map()
+    if (profile?.participant_id) {
+      byCanonicalId.set(profile.participant_id, { participant_id: profile.participant_id, display_name: profile.display_name, kind: 'self' })
+    }
+    (data.contacts || []).forEach((person) => {
+      const canonicalId = person.claimed_by_participant_id || person.participant_id
+      if (profile?.participant_id && (canonicalId === profile.participant_id || person.participant_id === profile.participant_id)) return
+      if (!byCanonicalId.has(canonicalId)) {
+        byCanonicalId.set(canonicalId, { ...person, participant_id: canonicalId })
+      }
     })
-    return [...all.values()]
+    ;(knownPeople || []).forEach((person) => {
+      const canonicalId = person.claimed_by_participant_id || person.participant_id
+      if (profile?.participant_id && (canonicalId === profile.participant_id || person.participant_id === profile.participant_id)) return
+      if (!byCanonicalId.has(canonicalId)) {
+        byCanonicalId.set(canonicalId, { ...person, participant_id: canonicalId })
+      }
+    })
+    data.balances?.breakdown?.forEach((person) => {
+      if (!person.user_id) return
+      if (profile?.participant_id && person.user_id === profile.participant_id) return
+      if (!byCanonicalId.has(person.user_id)) {
+        byCanonicalId.set(person.user_id, {
+          participant_id: person.user_id,
+          display_name: person.user_name || 'Settl person',
+          kind: 'balance',
+        })
+      }
+    })
+    return [...byCanonicalId.values()]
   }, [profile, data, knownPeople])
 
   async function refresh() {
@@ -453,11 +475,14 @@ export default function App() {
         {screen === 'home' && <Overview profile={profile} data={data} people={people} loading={loading} isOnline={isOnline} onExpense={() => setModal({ type: 'expense' })} onNavigate={setScreen} onSearch={startFromSpotlight} />}
         {screen === 'activity' && <ActivityPage data={data} people={people} profile={profile} loading={loading} query={query} onQuery={setQuery} onExpense={() => setModal({ type: 'expense' })} onEditExpense={openExpenseForEditing} />}
         {screen === 'balances' && <BalancesPage balances={data.balances} settlements={settlements} profile={profile} loading={loading} busy={busy} people={people} isOnline={isOnline} onNavigate={setScreen} onSettle={(entry) => setModal({ type: 'settlement', entry })} onSettlementResponse={respondToSettlement} />}
-        {screen === 'people' && <PeoplePage data={data} query={query} onQuery={setQuery} onAdd={() => setModal({ type: 'person' })} />}
+        {screen === 'people' && <PeoplePage data={data} query={query} onQuery={setQuery} onAdd={() => setModal({ type: 'person' })} profile={profile} />}
         {screen === 'collections' && <CollectionsPage data={data} loading={loading} onCreate={() => setModal({ type: 'collection' })} onOpen={openCollection} />}
       </div>
     </main>
-    <button className="mobile-add" aria-label="Add expense" onClick={() => setModal({ type: 'expense' })}><Plus size={24} /></button>
+    <button className="mobile-add" aria-label="Add expense" onClick={() => setModal({ type: 'expense' })}>
+      <Plus size={16} />
+      <span>Expense</span>
+    </button>
     {modal && <ModalHost modal={modal} isOnline={isOnline} close={() => setModal(null)} profile={profile} people={people} groups={data.groups} expenses={data.expenses} busy={busy} onExpense={saveExpense} onUpdateExpense={updateExpense} onSettlement={recordSettlement} onUpdateUPI={updateUPI} onEditUPI={() => setModal({ type: 'upi' })} onCollection={createCollection} onPerson={addPerson} onOpenPerson={() => setModal({ type: 'person' })} onLoadGroupMembers={loadGroupMembers} onAddMember={addCollectionMember} onRemoveMember={removeCollectionMember} onAddCollectionExpense={startCollectionExpense} onTheme={() => setDark(!dark)} dark={dark} />}
   </div>
 }
@@ -594,9 +619,19 @@ function UPIForm({ profile, busy, onSave, close }) {
   return <form className="modal-content" onSubmit={submit}><p className="modal-description">Add your UPI ID so people who owe you can pay you from their UPI app. Settl never stores bank credentials.</p><label>UPI ID<input value={value} onChange={(event) => setValue(event.target.value)} placeholder="name@bank" autoComplete="off" autoFocus/></label>{error && <Notice>{error}</Notice>}<div className="modal-footer"><button type="button" className="text-button" onClick={close}>Cancel</button><button className="button button-primary" disabled={busy}>{busy ? 'Saving…' : 'Save UPI ID'}<ArrowRight size={15}/></button></div></form>
 }
 
-function PeoplePage({ data, query, onQuery, onAdd }) {
+function PeoplePage({ data, query, onQuery, onAdd, profile }) {
   const normalizedQuery = query.trim().toLocaleLowerCase()
-  const people = (data.contacts || []).filter((person) => !normalizedQuery || `${person.display_name || ''} ${person.phone_number || ''}`.toLocaleLowerCase().includes(normalizedQuery))
+  const people = useMemo(() => {
+    const map = new Map()
+    ;(data.contacts || []).forEach((c) => {
+      const id = c.claimed_by_participant_id || c.participant_id
+      if (profile?.participant_id && (id === profile.participant_id || c.participant_id === profile.participant_id)) return
+      if (!map.has(id)) {
+        map.set(id, { ...c, participant_id: id })
+      }
+    })
+    return [...map.values()].filter((person) => !normalizedQuery || `${person.display_name || ''} ${person.phone_number || ''}`.toLocaleLowerCase().includes(normalizedQuery))
+  }, [data.contacts, profile?.participant_id, normalizedQuery])
   return <><PageHeader eyebrow="Good company" title="People" copy="Keep track of who you share things with." action={<button className="button button-primary" onClick={onAdd}><Plus size={16}/> Add a person</button>}/><section className="content-card page-card"><div className="toolbar"><label className="inline-search"><Search size={16}/><input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Search by name or phone"/></label><span className="toolbar-hint"><Users size={15}/>{people.length} {people.length === 1 ? 'person' : 'people'}</span></div>{people.length ? <div className="people-grid">{people.map((person, index) => <article className="person-card" key={person.participant_id}><Avatar name={person.display_name} tone={['lavender', 'mint', 'peach', 'blue'][index % 4]} size="large"/><div className="person-detail"><b>{person.display_name}</b><span>{person.phone_number || 'Settl contact'}</span></div><MoreHorizontal size={17} className="person-more"/></article>)}</div> : <Empty icon={Users} title="Your circle starts here" copy="Add people by name and phone. Settl uses real contacts from your account, never sample identities." action={<button className="button button-secondary" onClick={onAdd}><Plus size={15}/> Add a person</button>}/>}</section><div className="privacy-note"><ShieldCheck size={16}/> Phone numbers are used to match people who join Settl.</div></>
 }
 

@@ -88,12 +88,13 @@ func (q *DBQueries) GetList(ctx context.Context, id string) (*List, error) {
 
 func (q *DBQueries) ListListsByMember(ctx context.Context, participantID string) ([]List, error) {
 	rows, err := q.pool.Query(ctx,
-		`SELECT l.id, l.account_number, l.name, l.created_by, l.created_at, l.updated_at, l.deleted_at,
+		`SELECT DISTINCT l.id, l.account_number, l.name, l.created_by, l.created_at, l.updated_at, l.deleted_at,
 		        COALESCE(l.version, 1),
 		        (SELECT count(*) FROM public.list_members lm WHERE lm.list_id = l.id) AS member_count
 		 FROM public.lists l
 		 JOIN public.list_members lm ON lm.list_id = l.id
-		 WHERE lm.participant_id = $1 AND l.deleted_at IS NULL
+		 LEFT JOIN public.contacts c ON c.participant_id = lm.participant_id
+		 WHERE (lm.participant_id = $1 OR c.claimed_by_participant_id = $1) AND l.deleted_at IS NULL
 		 ORDER BY l.created_at DESC`, participantID)
 	if err != nil {
 		return nil, fmt.Errorf("list lists: %w", err)
@@ -113,11 +114,20 @@ func (q *DBQueries) ListListsByMember(ctx context.Context, participantID string)
 
 func (q *DBQueries) AddListMember(ctx context.Context, listID, participantID string) error {
 	now := time.Now()
-	_, err := q.pool.Exec(ctx,
+	canonicalID := participantID
+	var claimedPID *string
+	err := q.pool.QueryRow(ctx,
+		`SELECT claimed_by_participant_id FROM public.contacts WHERE participant_id = $1`, participantID,
+	).Scan(&claimedPID)
+	if err == nil && claimedPID != nil && *claimedPID != "" {
+		canonicalID = *claimedPID
+	}
+
+	_, err = q.pool.Exec(ctx,
 		`INSERT INTO public.list_members (list_id, participant_id, updated_at)
 		 VALUES ($1, $2, $3)
 		 ON CONFLICT DO NOTHING`,
-		listID, participantID, now,
+		listID, canonicalID, now,
 	)
 	if err != nil {
 		return fmt.Errorf("add list member: %w", err)
@@ -127,7 +137,11 @@ func (q *DBQueries) AddListMember(ctx context.Context, listID, participantID str
 
 func (q *DBQueries) RemoveListMember(ctx context.Context, listID, participantID string) error {
 	_, err := q.pool.Exec(ctx,
-		`DELETE FROM public.list_members WHERE list_id = $1 AND participant_id = $2`,
+		`DELETE FROM public.list_members lm
+		 USING public.contacts c
+		 WHERE lm.list_id = $1
+		   AND (lm.participant_id = $2
+		        OR (lm.participant_id = c.participant_id AND c.claimed_by_participant_id = $2))`,
 		listID, participantID)
 	if err != nil {
 		return fmt.Errorf("remove list member: %w", err)
@@ -137,12 +151,13 @@ func (q *DBQueries) RemoveListMember(ctx context.Context, listID, participantID 
 
 func (q *DBQueries) ListListMembers(ctx context.Context, listID string) ([]ListMember, error) {
 	rows, err := q.pool.Query(ctx,
-		`SELECT lm.list_id, lm.participant_id,
+		`SELECT lm.list_id,
+		        COALESCE(c.claimed_by_participant_id, lm.participant_id) AS participant_id,
 		        COALESCE(NULLIF(p.display_name, ''), NULLIF(c.display_name, ''), LEFT(lm.participant_id::text, 8)),
 		        lm.added_at
 		 FROM public.list_members lm
-		 LEFT JOIN public.profiles p ON p.participant_id = lm.participant_id
 		 LEFT JOIN public.contacts c ON c.participant_id = lm.participant_id AND c.deleted_at IS NULL
+		 LEFT JOIN public.profiles p ON p.participant_id = COALESCE(c.claimed_by_participant_id, lm.participant_id)
 		 WHERE lm.list_id = $1
 		 ORDER BY lm.added_at`, listID)
 	if err != nil {
