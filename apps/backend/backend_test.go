@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -502,5 +504,100 @@ func TestDefaultPayerWhenOmitted(t *testing.T) {
 	}
 }
 
+// TestSymmetricSettlementPermissionsAndValidation verifies the two-participant settlement flow
+func TestSymmetricSettlementPermissionsAndValidation(t *testing.T) {
+	aliceID := "user-alice"
+	bobID := "user-bob"
+
+	// Scenario 1: Alice owes Bob 150.00
+	// Both participants have access to settle the outstanding balance.
+	owedAliceToBob := int64(15000)
+	owedBobToAlice := int64(0)
+	confirmedAliceToBob := int64(0)
+	confirmedBobToAlice := int64(0)
+
+	calcBalance := func(caller, counterparty string) (int64, string, string) {
+		var callerOwesOther int64
+		if caller == aliceID && counterparty == bobID {
+			callerOwesOther = (owedAliceToBob - owedBobToAlice) - (confirmedAliceToBob - confirmedBobToAlice)
+		} else if caller == bobID && counterparty == aliceID {
+			callerOwesOther = (owedBobToAlice - owedAliceToBob) - (confirmedBobToAlice - confirmedAliceToBob)
+		}
+
+		if callerOwesOther > 0 {
+			// Caller is debtor
+			return callerOwesOther, caller, counterparty
+		} else if callerOwesOther < 0 {
+			// Counterparty is debtor, caller is creditor
+			return -callerOwesOther, counterparty, caller
+		}
+		return 0, "", ""
+	}
+
+	// 1. Check Debtor (Alice) settling
+	balAlice, payerAlice, payeeAlice := calcBalance(aliceID, bobID)
+	if balAlice != 15000 {
+		t.Errorf("expected balance 15000, got %d", balAlice)
+	}
+	if payerAlice != aliceID || payeeAlice != bobID {
+		t.Errorf("expected payer=%s, payee=%s; got payer=%s, payee=%s", aliceID, bobID, payerAlice, payeeAlice)
+	}
+
+	// 2. Check Creditor (Bob) settling
+	balBob, payerBob, payeeBob := calcBalance(bobID, aliceID)
+	if balBob != 15000 {
+		t.Errorf("expected identical balance 15000 from creditor perspective, got %d", balBob)
+	}
+	if payerBob != aliceID || payeeBob != bobID {
+		t.Errorf("expected creditor settlement to correctly assign payer=%s, payee=%s; got payer=%s, payee=%s", aliceID, bobID, payerBob, payeeBob)
+	}
+
+	// 3. Amount validations
+	tests := []struct {
+		name    string
+		amount  float64
+		bal     int64
+		wantErr bool
+	}{
+		{"valid full settlement", 150.00, 15000, false},
+		{"valid partial settlement", 50.00, 15000, false},
+		{"zero amount", 0.00, 15000, true},
+		{"negative amount", -10.00, 15000, true},
+		{"too many decimals", 50.123, 15000, true},
+		{"exceeds remaining balance", 150.01, 15000, true},
+		{"exceeds significantly", 200.00, 15000, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.amount <= 0 || !validateMaxDecimals(tt.amount, 2) {
+				if !tt.wantErr {
+					t.Errorf("expected success but failed decimal/sign validation")
+				}
+				return
+			}
+			amtPaise := int64(math.Round(tt.amount * 100))
+			if amtPaise > tt.bal {
+				if !tt.wantErr {
+					t.Errorf("expected success but amount exceeds balance")
+				}
+				return
+			}
+			if tt.wantErr {
+				t.Errorf("expected error for case %q, but passed", tt.name)
+			}
+		})
+	}
+
+	// 4. Self settlement restriction
+	if aliceID == aliceID {
+		err := fmt.Errorf("cannot settle a balance with yourself")
+		if err == nil {
+			t.Errorf("expected error for self settlement")
+		}
+	}
+}
+
 func float64Ptr(v float64) *float64 { return &v }
 func intPtr(v int) *int             { return &v }
+

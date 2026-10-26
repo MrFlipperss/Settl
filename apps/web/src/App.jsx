@@ -834,19 +834,17 @@ function BalanceRow({ entry, owesYou, people, pending, onSelect, onSettle, onPay
               <span>Pay QR</span>
             </button>
           )}
-          {owesYou === false && (
-            pending ? (
-              <span className="settlement-pending">Payment pending</span>
-            ) : onSettle ? (
-              <button
-                type="button"
-                className="button button-secondary button-small settle-up-button"
-                onClick={() => onSettle(entry)}
-              >
-                Settle up
-              </button>
-            ) : null
-          )}
+          {pending ? (
+            <span className="settlement-pending">Payment pending</span>
+          ) : onSettle ? (
+            <button
+              type="button"
+              className="button button-secondary button-small settle-up-button"
+              onClick={() => onSettle(entry)}
+            >
+              Settle up
+            </button>
+          ) : null}
         </div>
       )}
       {isPositive && onSelect && (
@@ -968,13 +966,20 @@ function BalanceActionModal({ entry, groupName, profile, people, busy, isOnline 
       return
     }
     if (!confirmedPaid) {
-      setError('Please check the confirmation box to confirm this money was paid.')
+      setError(isIOwe
+        ? 'Please check the confirmation box to confirm this payment was made.'
+        : 'Please check the confirmation box to confirm this payment was received.')
       return
     }
     setError('')
     setSubmitting(true)
     try {
-      await onSaveSettlement({ payee_id: entry.user_id, amount: payableAmount })
+      await onSaveSettlement({
+        counterparty_id: entry.user_id,
+        payee_id: isIOwe ? entry.user_id : profile.participant_id,
+        payer_id: isIOwe ? profile.participant_id : entry.user_id,
+        amount: payableAmount,
+      })
       close()
     } catch (issue) {
       setError(issue.message || 'Failed to record settlement')
@@ -1078,7 +1083,11 @@ function BalanceActionModal({ entry, groupName, profile, people, busy, isOnline 
                 <div className="choice-icon green"><Check size={20} /></div>
                 <div className="choice-text">
                   <b>Settle up</b>
-                  <p>{isIOwe ? `Confirm that you have paid ${amount(entry.amount_paise)} to ${recipientNameClean}` : 'View settlement status and payment confirmation'}</p>
+                  <p>
+                    {isIOwe
+                      ? `Confirm that you have paid ${amount(entry.amount_paise)} to ${recipientNameClean}`
+                      : `Confirm that you have received ${amount(entry.amount_paise)} from ${counterpartyName}`}
+                  </p>
                 </div>
                 <ArrowRight size={16} className="choice-arrow" />
               </button>
@@ -1163,83 +1172,67 @@ function BalanceActionModal({ entry, groupName, profile, people, busy, isOnline 
 
           {tab === 'settle' && (
             <form className="balance-settle-view" onSubmit={handleSettleSubmit}>
-              {isIOwe ? (
-                <>
-                  <div className="settle-confirm-box">
-                    <div className="settle-summary-line">
-                      <span>Recipient:</span> <b>{recipientName}</b>
-                    </div>
-                    <div className="settle-summary-line">
-                      <span>Full balance owed:</span> <b>{amount(entry.amount_paise)}</b>
-                    </div>
-                    <label>
-                      <span>Amount to settle</span>
-                      <input
-                        type="number"
-                        min="0.01"
-                        max={maxAmount}
-                        step="0.01"
-                        inputMode="decimal"
-                        value={value}
-                        onChange={(e) => setValue(e.target.value)}
-                        required
-                      />
-                    </label>
-                    <label className="settle-confirm-check">
-                      <input
-                        type="checkbox"
-                        checked={confirmedPaid}
-                        onChange={(e) => setConfirmedPaid(e.target.checked)}
-                        required
-                      />
-                      <span>
-                        I confirm that I have already paid <b>{amount(Math.round(payableAmount * 100) || 0)}</b> to <b>{recipientName}</b> outside Settl.
-                      </span>
-                    </label>
-                  </div>
-                  <p className="settlement-confirm-hint">
-                    Settl records that a payment was made. If {recipientName} has a Settl account, they will confirm receipt before your balance changes.
-                  </p>
-                  {error && <Notice kind="error">{error}</Notice>}
-                  <div className="modal-footer">
-                    <button type="button" className="text-button" onClick={close}>Cancel</button>
-                    <button
-                      type="submit"
-                      className="button button-primary"
-                      disabled={!validAmount || !confirmedPaid || busy || submitting || !isOnline}
-                    >
-                      {!isOnline ? 'Offline' : (submitting || busy) ? 'Recording…' : 'I’ve paid this amount'}
-                      <ArrowRight size={15}/>
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="settle-recipient-view">
-                  <div className="settle-info-card">
-                    <ShieldCheck size={20} />
-                    <div>
-                      <b>Waiting for {counterpartyName} to pay</b>
-                      <p>
-                        {counterpartyName} owes you {amount(entry.amount_paise)}. In Settl, the person who made the payment records the settlement.
-                      </p>
-                      <p>
-                        Share your payment QR code so they can transfer the money. Once they record it in the app, a confirmation request will appear on your <b>Balances</b> screen.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="modal-footer">
-                    <button type="button" className="text-button" onClick={close}>Close</button>
-                    <button
-                      type="button"
-                      className="button button-primary"
-                      onClick={() => { setTab('qr'); setError('') }}
-                    >
-                      <QrCode size={15} />
-                      <span>Show Payment QR</span>
-                    </button>
-                  </div>
+              <div className="settle-confirm-box">
+                <div className="settle-summary-line">
+                  <span>{isIOwe ? 'Paying to:' : 'Receiving from:'}</span>
+                  <b>{isIOwe ? recipientNameClean : counterpartyName}</b>
                 </div>
-              )}
+                <div className="settle-summary-line">
+                  <span>{isIOwe ? 'Full balance owed:' : 'Total outstanding to receive:'}</span>
+                  <b>{amount(entry.amount_paise)}</b>
+                </div>
+                <label>
+                  <span>Amount to settle</span>
+                  <input
+                    type="number"
+                    min="0.01"
+                    max={maxAmount}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    required
+                  />
+                </label>
+                <label className="settle-confirm-check">
+                  <input
+                    type="checkbox"
+                    checked={confirmedPaid}
+                    onChange={(e) => setConfirmedPaid(e.target.checked)}
+                    required
+                  />
+                  <span>
+                    {isIOwe ? (
+                      <>I confirm that I have already paid <b>{amount(Math.round(payableAmount * 100) || 0)}</b> to <b>{recipientNameClean}</b> outside Settl.</>
+                    ) : (
+                      <>I confirm that I have received <b>{amount(Math.round(payableAmount * 100) || 0)}</b> from <b>{counterpartyName}</b>.</>
+                    )}
+                  </span>
+                </label>
+              </div>
+              <p className="settlement-confirm-hint">
+                {isIOwe
+                  ? `Settl records that a payment was made. If ${recipientNameClean} has a Settl account, they can confirm receipt before your balance changes.`
+                  : `Confirming receipt immediately settles this balance on both your ledger and ${counterpartyName}'s ledger.`}
+              </p>
+              {error && <Notice kind="error">{error}</Notice>}
+              <div className="modal-footer">
+                <button type="button" className="text-button" onClick={close}>Cancel</button>
+                <button
+                  type="submit"
+                  className="button button-primary"
+                  disabled={!validAmount || !confirmedPaid || busy || submitting || !isOnline}
+                >
+                  {!isOnline
+                    ? 'Offline'
+                    : (submitting || busy)
+                      ? 'Recording…'
+                      : isIOwe
+                        ? 'I’ve paid this amount'
+                        : 'I’ve received this amount'}
+                  <ArrowRight size={15}/>
+                </button>
+              </div>
             </form>
           )}
         </>
