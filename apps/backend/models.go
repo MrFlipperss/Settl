@@ -56,6 +56,7 @@ type Expense struct {
 	ID        string     `json:"id"`
 	ListID    *string    `json:"group_id"`
 	PayerID   string     `json:"payer_id"`
+	CreatedBy *string    `json:"created_by,omitempty"`
 	Amount    int64      `json:"amount_paise"`
 	Category  string     `json:"category"`
 	Note      *string    `json:"note,omitempty"`
@@ -122,6 +123,7 @@ type CreateExpenseRequest struct {
 	ID             *string           `json:"id,omitempty"`
 	GroupID        *string           `json:"group_id"`
 	PayerID        string            `json:"payer_id"`
+	CreatedBy      *string           `json:"created_by,omitempty"`
 	Amount         float64           `json:"amount"`
 	SplitType      string            `json:"split_type"`
 	Category       *string           `json:"category"`

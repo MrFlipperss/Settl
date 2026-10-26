@@ -95,8 +95,9 @@ func createReceiptHandler(q *DBQueries) http.HandlerFunc {
 			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "expense not found"})
 			return
 		}
-		if expense.PayerID != createdBy {
-			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "only the payer of the expense can attach or update receipts"})
+		isAuthorizedReceiptOwner := expense.PayerID == createdBy || (expense.CreatedBy != nil && *expense.CreatedBy == createdBy)
+		if !isAuthorizedReceiptOwner {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "only the payer or creator of the expense can attach or update receipts"})
 			return
 		}
 

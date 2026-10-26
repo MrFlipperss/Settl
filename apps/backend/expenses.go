@@ -49,22 +49,32 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 		canonicalPayerID = *claimedPayer
 	}
 
+	creatorPID := canonicalPayerID
+	if req.CreatedBy != nil && *req.CreatedBy != "" {
+		creatorPID = *req.CreatedBy
+		var claimedCreator *string
+		err = tx.QueryRow(ctx, `SELECT claimed_by_participant_id FROM public.contacts WHERE participant_id = $1`, creatorPID).Scan(&claimedCreator)
+		if err == nil && claimedCreator != nil && *claimedCreator != "" {
+			creatorPID = *claimedCreator
+		}
+	}
+
 	if req.IdempotencyKey != nil && *req.IdempotencyKey != "" {
 		if hasID {
 			err = tx.QueryRow(ctx,
-				`INSERT INTO public.expenses (id, list_id, payer_id, amount, category, note, split_type, created_at, updated_at, idempotency_key, version)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)
+				`INSERT INTO public.expenses (id, list_id, payer_id, created_by, amount, category, note, split_type, created_at, updated_at, idempotency_key, version)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 1)
 				 ON CONFLICT (idempotency_key) DO NOTHING
 				 RETURNING id`,
-				expenseID, req.GroupID, canonicalPayerID, amountRupees, category, req.Note, splitType, createdAt, now, req.IdempotencyKey,
+				expenseID, req.GroupID, canonicalPayerID, creatorPID, amountRupees, category, req.Note, splitType, createdAt, now, req.IdempotencyKey,
 			).Scan(&expenseID)
 		} else {
 			err = tx.QueryRow(ctx,
-				`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at, updated_at, idempotency_key, version)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)
+				`INSERT INTO public.expenses (list_id, payer_id, created_by, amount, category, note, split_type, created_at, updated_at, idempotency_key, version)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)
 				 ON CONFLICT (idempotency_key) DO NOTHING
 				 RETURNING id`,
-				req.GroupID, canonicalPayerID, amountRupees, category, req.Note, splitType, createdAt, now, req.IdempotencyKey,
+				req.GroupID, canonicalPayerID, creatorPID, amountRupees, category, req.Note, splitType, createdAt, now, req.IdempotencyKey,
 			).Scan(&expenseID)
 		}
 		if err != nil {
@@ -79,17 +89,17 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 	} else {
 		if hasID {
 			err = tx.QueryRow(ctx,
-				`INSERT INTO public.expenses (id, list_id, payer_id, amount, category, note, split_type, created_at, updated_at, version)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)
+				`INSERT INTO public.expenses (id, list_id, payer_id, created_by, amount, category, note, split_type, created_at, updated_at, version)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)
 				 RETURNING id`,
-				expenseID, req.GroupID, canonicalPayerID, amountRupees, category, req.Note, splitType, createdAt, now,
+				expenseID, req.GroupID, canonicalPayerID, creatorPID, amountRupees, category, req.Note, splitType, createdAt, now,
 			).Scan(&expenseID)
 		} else {
 			err = tx.QueryRow(ctx,
-				`INSERT INTO public.expenses (list_id, payer_id, amount, category, note, split_type, created_at, updated_at, version)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
+				`INSERT INTO public.expenses (list_id, payer_id, created_by, amount, category, note, split_type, created_at, updated_at, version)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)
 				 RETURNING id`,
-				req.GroupID, canonicalPayerID, amountRupees, category, req.Note, splitType, createdAt, now,
+				req.GroupID, canonicalPayerID, creatorPID, amountRupees, category, req.Note, splitType, createdAt, now,
 			).Scan(&expenseID)
 		}
 		if err != nil {
@@ -123,21 +133,32 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 	if req.Note != nil && *req.Note != "" {
 		notificationBody = *req.Note
 	}
-	notified := make(map[string]struct{}, len(splits))
+	notified := make(map[string]struct{}, len(splits)+2)
+	actorPID := creatorPID
+
+	// If payer is different from creator, notify payer as well so they know an expense was logged in their name
+	recipients := make([]string, 0, len(splits)+1)
 	for _, s := range splits {
-		if s.ParticipantID == req.PayerID {
+		recipients = append(recipients, s.ParticipantID)
+	}
+	if canonicalPayerID != actorPID {
+		recipients = append(recipients, canonicalPayerID)
+	}
+
+	for _, recipientPID := range recipients {
+		if recipientPID == actorPID {
 			continue
 		}
-		if _, exists := notified[s.ParticipantID]; exists {
+		if _, exists := notified[recipientPID]; exists {
 			continue
 		}
-		notified[s.ParticipantID] = struct{}{}
+		notified[recipientPID] = struct{}{}
 		_, err = tx.Exec(ctx,
 			`INSERT INTO public.notifications
 				(recipient_participant_id, actor_participant_id, expense_id, type, title, body)
 			 VALUES ($1, $2, $3, 'expense_created', $4, $5)
 			 ON CONFLICT (recipient_participant_id, expense_id, type) WHERE expense_id IS NOT NULL DO NOTHING`,
-			s.ParticipantID, req.PayerID, expenseID, notificationTitle, notificationBody,
+			recipientPID, actorPID, expenseID, notificationTitle, notificationBody,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("insert expense notification: %w", err)
@@ -151,7 +172,8 @@ func (q *DBQueries) CreateExpense(ctx context.Context, req CreateExpenseRequest,
 	expense := &Expense{
 		ID:        expenseID,
 		ListID:    req.GroupID,
-		PayerID:   req.PayerID,
+		PayerID:   canonicalPayerID,
+		CreatedBy: &creatorPID,
 		Amount:    amountPaise,
 		Category:  category,
 		Note:      req.Note,
@@ -265,13 +287,13 @@ func (q *DBQueries) DeleteExpense(ctx context.Context, id string) error {
 
 func (q *DBQueries) GetExpense(ctx context.Context, id string) (*Expense, error) {
 	row := q.pool.QueryRow(ctx,
-		`SELECT id, list_id, payer_id, amount, category, note, split_type, COALESCE(version, 1), created_at, updated_at
+		`SELECT id, list_id, payer_id, created_by, amount, category, note, split_type, COALESCE(version, 1), created_at, updated_at
 		 FROM public.expenses WHERE id = $1`, id)
 
 	var e Expense
 	var listID *string
 	var amountFloat float64
-	err := row.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt, &e.UpdatedAt)
+	err := row.Scan(&e.ID, &listID, &e.PayerID, &e.CreatedBy, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -308,10 +330,10 @@ func (q *DBQueries) GetExpense(ctx context.Context, id string) (*Expense, error)
 }
 
 func (q *DBQueries) ListExpenses(ctx context.Context, groupID *string, from, to *time.Time, participantID string) ([]Expense, error) {
-	query := `SELECT DISTINCT e.id, e.list_id, e.payer_id, e.amount, e.category, e.note, e.split_type, COALESCE(e.version, 1), e.created_at, e.updated_at
+	query := `SELECT DISTINCT e.id, e.list_id, e.payer_id, e.created_by, e.amount, e.category, e.note, e.split_type, COALESCE(e.version, 1), e.created_at, e.updated_at
 		FROM public.expenses e
 		LEFT JOIN public.expense_splits es ON es.expense_id = e.id
-		WHERE e.deleted_at IS NULL AND (e.payer_id = $1 OR es.participant_id = $1)`
+		WHERE e.deleted_at IS NULL AND (e.payer_id = $1 OR e.created_by = $1 OR es.participant_id = $1)`
 	args := []interface{}{participantID}
 	argIdx := 2
 
@@ -344,7 +366,7 @@ func (q *DBQueries) ListExpenses(ctx context.Context, groupID *string, from, to 
 		var e Expense
 		var listID *string
 		var amountFloat float64
-		if err := rows.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt, &e.UpdatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &listID, &e.PayerID, &e.CreatedBy, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt, &e.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan expense: %w", err)
 		}
 		e.Amount = int64(math.Round(amountFloat * 100))
@@ -380,7 +402,24 @@ func createExpenseHandler(q *DBQueries) http.HandlerFunc {
 			writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
 			return
 		}
-		req.PayerID = callerPID
+
+		// Default payer to caller if not specified
+		if req.PayerID == "" {
+			req.PayerID = callerPID
+		}
+		// Track creator
+		req.CreatedBy = &callerPID
+
+		// Authorize payer: must be eligible for the caller
+		allowedPayer, err := q.CanUseParticipant(r.Context(), callerPID, req.PayerID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to authorize payer"})
+			return
+		}
+		if !allowedPayer {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "selected payer is not an eligible participant"})
+			return
+		}
 
 		if req.Amount <= 0 || len(req.Splits) == 0 {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "amount and splits are required"})
@@ -444,8 +483,8 @@ func getExpenseHandler(q *DBQueries) http.HandlerFunc {
 			return
 		}
 
-		// Authorization Check: Verify caller is payer, participant in split, or member of group
-		isParticipant := expense.PayerID == callerPID
+		// Authorization Check: Verify caller is payer, creator, participant in split, or member of group
+		isParticipant := expense.PayerID == callerPID || (expense.CreatedBy != nil && *expense.CreatedBy == callerPID)
 		if !isParticipant {
 			for _, s := range expense.Splits {
 				if s.ParticipantID == callerPID {
@@ -485,8 +524,9 @@ func updateExpenseHandler(q *DBQueries) http.HandlerFunc {
 			return
 		}
 
-		if existing.PayerID != callerPID {
-			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "only payer can edit expense"})
+		isOwner := existing.PayerID == callerPID || (existing.CreatedBy != nil && *existing.CreatedBy == callerPID)
+		if !isOwner {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "only payer or creator can edit expense"})
 			return
 		}
 
@@ -496,7 +536,21 @@ func updateExpenseHandler(q *DBQueries) http.HandlerFunc {
 			return
 		}
 
-		req.PayerID = callerPID
+		// If client omitted payer_id, retain existing payer_id
+		if req.PayerID == "" {
+			req.PayerID = existing.PayerID
+		}
+
+		// Authorize selected payer
+		allowedPayer, authPayerErr := q.CanUseParticipant(r.Context(), callerPID, req.PayerID)
+		if authPayerErr != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to authorize payer"})
+			return
+		}
+		if !allowedPayer {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "selected payer is not an eligible participant"})
+			return
+		}
 
 		if !validateMaxDecimals(req.Amount, 2) {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "amount cannot have more than 2 decimal places"})
@@ -545,8 +599,9 @@ func deleteExpenseHandler(q *DBQueries) http.HandlerFunc {
 			return
 		}
 
-		if existing.PayerID != callerPID {
-			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "only payer can delete expense"})
+		isOwner := existing.PayerID == callerPID || (existing.CreatedBy != nil && *existing.CreatedBy == callerPID)
+		if !isOwner {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "only payer or creator can delete expense"})
 			return
 		}
 

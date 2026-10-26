@@ -36,11 +36,11 @@ func (q *DBQueries) GetChanges(ctx context.Context, since time.Time, participant
 }
 
 func (q *DBQueries) GetChangedExpenses(ctx context.Context, since time.Time, participantID string) ([]Expense, error) {
-	query := `SELECT DISTINCT e.id, e.list_id, e.payer_id, e.amount, e.category, e.note,
+	query := `SELECT DISTINCT e.id, e.list_id, e.payer_id, e.created_by, e.amount, e.category, e.note,
 	                  e.split_type, COALESCE(e.version, 1), e.created_at, e.updated_at
 		FROM public.expenses e
 		LEFT JOIN public.expense_splits es ON es.expense_id = e.id
-		WHERE (e.payer_id = $1 OR es.participant_id = $1)
+		WHERE (e.payer_id = $1 OR e.created_by = $1 OR es.participant_id = $1)
 		  AND (e.updated_at > $2 OR e.created_at > $2)
 		ORDER BY GREATEST(e.created_at, COALESCE(e.updated_at, e.created_at)) DESC`
 
@@ -55,7 +55,7 @@ func (q *DBQueries) GetChangedExpenses(ctx context.Context, since time.Time, par
 		var e Expense
 		var listID *string
 		var amountFloat float64
-		if err := rows.Scan(&e.ID, &listID, &e.PayerID, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt, &e.UpdatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &listID, &e.PayerID, &e.CreatedBy, &amountFloat, &e.Category, &e.Note, &e.SplitType, &e.Version, &e.CreatedAt, &e.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan expense: %w", err)
 		}
 		e.Amount = int64(math.Round(amountFloat * 100))

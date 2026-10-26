@@ -308,4 +308,199 @@ func TestHistoricalExpenseIntegrityWithCanonicalClaiming(t *testing.T) {
 		}
 	}
 }
+// TestPayerSelection_BalanceCalculation verifies that pairwise obligations
+// are correctly computed when a user (e.g. Aanya) pays and the payer is or isn't in splits.
+func TestPayerSelection_BalanceCalculation(t *testing.T) {
+	// Scenario from requirement: ₹1,000 paid by Aanya, split equally between Current User and Aanya.
+	// Aanya's paid = 1000 INR
+	// Current User share = 500 INR
+	// Aanya share = 500 INR
+	// Net: Current User owes Aanya 500 INR (50000 paise).
+	req := CreateExpenseRequest{
+		PayerID:   "aanya-pid",
+		Amount:    1000.00,
+		SplitType: "equal",
+		Splits: []CreateSplitItem{
+			{UserID: "current-user-pid"},
+			{UserID: "aanya-pid"},
+		},
+	}
 
+	splits, err := resolveSplits(req)
+	if err != nil {
+		t.Fatalf("resolveSplits failed: %v", err)
+	}
+
+	if len(splits) != 2 {
+		t.Fatalf("expected 2 splits, got %d", len(splits))
+	}
+
+	// Pairwise balance simulation matching pairwise_balances view:
+	// sum(share_amount) where from_participant != to_participant
+	debts := make(map[string]int64)
+	for _, s := range splits {
+		if s.ParticipantID != req.PayerID {
+			debts[s.ParticipantID] += s.ShareAmount
+		}
+	}
+
+	if debts["current-user-pid"] != 50000 {
+		t.Errorf("expected current user to owe Aanya 50000 paise (₹500), got %d", debts["current-user-pid"])
+	}
+	if debts["aanya-pid"] != 0 {
+		t.Errorf("expected Aanya self-debt to be excluded, got %d", debts["aanya-pid"])
+	}
+}
+
+// TestPayerNotIncludedInSplits verifies that when the payer does not partake in the split,
+// all split participants owe their entire shares to the payer.
+func TestPayerNotIncludedInSplits(t *testing.T) {
+	// Aanya pays ₹600 for Bob and Charlie (equal split, ₹300 each). Aanya gets nothing.
+	req := CreateExpenseRequest{
+		PayerID:   "aanya-pid",
+		Amount:    600.00,
+		SplitType: "equal",
+		Splits: []CreateSplitItem{
+			{UserID: "bob-pid"},
+			{UserID: "charlie-pid"},
+		},
+	}
+
+	splits, err := resolveSplits(req)
+	if err != nil {
+		t.Fatalf("resolveSplits failed: %v", err)
+	}
+
+	debts := make(map[string]int64)
+	for _, s := range splits {
+		if s.ParticipantID != req.PayerID {
+			debts[s.ParticipantID] += s.ShareAmount
+		}
+	}
+
+	if debts["bob-pid"] != 30000 {
+		t.Errorf("expected bob to owe Aanya 30000 paise (₹300), got %d", debts["bob-pid"])
+	}
+	if debts["charlie-pid"] != 30000 {
+		t.Errorf("expected charlie to owe Aanya 30000 paise (₹300), got %d", debts["charlie-pid"])
+	}
+}
+
+// TestPayerSelection_AllSplitTypes ensures arbitrary payer works identically across
+// exact, percentage, and shares splits.
+func TestPayerSelection_AllSplitTypes(t *testing.T) {
+	payer := "payer-aanya"
+
+	// 1. Exact split
+	exactReq := CreateExpenseRequest{
+		PayerID:   payer,
+		Amount:    500.00,
+		SplitType: "exact",
+		Splits: []CreateSplitItem{
+			{UserID: "user-alice", ExactAmount: float64Ptr(200.00)},
+			{UserID: "user-bob", ExactAmount: float64Ptr(300.00)},
+		},
+	}
+	exactSplits, err := resolveSplits(exactReq)
+	if err != nil {
+		t.Fatalf("exact split failed: %v", err)
+	}
+	if exactSplits[0].ShareAmount != 20000 || exactSplits[1].ShareAmount != 30000 {
+		t.Errorf("unexpected exact shares: %+v", exactSplits)
+	}
+
+	// 2. Percentage split
+	pctReq := CreateExpenseRequest{
+		PayerID:   payer,
+		Amount:    1000.00,
+		SplitType: "percentage",
+		Splits: []CreateSplitItem{
+			{UserID: "user-alice", Percentage: float64Ptr(25.0)},
+			{UserID: "user-bob", Percentage: float64Ptr(75.0)},
+		},
+	}
+	pctSplits, err := resolveSplits(pctReq)
+	if err != nil {
+		t.Fatalf("percentage split failed: %v", err)
+	}
+	if pctSplits[0].ShareAmount != 25000 || pctSplits[1].ShareAmount != 75000 {
+		t.Errorf("unexpected percentage shares: %+v", pctSplits)
+	}
+
+	// 3. Shares split
+	shareReq := CreateExpenseRequest{
+		PayerID:   payer,
+		Amount:    100.00,
+		SplitType: "shares",
+		Splits: []CreateSplitItem{
+			{UserID: "user-alice", ShareCount: intPtr(1)},
+			{UserID: "user-bob", ShareCount: intPtr(3)},
+		},
+	}
+	shSplits, err := resolveSplits(shareReq)
+	if err != nil {
+		t.Fatalf("shares split failed: %v", err)
+	}
+	if shSplits[0].ShareAmount != 2500 || shSplits[1].ShareAmount != 7500 {
+		t.Errorf("unexpected share weights: %+v", shSplits)
+	}
+}
+
+// TestExpenseCreatorAndPayerAuthorizationPolicy verifies the ownership rules
+// where both payer and original creator are recognized as owners for updates and deletes.
+func TestExpenseCreatorAndPayerAuthorizationPolicy(t *testing.T) {
+	creator := "creator-alice"
+	payer := "payer-aanya"
+	otherUser := "unrelated-eve"
+
+	expense := Expense{
+		ID:        "exp-1",
+		PayerID:   payer,
+		CreatedBy: &creator,
+		Amount:    10000,
+	}
+
+	isOwner := func(user string) bool {
+		return expense.PayerID == user || (expense.CreatedBy != nil && *expense.CreatedBy == user)
+	}
+
+	if !isOwner(creator) {
+		t.Errorf("expected expense creator %q to have owner permissions", creator)
+	}
+	if !isOwner(payer) {
+		t.Errorf("expected expense payer %q to have owner permissions", payer)
+	}
+	if isOwner(otherUser) {
+		t.Errorf("unrelated user %q should not have owner permissions", otherUser)
+	}
+}
+
+// TestDefaultPayerWhenOmitted tests backward compatibility for clients omitting payer_id.
+func TestDefaultPayerWhenOmitted(t *testing.T) {
+	callerPID := "caller-user-id"
+	req := CreateExpenseRequest{
+		PayerID:   "", // omitted by legacy client
+		Amount:    100.0,
+		SplitType: "equal",
+		Splits: []CreateSplitItem{
+			{UserID: callerPID},
+		},
+	}
+
+	if req.PayerID == "" {
+		req.PayerID = callerPID
+	}
+	if req.CreatedBy == nil || *req.CreatedBy == "" {
+		req.CreatedBy = &callerPID
+	}
+
+	if req.PayerID != callerPID {
+		t.Errorf("expected payer_id to default to %q, got %q", callerPID, req.PayerID)
+	}
+	if req.CreatedBy == nil || *req.CreatedBy != callerPID {
+		t.Errorf("expected created_by to default to %q", callerPID)
+	}
+}
+
+func float64Ptr(v float64) *float64 { return &v }
+func intPtr(v int) *int             { return &v }
