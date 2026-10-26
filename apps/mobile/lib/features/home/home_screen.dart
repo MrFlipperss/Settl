@@ -560,7 +560,7 @@ class _SpotlightSearchBarState extends ConsumerState<_SpotlightSearchBar> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: action.category,
+                initialValue: action.category,
                 decoration: const InputDecoration(
                   labelText: 'Category',
                   isDense: true,
@@ -607,18 +607,17 @@ class _SpotlightSearchBarState extends ConsumerState<_SpotlightSearchBar> {
             if (action.type == SpotlightActionType.budget) ...[
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: action.category,
+                initialValue: action.category,
                 decoration: const InputDecoration(
                   labelText: 'Budget category',
                   isDense: true,
                 ),
-                items: [
+                items: {
                   ...KeywordExpenseCategorizer.categories,
                   if (!KeywordExpenseCategorizer.categories
                       .contains(action.category))
                     action.category,
-                ]
-                    .toSet()
+                }
                     .map((category) => DropdownMenuItem(
                           value: category,
                           child: Text(category),
@@ -663,7 +662,7 @@ class _SpotlightSearchBarState extends ConsumerState<_SpotlightSearchBar> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: action.billingCycle,
+                initialValue: action.billingCycle,
                 decoration: const InputDecoration(
                   labelText: 'Billing cycle',
                   isDense: true,

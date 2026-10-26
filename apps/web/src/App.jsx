@@ -131,7 +131,7 @@ export default function App() {
     data.contacts.forEach((person) => all.set(person.participant_id, person))
     knownPeople.forEach((person) => { if (!all.has(person.participant_id)) all.set(person.participant_id, person) })
     data.balances?.breakdown?.forEach((person) => {
-      if (person.user_id && !all.has(person.user_id)) all.set(person.user_id, { participant_id: person.user_id, display_name: person.user_name || 'Settl person' })
+      if (person.user_id && !all.has(person.user_id)) all.set(person.user_id, { participant_id: person.user_id, display_name: person.user_name || 'Settl person', kind: 'balance' })
     })
     return [...all.values()]
   }, [profile, data, knownPeople])

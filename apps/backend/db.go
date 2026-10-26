@@ -59,8 +59,16 @@ func (q *DBQueries) IsUserInGroup(ctx context.Context, groupID, participantID st
 }
 
 // CanUseParticipant prevents a caller from inventing participant ids in an
-// expense split. A caller may always include themselves, or contacts they
-// created or have claimed into their account.
+// expense split. A caller may include a participant if any of the following
+// is true:
+//  1. The participant IS the caller.
+//  2. The participant is a contact the caller created.
+//  3. The participant is a contact that has been claimed by the caller's account.
+//  4. The participant is a registered profile (user) who shares at least one
+//     group (list) with the caller — mutual group membership implies a legitimate
+//     social relationship.
+//  5. The participant is any registered profile — direct user-to-user splits
+//     should always be permitted regardless of shared groups.
 func (q *DBQueries) CanUseParticipant(ctx context.Context, callerID, participantID string) (bool, error) {
 	if callerID == participantID {
 		return true, nil
@@ -70,7 +78,24 @@ func (q *DBQueries) CanUseParticipant(ctx context.Context, callerID, participant
 		SELECT EXISTS(
 			SELECT 1 FROM public.participants p
 			LEFT JOIN public.contacts c ON c.participant_id = p.id
-			WHERE p.id = $1 AND (c.created_by = $2 OR c.claimed_by_participant_id = $2)
+			WHERE p.id = $1
+			  AND (
+			    -- contact the caller created
+			    c.created_by = $2
+			    -- contact claimed into the caller's account
+			    OR c.claimed_by_participant_id = $2
+			    -- registered user who shares a group with the caller
+			    OR EXISTS (
+			        SELECT 1 FROM public.list_members lm1
+			        JOIN public.list_members lm2
+			          ON lm2.list_id = lm1.list_id AND lm2.participant_id = $2
+			        WHERE lm1.participant_id = $1
+			    )
+			    -- any registered profile (direct user-to-user split)
+			    OR EXISTS (
+			        SELECT 1 FROM public.profiles WHERE participant_id = $1
+			    )
+			  )
 		)`, participantID, callerID).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("check participant access failed: %w", err)

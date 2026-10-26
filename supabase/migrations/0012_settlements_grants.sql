@@ -1,0 +1,23 @@
+-- Grant PostgREST access to the settlements table for authenticated users.
+--
+-- The table was created in 0011_settlements.sql with RLS enabled and
+-- row-level policies already in place. Those policies correctly restrict
+-- what each user can see and do. However, PostgREST (used by the mobile
+-- Supabase client) requires an explicit GRANT at the role level before it
+-- will even route a request through to the RLS gate — without it every
+-- query returns a 42501 "permission denied for table settlements" error
+-- regardless of RLS.
+--
+-- SELECT  – payers and payees can read their own settlements (RLS policy:
+--           "users can read their settlements").
+-- INSERT  – payers record a new settlement (handled via the Go backend
+--           using the service role, which bypasses RLS; granting INSERT
+--           here allows future direct-client flows without a schema change).
+-- UPDATE  – payees confirm / decline (RLS policy: "payees can confirm
+--           settlements"). The mobile client calls this directly via
+--           Supabase PostgREST.
+--
+-- anon role is intentionally excluded: settlements are private data and
+-- no unauthenticated path should exist.
+
+GRANT SELECT, INSERT, UPDATE ON public.settlements TO authenticated;
