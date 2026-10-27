@@ -600,9 +600,25 @@ class _SpotlightSearchBarState extends ConsumerState<_SpotlightSearchBar> {
                     ),
                 ],
               ),
-              if (action.groupId != null)
-                Text('Group expense: ${action.personName}',
-                    style: Theme.of(context).textTheme.bodySmall),
+              if (action.groupName != null || action.groupId != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.folder_outlined,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Collection: ${action.groupName ?? "Group"}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
             if (action.type == SpotlightActionType.budget) ...[
               const SizedBox(height: 12),

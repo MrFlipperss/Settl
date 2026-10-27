@@ -133,6 +133,7 @@ class SpotlightAction {
     this.personId,
     this.participantIds = const [],
     this.groupId,
+    this.groupName,
     this.subscriptionName,
     this.billingCycle,
     this.upiId = '',
@@ -146,6 +147,7 @@ class SpotlightAction {
   final String? personId;
   final List<String> participantIds;
   final String? groupId;
+  final String? groupName;
   final String? subscriptionName;
   final String? billingCycle;
   final String upiId;
@@ -158,6 +160,7 @@ class SpotlightAction {
     String? personId,
     List<String>? participantIds,
     String? groupId,
+    String? groupName,
     String? subscriptionName,
     String? billingCycle,
     String? upiId,
@@ -171,6 +174,7 @@ class SpotlightAction {
         personId: personId ?? this.personId,
         participantIds: participantIds ?? this.participantIds,
         groupId: groupId ?? this.groupId,
+        groupName: groupName ?? this.groupName,
         subscriptionName: subscriptionName ?? this.subscriptionName,
         billingCycle: billingCycle ?? this.billingCycle,
         upiId: upiId ?? this.upiId,
@@ -256,30 +260,53 @@ class SpotlightParser {
     if (amountMatch == null) return null;
 
     final amountText = amountMatch.group(1) ?? amountMatch.group(2)!;
-    final matches = _matchPeople(text, knownPeople);
     final groupMatch = _matchGroup(text, knownGroups);
+    final matches = _matchPeople(text, knownPeople);
+
+    // Extract person name from "with <name>" or "for <name>" if not pre-matched
+    String? explicitPersonName;
+    final withMatch = RegExp(
+      r'\b(?:with|for)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)\b',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (withMatch != null) {
+      final candidate = withMatch.group(1)!.trim();
+      // Only treat as person if it doesn't match the group name
+      if (groupMatch == null ||
+          !groupMatch.name.toLowerCase().contains(candidate.toLowerCase())) {
+        explicitPersonName = candidate;
+      }
+    }
+
     final participantIds = <String>{
       if (currentParticipantId.isNotEmpty) currentParticipantId,
     };
     if (groupMatch != null) {
       participantIds.addAll(groupMatch.memberIds);
-    } else {
-      participantIds.addAll(matches.map((person) => person.id));
     }
+    participantIds.addAll(matches.map((person) => person.id));
+
     final description = _expenseDescription(
       text,
       amountMatch.group(0)!,
       matches,
       groupMatch,
+      explicitPersonName,
     );
+
+    final resolvedPersonName = matches.isNotEmpty
+        ? matches.map((p) => p.name).join(', ')
+        : explicitPersonName;
+
     return SpotlightAction(
       type: SpotlightActionType.expense,
       amount: _parseAmount(amountText),
       category: categorizer.categorize(text),
       description: description.isEmpty ? 'Expense' : _titleCase(description),
-      personName: groupMatch?.name ?? matches.map((p) => p.name).join(', '),
+      personName: resolvedPersonName,
       participantIds: participantIds.toList(),
       groupId: groupMatch?.id,
+      groupName: groupMatch?.name,
     );
   }
 
@@ -314,9 +341,18 @@ class SpotlightParser {
     String text,
     List<SpotlightGroup> groups,
   ) {
+    if (groups.isEmpty) return null;
+    final sorted = groups.toList()
+      ..sort((a, b) => b.name.length.compareTo(a.name.length));
     final normalized = text.toLowerCase();
-    for (final group in groups) {
-      if (_containsWord(normalized, group.name.toLowerCase())) return group;
+    for (final group in sorted) {
+      final name = group.name.trim().toLowerCase();
+      if (name.isEmpty) continue;
+      final pattern = RegExp(
+        '(?:\\b(?:in|for|at|under)\\s+)?\\b${RegExp.escape(name)}\\b',
+        caseSensitive: false,
+      );
+      if (pattern.hasMatch(normalized)) return group;
     }
     return null;
   }
@@ -326,11 +362,15 @@ class SpotlightParser {
     String amountText,
     List<SpotlightPerson> people,
     SpotlightGroup? group,
+    String? rawPersonName,
   ) {
     var description = text.replaceFirst(amountText, ' ');
     if (group != null) {
       description = description.replaceAll(
-        RegExp(RegExp.escape(group.name), caseSensitive: false),
+        RegExp(
+          '(?:\\b(?:in|for|at|under)\\s+)?\\b${RegExp.escape(group.name)}\\b',
+          caseSensitive: false,
+        ),
         ' ',
       );
     }
@@ -347,9 +387,20 @@ class SpotlightParser {
         );
       }
     }
+    if (rawPersonName != null && rawPersonName.isNotEmpty) {
+      description = description.replaceAll(
+        RegExp(RegExp.escape(rawPersonName), caseSensitive: false),
+        ' ',
+      );
+    }
+    // Remove "with <name>" remnants
+    description = description.replaceAll(
+      RegExp(r'\b(?:with|for)\s+[a-zA-Z]+', caseSensitive: false),
+      ' ',
+    );
     return description
         .replaceAll(
-            RegExp(r'\b(with|and|for|paid|spent|in|on|trip)\b',
+            RegExp(r'\b(with|and|paid|spent|in|on|at|under|by|for)\b',
                 caseSensitive: false),
             ' ')
         .replaceAll(RegExp(r'[^A-Za-z0-9\u0080-\uFFFF ]'), ' ')

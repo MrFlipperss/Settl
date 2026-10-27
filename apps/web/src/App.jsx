@@ -8,6 +8,8 @@ import {
   Plus, QrCode, ReceiptText, Search, Settings, Share2, ShieldCheck, Sparkles, Sun, Trash2, Users, Wallet,
   WifiOff, X, Zap,
 } from 'lucide-react'
+import { ACCENT_PRESETS, applyAccent } from './utils/theme.js'
+import { parseSpotlightExpense } from './utils/spotlight.js'
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://settl-kru1.onrender.com').replace(/\/$/, '')
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -83,6 +85,8 @@ export default function App() {
   const [modal, setModal] = useState(null)
   const [query, setQuery] = useState('')
   const [dark, setDark] = useState(localStorage.getItem('settl-theme') === 'dark')
+  const [accent, setAccent] = useState(() => localStorage.getItem('settl-accent') || 'sage')
+  const [customAccent, setCustomAccent] = useState(() => localStorage.getItem('settl-custom-accent') || '#55735a')
   const [busy, setBusy] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [settlements, setSettlements] = useState([])
@@ -113,7 +117,10 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
     localStorage.setItem('settl-theme', dark ? 'dark' : 'light')
-  }, [dark])
+    localStorage.setItem('settl-accent', accent)
+    localStorage.setItem('settl-custom-accent', customAccent)
+    applyAccent(accent, customAccent, dark)
+  }, [dark, accent, customAccent])
 
   useEffect(() => {
     if (!supabase) { setAuthLoading(false); return }
@@ -474,38 +481,51 @@ export default function App() {
   }
 
   async function startFromSpotlight(text) {
-    const normalizedText = text.replace(/\s+/g, ' ').trim()
-    const cash = normalizedText.match(/(?:₹|rs\.?|inr)\s*([\d,]+(?:\.\d{1,2})?)/i)
-      || normalizedText.match(/(?:^|\s)([\d,]+(?:\.\d{1,2})?)(?=\s|$)/)
-    const rawAmount = cash?.[1]?.replace(/,/g, '') || ''
-    const note = (cash ? normalizedText.replace(cash[0], ' ').replace(/\s+/g, ' ').trim() : normalizedText)
-      .replace(/\s*\b(?:with|for|among)\s+.+$/i, '').trim()
-    const category = /food|dinner|lunch|breakfast|coffee|chai|grocer|restaurant|snack|meal/i.test(note) ? 'Food'
-      : /cab|auto|uber|metro|bus|train|fuel|taxi|rickshaw/i.test(note) ? 'Transport'
-        : /trip|flight|hotel|travel|stay/i.test(note) ? 'Travel'
-          : /rent|electricity|water|internet|utility|bill/i.test(note) ? 'Home'
-            : /shopping|clothes|purchase|market/i.test(note) ? 'Shopping'
-              : /movie|cinema|concert|game|netflix/i.test(note) ? 'Entertainment' : 'Other'
-    const normalizedNote = (value) => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
-    const noteWords = ` ${normalizedNote(note)} `
-    const mentionedPeople = [...people]
-    const namePhrase = note.match(/\b(?:with|for|among)\s+(.+)$/i)?.[1]
-    if (namePhrase) {
-      const names = namePhrase.split(/\s*(?:,|&|\band\b)\s*/i).map((name) => name.trim()).filter((name) => name.length >= 2)
-      const searches = await Promise.allSettled(names.map((name) => request(`/api/v1/contacts/search?q=${encodeURIComponent(name)}`, session.access_token)))
-      searches.forEach((result) => {
-        if (result.status === 'fulfilled' && Array.isArray(result.value)) mentionedPeople.push(...result.value)
-      })
-      const unique = new Map(mentionedPeople.map((person) => [person.participant_id, person]))
-      setKnownPeople((prev) => [...new Map([...prev, ...mentionedPeople.filter((person) => person.kind !== 'self')].map((person) => [person.participant_id, person])).values()])
-      mentionedPeople.splice(0, mentionedPeople.length, ...unique.values())
+    const searchContacts = async (name) => {
+      if (!session?.access_token) return []
+      try {
+        const res = await request(`/api/v1/contacts/search?q=${encodeURIComponent(name)}`, session.access_token)
+        return Array.isArray(res) ? res : []
+      } catch {
+        return []
+      }
     }
-    const peopleDraft = mentionedPeople.filter((person) => {
-      if (person.kind === 'self' || !person.display_name || person.display_name === 'Settl person') return false
-      const aliases = normalizedNote(person.display_name).split(' ')
-      return aliases.some((alias) => alias.length >= 3 && noteWords.includes(` ${alias} `))
-    }).map((person) => person.participant_id)
-    setModal({ type: 'expense', prefill: { amount: rawAmount, note, category, participantIDs: [profile.participant_id, ...peopleDraft] } })
+
+    const parsed = await parseSpotlightExpense(text, {
+      people,
+      groups: data.groups,
+      currentUserId: profile.participant_id,
+      searchContacts,
+    })
+
+    if (parsed.matchedPeople && parsed.matchedPeople.length > 0) {
+      setKnownPeople((prev) => [
+        ...new Map([...prev, ...parsed.matchedPeople.filter((person) => person.kind !== 'self')].map((p) => [p.participant_id, p])).values(),
+      ])
+    }
+
+    let allParticipantIDs = parsed.participantIDs
+    if (parsed.groupId) {
+      try {
+        const members = await loadGroupMembers(parsed.groupId)
+        if (Array.isArray(members) && members.length > 0) {
+          allParticipantIDs = [...new Set([...allParticipantIDs, ...members.map((m) => m.participant_id)])]
+        }
+      } catch {
+        // Fall back to matched participants if loading group members fails
+      }
+    }
+
+    setModal({
+      type: 'expense',
+      prefill: {
+        amount: parsed.amount,
+        note: parsed.note,
+        category: parsed.category,
+        groupId: parsed.groupId,
+        participantIDs: allParticipantIDs,
+      },
+    })
   }
 
   async function logout() { if (session?.user?.id) sessionStorage.removeItem(`settl-profile:${session.user.id}`); if (supabase) await supabase.auth.signOut(); setProfile(null) }
@@ -583,14 +603,14 @@ export default function App() {
         {screen === 'balances' && <BalancesPage balances={data.balances} settlements={settlements} profile={profile} loading={loading} busy={busy} people={people} isOnline={isOnline} onNavigate={setScreen} onSelectBalance={(entry, groupName, initialTab) => setModal({ type: 'balanceDetail', entry, groupName, initialTab })} onSettle={(entry) => setModal({ type: 'balanceDetail', entry, initialTab: 'settle' })} onSettlementResponse={respondToSettlement} />}
         {screen === 'people' && <PeoplePage data={data} query={query} onQuery={setQuery} onAdd={() => setModal({ type: 'person' })} profile={profile} />}
         {screen === 'collections' && <CollectionsPage data={data} loading={loading} onCreate={() => setModal({ type: 'collection' })} onOpen={openCollection} />}
-        {screen === 'settings' && <SettingsPage profile={profile} session={session} onUpdateProfile={updateProfileInfo} onLogout={logout} dark={dark} onToggleDark={() => setDark(!dark)} />}
+        {screen === 'settings' && <SettingsPage profile={profile} session={session} onUpdateProfile={updateProfileInfo} onLogout={logout} dark={dark} onToggleDark={() => setDark(!dark)} accent={accent} customAccent={customAccent} onSelectAccent={(id, customHex) => { setAccent(id); if (customHex) setCustomAccent(customHex); }} />}
       </div>
     </main>
     <button className="mobile-add" aria-label="Add expense" onClick={() => setModal({ type: 'expense' })}>
       <Plus size={16} />
       <span>Expense</span>
     </button>
-    {modal && <ModalHost modal={modal} isOnline={isOnline} close={() => setModal(null)} profile={profile} people={people} groups={data.groups} expenses={data.expenses} balances={data.balances} busy={busy} onExpense={saveExpense} onUpdateExpense={updateExpense} onDeleteExpense={deleteExpense} onSettlement={recordSettlement} onSelectBalance={(entry, groupName, initialTab) => setModal({ type: 'balanceDetail', entry, groupName, initialTab })} onUpdateUPI={updateUPI} onEditUPI={() => setModal({ type: 'upi' })} onCollection={createCollection} onPerson={addPerson} onOpenPerson={() => setModal({ type: 'person' })} onLoadGroupMembers={loadGroupMembers} onAddMember={addCollectionMember} onRemoveMember={removeCollectionMember} onAddCollectionExpense={startCollectionExpense} onTheme={() => setDark(!dark)} dark={dark} onOpenSettings={() => { setModal(null); setScreen('settings') }} />}
+    {modal && <ModalHost modal={modal} isOnline={isOnline} close={() => setModal(null)} profile={profile} people={people} groups={data.groups} expenses={data.expenses} balances={data.balances} busy={busy} onExpense={saveExpense} onUpdateExpense={updateExpense} onDeleteExpense={deleteExpense} onSettlement={recordSettlement} onSelectBalance={(entry, groupName, initialTab) => setModal({ type: 'balanceDetail', entry, groupName, initialTab })} onUpdateUPI={updateUPI} onEditUPI={() => setModal({ type: 'upi' })} onCollection={createCollection} onPerson={addPerson} onOpenPerson={() => setModal({ type: 'person' })} onLoadGroupMembers={loadGroupMembers} onAddMember={addCollectionMember} onRemoveMember={removeCollectionMember} onAddCollectionExpense={startCollectionExpense} onTheme={() => setDark(!dark)} dark={dark} accent={accent} customAccent={customAccent} onSelectAccent={(id, customHex) => { setAccent(id); if (customHex) setCustomAccent(customHex); }} onOpenSettings={() => { setModal(null); setScreen('settings') }} />}
   </div>
 }
 
@@ -1273,7 +1293,7 @@ function CollectionsPage({ data, loading, onCreate, onOpen }) {
   return <><PageHeader eyebrow="Your circles" title="Collections" copy="Bring recurring groups together, without the admin." action={<button className="button button-primary" onClick={onCreate}><Plus size={16}/> New collection</button>}/><div className="collection-grid">{data.groups.map((group, index) => <article className="collection-card" key={group.id}><div className={`collection-hero collection-${index % 4}`}><div className="collection-orbit"/><div className="collection-icon"><Users size={20}/></div><span>{group.account_number || 'SETTL COLLECTION'}</span><MoreHorizontal className="collection-more" size={18}/></div><div className="collection-body"><h3>{group.name}</h3><p>{group.member_count || 1} members · Created {new Date(group.created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</p><button className="collection-open" onClick={() => onOpen(group)}>Open collection <ArrowRight size={14}/></button></div></article>)}{!data.groups.length && !loading && <div className="collection-empty"><Empty icon={LayoutGrid} title="Make room for your regulars" copy="A collection can be your flatmates, family, or the people you travel with." action={<button className="button button-secondary" onClick={onCreate}><FolderPlus size={15}/> Create a collection</button>}/></div>}{loading && <div className="skeleton-row"/>}</div></>
 }
 
-function SettingsPage({ profile, session, onUpdateProfile, onLogout, dark, onToggleDark }) {
+function SettingsPage({ profile, session, onUpdateProfile, onLogout, dark, onToggleDark, accent, customAccent, onSelectAccent }) {
   const [displayName, setDisplayName] = useState(profile.display_name || '')
   const [upiId, setUpiId] = useState(profile.upi_id || '')
   const [defaultCategory, setDefaultCategory] = useState(typeof localStorage !== 'undefined' ? (localStorage.getItem('settl_default_category') || 'Food') : 'Food')
@@ -1541,6 +1561,53 @@ function SettingsPage({ profile, session, onUpdateProfile, onLogout, dark, onTog
                 <span>{dark ? 'Switch to Light' : 'Switch to Dark'}</span>
               </button>
             </div>
+
+            <div className="accent-personalization-block">
+              <div className="accent-header-row">
+                <div>
+                  <b>Accent color</b>
+                  <small>Personalize Settl's highlights, buttons, and badges</small>
+                </div>
+                <span className="accent-active-pill">
+                  <span className="accent-mini-dot" style={{ background: 'var(--brand-fill)' }} />
+                  {accent === 'custom' ? 'Custom' : (ACCENT_PRESETS.find((p) => p.id === accent)?.name || 'Sage Green')}
+                </span>
+              </div>
+
+              <div className="accent-grid">
+                {ACCENT_PRESETS.map((preset) => {
+                  const isSelected = accent === preset.id
+                  const swatchColor = dark ? preset.dark.fill : preset.light.fill
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={`accent-card ${isSelected ? 'selected' : ''}`}
+                      onClick={() => onSelectAccent(preset.id)}
+                      title={`Select ${preset.name}`}
+                    >
+                      <span className="accent-card-swatch" style={{ background: swatchColor }}>
+                        {isSelected && <Check size={14} className="accent-check-icon" />}
+                      </span>
+                      <span className="accent-card-name">{preset.name}</span>
+                    </button>
+                  )
+                })}
+
+                <label className={`accent-card accent-card-custom ${accent === 'custom' ? 'selected' : ''}`} title="Pick a custom accent color">
+                  <span className="accent-card-swatch custom-swatch" style={{ background: customAccent }}>
+                    {accent === 'custom' ? <Check size={14} className="accent-check-icon" /> : <Sparkles size={13} />}
+                    <input
+                      type="color"
+                      className="accent-color-native-input"
+                      value={customAccent}
+                      onChange={(e) => onSelectAccent('custom', e.target.value)}
+                    />
+                  </span>
+                  <span className="accent-card-name">{accent === 'custom' ? 'Custom' : 'Custom…'}</span>
+                </label>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1588,7 +1655,7 @@ function NotificationsPopover({ items, unreadCount, loading, onClose, onReadAll,
   return <section className="notifications-popover" role="dialog" aria-label="Notifications"><header><div><b>Notifications</b><small>{unreadCount ? `${unreadCount} unread` : 'You’re up to date'}</small></div><div className="notification-actions">{unreadCount > 0 && <button onClick={onReadAll}>Mark all read</button>}<button className="icon-button" aria-label="Close notifications" onClick={onClose}><X size={15}/></button></div></header>{loading ? <div className="notification-empty">Loading your notifications…</div> : items.length ? <div className="notification-list">{items.map((item) => <button key={item.id} className={`notification-item ${item.read_at ? 'read' : 'unread'}`} onClick={() => onSelect(item)}><span className="notification-avatar"><ReceiptText size={15}/></span><span className="notification-copy"><b>{item.title}</b><span>{item.actor_display_name} · {item.body}</span><small>{new Date(item.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</small></span>{!item.read_at && <i aria-label="Unread"/>}</button>)}</div> : <div className="notification-empty"><span className="empty-icon"><Bell size={17}/></span><b>No notifications yet</b><p>When someone adds you to a shared expense, it’ll show up here.</p></div>}<footer><span>Notifications are in-app. Unregistered contacts can see them after they join Settl.</span></footer></section>
 }
 
-function ModalHost({ modal, close, profile, people, groups, expenses, balances, busy, isOnline = true, onExpense, onUpdateExpense, onDeleteExpense, onSettlement, onSelectBalance, onUpdateUPI, onEditUPI, onCollection, onPerson, onOpenPerson, onLoadGroupMembers, onAddMember, onRemoveMember, onAddCollectionExpense, dark, onTheme, onOpenSettings }) {
+function ModalHost({ modal, close, profile, people, groups, expenses, balances, busy, isOnline = true, onExpense, onUpdateExpense, onDeleteExpense, onSettlement, onSelectBalance, onUpdateUPI, onEditUPI, onCollection, onPerson, onOpenPerson, onLoadGroupMembers, onAddMember, onRemoveMember, onAddCollectionExpense, dark, onTheme, accent, customAccent, onSelectAccent, onOpenSettings }) {
   const titles = { expense: 'Add an expense', editExpense: 'Edit expense', settlement: 'Settle balance', balanceDetail: 'Balance details', upi: 'Payment details', collection: 'New collection', person: 'Add a person', invite: 'Invite to Settl', settings: 'Quick Settings', about: 'A little more about Settl' }
   const isDetail = modal.type === 'collectionDetail'
   const isBalanceAction = modal.type === 'balanceDetail' || modal.type === 'settlement'
@@ -1605,7 +1672,7 @@ function ModalHost({ modal, close, profile, people, groups, expenses, balances, 
     raw: Object.fromEntries(savedSplits.map((split) => [split.user_id, (Number(split.share_amount_paise || 0) / 100).toFixed(2)])),
   } : undefined
   const heading = isDetail ? modal.group.name : titles[modal.type]
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><section className={`modal ${modal.type === 'expense' || modal.type === 'editExpense' || isDetail ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby="modal-title"><header className="modal-header"><div><div className="eyebrow">{isDetail ? `Collection · ${modal.group.account_number || 'Shared space'}` : modal.type === 'expense' || modal.type === 'editExpense' ? 'Shared spending' : 'Your Settl space'}</div><h2 id="modal-title">{heading}</h2></div><button className="icon-button modal-close" aria-label="Close dialog" onClick={close}><X size={18}/></button></header>{(modal.type === 'expense' || editingExpense) && <ExpenseForm profile={profile} people={people} groups={groups} busy={busy} isOnline={isOnline} prefill={editingExpense ? expensePrefill : modal.prefill} editingExpense={editingExpense} onLoadGroupMembers={onLoadGroupMembers} onSave={onExpense} onUpdateExpense={onUpdateExpense} onDeleteExpense={onDeleteExpense} close={close}/>}{isBalanceAction && <BalanceActionModal entry={modal.entry} groupName={modal.groupName} profile={profile} people={people} busy={busy} isOnline={isOnline} onSaveSettlement={onSettlement} onOpenSettings={() => { close(); onOpenSettings() }} close={close} initialTab={modal.initialTab || (modal.type === 'settlement' ? 'settle' : 'overview')}/>}{modal.type === 'upi' && <UPIForm profile={profile} busy={busy} onSave={onUpdateUPI} close={close}/>}{isDetail && <CollectionDetail group={modal.group} members={modal.members} expenses={expenses} people={people} profile={profile} busy={busy} balances={balances} onSelectBalance={onSelectBalance} onAddMember={onAddMember} onRemoveMember={onRemoveMember} onAddExpense={onAddCollectionExpense} onOpenPerson={onOpenPerson}/>}{modal.type === 'person' && <PersonForm busy={busy} isOnline={isOnline} onSave={onPerson} close={close}/>}{modal.type === 'invite' && <InvitePerson person={modal.person} close={close}/>}{modal.type === 'collection' && <CollectionForm people={people} busy={busy} isOnline={isOnline} onSave={onCollection} close={close}/>}{modal.type === 'settings' && <div className="modal-content"><div className="setting-row"><span className="setting-icon"><Moon size={17}/></span><div><b>Appearance</b><small>Choose a comfortable theme</small></div><button className="button button-small button-secondary" onClick={onTheme}>{dark ? 'Dark' : 'Light'}<ChevronDown size={13}/></button></div><div className="setting-row"><span className="setting-icon"><ShieldCheck size={17}/></span><div><b>Account</b><small>{profile.display_name} · {profile.phone_number}</small></div></div><div className="setting-row"><span className="setting-icon"><CreditCard size={17}/></span><div><b>Payments</b><small>{profile.upi_id || 'UPI details not added'}</small></div><button className="button button-small button-secondary" onClick={onEditUPI}>{profile.upi_id ? 'Update' : 'Add UPI'}</button></div><div className="modal-footer"><button type="button" className="button button-secondary full-button" onClick={onOpenSettings}><Settings size={15}/> Open Full Settings Screen</button></div></div>}{modal.type === 'about' && <div className="modal-content about-copy"><p>Settl helps people keep shared expenses clear. Log what happened, pick the people involved, and review the split before saving.</p><div className="about-feature"><span><Zap size={16}/></span><div><b>Fast capture</b><small>One expense, the right people, a clear split.</small></div></div><div className="about-feature"><span><Users size={16}/></span><div><b>People first</b><small>Collections make recurring groups easier, but they’re optional.</small></div></div><div className="about-feature"><span><ShieldCheck size={16}/></span><div><b>Honest money</b><small>Only confirmed backend responses appear in your ledger.</small></div></div><div className="future-note"><Sparkles size={15}/> Budgets, recurring payments, ticket storage, and receipt scanning are not connected yet.</div></div>}</section></div>
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><section className={`modal ${modal.type === 'expense' || modal.type === 'editExpense' || isDetail ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby="modal-title"><header className="modal-header"><div><div className="eyebrow">{isDetail ? `Collection · ${modal.group.account_number || 'Shared space'}` : modal.type === 'expense' || modal.type === 'editExpense' ? 'Shared spending' : 'Your Settl space'}</div><h2 id="modal-title">{heading}</h2></div><button className="icon-button modal-close" aria-label="Close dialog" onClick={close}><X size={18}/></button></header>{(modal.type === 'expense' || editingExpense) && <ExpenseForm profile={profile} people={people} groups={groups} busy={busy} isOnline={isOnline} prefill={editingExpense ? expensePrefill : modal.prefill} editingExpense={editingExpense} onLoadGroupMembers={onLoadGroupMembers} onSave={onExpense} onUpdateExpense={onUpdateExpense} onDeleteExpense={onDeleteExpense} close={close}/>}{isBalanceAction && <BalanceActionModal entry={modal.entry} groupName={modal.groupName} profile={profile} people={people} busy={busy} isOnline={isOnline} onSaveSettlement={onSettlement} onOpenSettings={() => { close(); onOpenSettings() }} close={close} initialTab={modal.initialTab || (modal.type === 'settlement' ? 'settle' : 'overview')}/>}{modal.type === 'upi' && <UPIForm profile={profile} busy={busy} onSave={onUpdateUPI} close={close}/>}{isDetail && <CollectionDetail group={modal.group} members={modal.members} expenses={expenses} people={people} profile={profile} busy={busy} balances={balances} onSelectBalance={onSelectBalance} onAddMember={onAddMember} onRemoveMember={onRemoveMember} onAddExpense={onAddCollectionExpense} onOpenPerson={onOpenPerson}/>}{modal.type === 'person' && <PersonForm busy={busy} isOnline={isOnline} onSave={onPerson} close={close}/>}{modal.type === 'invite' && <InvitePerson person={modal.person} close={close}/>}{modal.type === 'collection' && <CollectionForm people={people} busy={busy} isOnline={isOnline} onSave={onCollection} close={close}/>}{modal.type === 'settings' && <div className="modal-content"><div className="setting-row"><span className="setting-icon"><Moon size={17}/></span><div><b>Appearance</b><small>Choose a comfortable theme</small></div><button className="button button-small button-secondary" onClick={onTheme}>{dark ? 'Dark' : 'Light'}<ChevronDown size={13}/></button></div><div className="setting-row setting-row-accent"><span className="setting-icon"><Sparkles size={17}/></span><div style={{ flex: 1 }}><b>Accent color</b><small>{accent === 'custom' ? 'Custom hex' : (ACCENT_PRESETS.find((p) => p.id === accent)?.name || 'Sage Green')}</small><div className="quick-accent-strip">{ACCENT_PRESETS.map((preset) => <button key={preset.id} type="button" className={`quick-swatch ${accent === preset.id ? 'active' : ''}`} style={{ background: dark ? preset.dark.fill : preset.light.fill }} onClick={() => onSelectAccent && onSelectAccent(preset.id)} title={preset.name}>{accent === preset.id && <Check size={12}/>}</button>)}<label className={`quick-swatch quick-swatch-custom ${accent === 'custom' ? 'active' : ''}`} style={{ background: customAccent }} title="Pick custom color">{accent === 'custom' && <Check size={12}/>}<input type="color" className="accent-color-native-input" value={customAccent} onChange={(e) => onSelectAccent && onSelectAccent('custom', e.target.value)}/></label></div></div></div><div className="setting-row"><span className="setting-icon"><ShieldCheck size={17}/></span><div><b>Account</b><small>{profile.display_name} · {profile.phone_number}</small></div></div><div className="setting-row"><span className="setting-icon"><CreditCard size={17}/></span><div><b>Payments</b><small>{profile.upi_id || 'UPI details not added'}</small></div><button className="button button-small button-secondary" onClick={onEditUPI}>{profile.upi_id ? 'Update' : 'Add UPI'}</button></div><div className="modal-footer"><button type="button" className="button button-secondary full-button" onClick={onOpenSettings}><Settings size={15}/> Open Full Settings Screen</button></div></div>}{modal.type === 'about' && <div className="modal-content about-copy"><p>Settl helps people keep shared expenses clear. Log what happened, pick the people involved, and review the split before saving.</p><div className="about-feature"><span><Zap size={16}/></span><div><b>Fast capture</b><small>One expense, the right people, a clear split.</small></div></div><div className="about-feature"><span><Users size={16}/></span><div><b>People first</b><small>Collections make recurring groups easier, but they’re optional.</small></div></div><div className="about-feature"><span><ShieldCheck size={16}/></span><div><b>Honest money</b><small>Only confirmed backend responses appear in your ledger.</small></div></div><div className="future-note"><Sparkles size={15}/> Budgets, recurring payments, ticket storage, and receipt scanning are not connected yet.</div></div>}</section></div>
 }
 
 function InvitePerson({ person, close }) {
@@ -1788,6 +1855,22 @@ function ExpenseForm({ profile, people, groups, busy, isOnline = true, prefill =
     if (index === participants.length - 1) return amountPaise - participants.slice(0, -1).reduce((sum, participant) => sum + Math.floor(amountPaise * Number(raw[participant.participant_id] || 1) / shareTotal), 0)
     return Math.floor(amountPaise * Number(raw[person.participant_id] || 1) / shareTotal)
   }
+
+  useEffect(() => {
+    if (prefill.groupId && (!prefill.participantIDs || prefill.participantIDs.length <= 1) && onLoadGroupMembers) {
+      setMembersLoading(true)
+      onLoadGroupMembers(prefill.groupId)
+        .then((members) => {
+          if (Array.isArray(members) && members.length > 0) {
+            setSelected((prev) => [...new Set([...prev, ...members.map((m) => m.participant_id)])])
+          }
+        })
+        .catch(() => {})
+        .finally(() => setMembersLoading(false))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill.groupId, onLoadGroupMembers])
+
   function togglePerson(id) { setSelected((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]) }
   async function changeGroup(id) {
     setGroupId(id)

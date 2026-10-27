@@ -1459,5 +1459,173 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   }
 }
 
+/* Accent Color Personalization */
+.brand-mark {
+  background: var(--brand-fill) !important;
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--brand-fill) 28%, transparent) !important;
+}
+.brand-period {
+  color: var(--brand-ink) !important;
+}
 
+.accent-personalization-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+  margin-top: 6px;
+}
 
+.accent-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.accent-header-row b {
+  font-size: 13px;
+  display: block;
+}
+
+.accent-header-row small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.accent-active-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid var(--brand-outline);
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--brand-tint);
+  color: var(--brand-ink);
+  transition: all 0.2s ease;
+}
+
+.accent-mini-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.accent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+  gap: 10px;
+}
+
+.accent-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 6px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+  user-select: none;
+}
+
+.accent-card:hover {
+  background: var(--surface-soft);
+  border-color: var(--brand-outline);
+  transform: translateY(-2px);
+}
+
+.accent-card.selected {
+  border-color: var(--brand-fill);
+  background: var(--brand-tint);
+  box-shadow: 0 0 0 1.5px var(--brand-fill);
+}
+
+.accent-card-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+  position: relative;
+  transition: transform 0.15s ease;
+}
+
+.accent-card:hover .accent-card-swatch {
+  transform: scale(1.1);
+}
+
+.accent-card-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+}
+
+.accent-card-custom {
+  position: relative;
+}
+
+.accent-color-native-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.accent-check-icon {
+  stroke-width: 3;
+}
+
+.setting-row-accent {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quick-accent-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  flex-wrap: wrap;
+}
+
+.quick-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  outline: 1.5px solid var(--line);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.15s ease, outline-color 0.15s ease;
+}
+
+.quick-swatch:hover {
+  transform: scale(1.18);
+}
+
+.quick-swatch.active {
+  outline: 2px solid var(--brand-fill);
+  box-shadow: 0 0 0 2px var(--brand-tint);
+}
+
+.quick-swatch-custom {
+  position: relative;
+}
